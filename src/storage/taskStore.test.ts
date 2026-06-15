@@ -1,5 +1,6 @@
 import type { GenerationTask } from "../domain/types";
 import { loadTasks, saveTasks } from "./taskStore";
+import { afterEach, vi } from "vitest";
 
 const task: GenerationTask = {
   id: "task-1",
@@ -32,6 +33,10 @@ describe("taskStore", () => {
     localStorage.clear();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("round trips saved generation tasks", () => {
     saveTasks([task]);
 
@@ -52,5 +57,52 @@ describe("taskStore", () => {
     localStorage.setItem("commerce-studio-tasks-v1", JSON.stringify({ task }));
 
     expect(loadTasks()).toEqual([]);
+  });
+
+  it("filters invalid stored task entries", () => {
+    localStorage.setItem("commerce-studio-tasks-v1", JSON.stringify([{}]));
+
+    expect(loadTasks()).toEqual([]);
+  });
+
+  it("keeps valid stored tasks when invalid entries are mixed in", () => {
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([{}, task, { ...task, id: 42 }]),
+    );
+
+    expect(loadTasks()).toEqual([task]);
+  });
+
+  it("normalizes stored transient tasks into interrupted failures and persists them", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T02:00:00.000Z"));
+    const processingTask: GenerationTask = {
+      ...task,
+      id: "task-processing",
+      status: "processing",
+      resultUrls: ["/stale-result.png"],
+      creditCost: 1,
+      completedAt: undefined,
+    };
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([processingTask]),
+    );
+
+    expect(loadTasks()).toEqual([
+      {
+        ...processingTask,
+        status: "failed",
+        errorCode: "task_interrupted",
+        errorMessage: "任务在上次会话中断，请重新生成。",
+        completedAt: "2026-06-15T02:00:00.000Z",
+        creditCost: 0,
+        resultUrls: [],
+      },
+    ]);
+    expect(
+      JSON.parse(localStorage.getItem("commerce-studio-tasks-v1") ?? "[]"),
+    ).toEqual(loadTasks());
   });
 });

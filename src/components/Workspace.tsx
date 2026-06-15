@@ -52,9 +52,18 @@ export function Workspace() {
   const [config, setConfig] = useState<GenerationConfig>(defaultConfig);
   const [product, setProduct] = useState<ProductInput | null>(null);
   const [tasks, setTasks] = useState<GenerationTask[]>(() => loadTasks());
+  const [activePreviewTaskId, setActivePreviewTaskId] = useState<
+    string | null | undefined
+  >(undefined);
   const provider = useMemo(() => new MockGenerationProvider({ delayMs: 20 }), []);
   const productRef = useRef<ProductInput | null>(null);
   const latestTask = tasks[0];
+  const activePreviewTask =
+    activePreviewTaskId === undefined
+      ? latestTask
+      : activePreviewTaskId === null
+        ? undefined
+        : tasks.find((task) => task.id === activePreviewTaskId);
   const hasRunningLatestTask =
     latestTask?.status === "queued" || latestTask?.status === "processing";
 
@@ -119,20 +128,27 @@ export function Workspace() {
     const processingTask = markProcessing(queuedTask);
 
     setTasks((currentTasks) => [processingTask, ...currentTasks]);
+    setActivePreviewTaskId(processingTask.id);
     void runProcessingTask(processingTask);
   };
 
   const handleRetryTask = (task: GenerationTask) => {
+    if (hasRunningLatestTask) {
+      return;
+    }
+
     const queuedTask = retryTask(task, new Date().toISOString());
     const processingTask = markProcessing(queuedTask);
 
     setTasks((currentTasks) => moveTaskToTop(currentTasks, processingTask));
+    setActivePreviewTaskId(processingTask.id);
     void runProcessingTask(processingTask);
   };
 
   const handleReuseTask = (task: GenerationTask) => {
     handleProductChange(task.productInput);
     setConfig(task.config);
+    setActivePreviewTaskId(null);
   };
 
   useEffect(() => {
@@ -153,13 +169,14 @@ export function Workspace() {
           tasks={tasks}
           onReuseTask={handleReuseTask}
           onRetryTask={handleRetryTask}
+          isRetryDisabled={hasRunningLatestTask}
         />
       </div>
       <div className="workspace-main">
         <UploadPanel product={product} onProductChange={handleProductChange} />
         <ResultPreview
           product={product}
-          latestTask={latestTask}
+          latestTask={activePreviewTask}
           onGenerate={handleGenerate}
           isGenerateDisabled={!product || hasRunningLatestTask}
         />

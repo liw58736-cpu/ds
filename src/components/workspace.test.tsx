@@ -13,6 +13,35 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function createStoredTask(overrides: Partial<GenerationTask> = {}): GenerationTask {
+  return {
+    id: "task-history-1",
+    productInput: {
+      id: "history-product",
+      imageUrl: "/history-product.png",
+      fileName: "history-product.png",
+      createdAt: "2026-06-15T00:00:00.000Z",
+      source: "sample",
+    },
+    config: {
+      module: "shopify_banner",
+      platform: "shopify",
+      aspectRatio: "16:9",
+      style: "premium",
+      outputFormat: "webp",
+      sellingPoints: "Reusable history copy",
+      specifications: "1200 x 628",
+    },
+    status: "completed",
+    resultUrls: ["/result.png"],
+    creditCost: 1,
+    createdAt: "2026-06-15T01:00:00.000Z",
+    completedAt: "2026-06-15T01:00:01.000Z",
+    attempt: 1,
+    ...overrides,
+  };
+}
+
 describe("Workspace", () => {
   it("displays the current product image after selecting the sample product", async () => {
     const user = userEvent.setup();
@@ -208,31 +237,7 @@ describe("Workspace", () => {
 
   it("reuses product and parameters from a history task", async () => {
     const user = userEvent.setup();
-    const historyTask: GenerationTask = {
-      id: "task-history-1",
-      productInput: {
-        id: "history-product",
-        imageUrl: "/history-product.png",
-        fileName: "history-product.png",
-        createdAt: "2026-06-15T00:00:00.000Z",
-        source: "sample",
-      },
-      config: {
-        module: "shopify_banner",
-        platform: "shopify",
-        aspectRatio: "16:9",
-        style: "premium",
-        outputFormat: "webp",
-        sellingPoints: "Reusable history copy",
-        specifications: "1200 x 628",
-      },
-      status: "completed",
-      resultUrls: ["/result.png"],
-      creditCost: 1,
-      createdAt: "2026-06-15T01:00:00.000Z",
-      completedAt: "2026-06-15T01:00:01.000Z",
-      attempt: 1,
-    };
+    const historyTask = createStoredTask();
     localStorage.setItem(
       "commerce-studio-tasks-v1",
       JSON.stringify([historyTask]),
@@ -253,6 +258,141 @@ describe("Workspace", () => {
     expect(screen.getByLabelText("输出格式")).toHaveValue("webp");
     expect(screen.getByLabelText("卖点")).toHaveValue("Reusable history copy");
     expect(screen.getByLabelText("规格")).toHaveValue("1200 x 628");
+  });
+
+  it("loads stored processing tasks as retryable interrupted failures without locking generation", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([
+        createStoredTask({
+          status: "processing",
+          resultUrls: ["/stale-result.png"],
+          creditCost: 1,
+          completedAt: undefined,
+        }),
+      ]),
+    );
+    render(<Workspace />);
+
+    expect(
+      screen.getAllByText("任务在上次会话中断，请重新生成。").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "重试" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+
+    expect(screen.getByRole("button", { name: "生成素材" })).toBeEnabled();
+  });
+
+  it("disables retry while another task is processing", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([
+        createStoredTask({
+          id: "failed-task",
+          status: "failed",
+          resultUrls: [],
+          creditCost: 0,
+          errorCode: "mock_generation_failed",
+          errorMessage: "模拟生成失败，请重试。",
+        }),
+      ]),
+    );
+    render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: "生成素材" }));
+
+    expect(screen.getByRole("button", { name: "重试" })).toBeDisabled();
+  });
+
+  it("downloads completed results through a temporary anchor", async () => {
+    const user = userEvent.setup();
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: "生成素材" }));
+    expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "下载结果" }));
+
+    expect(anchorClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("copies completed task parameters to the clipboard", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: "生成素材" }));
+    expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "复制参数" }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('"module":"main_image"'),
+    );
+  });
+
+  it("clears unrelated preview result when reusing an older task", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([
+        createStoredTask({
+          id: "latest-task",
+          productInput: {
+            id: "latest-product",
+            imageUrl: "/latest-product.png",
+            fileName: "latest-product.png",
+            createdAt: "2026-06-15T00:00:00.000Z",
+            source: "sample",
+          },
+          resultUrls: ["/latest-result.png"],
+        }),
+        createStoredTask({
+          id: "older-task",
+          productInput: {
+            id: "older-product",
+            imageUrl: "/older-product.png",
+            fileName: "older-product.png",
+            createdAt: "2026-06-15T00:00:00.000Z",
+            source: "sample",
+          },
+          config: {
+            module: "detail_page",
+            platform: "amazon",
+            aspectRatio: "long_page",
+            style: "minimal",
+            outputFormat: "jpg",
+            sellingPoints: "Older task copy",
+            specifications: "Long page",
+          },
+          resultUrls: ["/older-result.png"],
+        }),
+      ]),
+    );
+    render(<Workspace />);
+
+    expect(screen.getByAltText("生成结果")).toHaveAttribute(
+      "src",
+      "/latest-result.png",
+    );
+    await user.click(screen.getAllByRole("button", { name: "复用参数" })[1]);
+
+    expect(screen.getByText("older-product.png")).toBeInTheDocument();
+    expect(screen.queryByAltText("生成结果")).not.toBeInTheDocument();
+    expect(screen.getByText("等待生成结果")).toBeInTheDocument();
   });
 });
 

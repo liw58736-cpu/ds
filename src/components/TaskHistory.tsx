@@ -5,6 +5,7 @@ interface TaskHistoryProps {
   tasks: GenerationTask[];
   onReuseTask: (task: GenerationTask) => void;
   onRetryTask: (task: GenerationTask) => void;
+  isRetryDisabled: boolean;
 }
 
 const statusLabels = {
@@ -18,6 +19,7 @@ export function TaskHistory({
   tasks,
   onReuseTask,
   onRetryTask,
+  isRetryDisabled,
 }: TaskHistoryProps) {
   return (
     <section className="panel task-history" aria-labelledby="task-history-title">
@@ -39,14 +41,20 @@ export function TaskHistory({
                 </span>
               </div>
               {task.errorMessage ? (
-                <p className="task-error">{task.errorMessage}</p>
+                <p className="task-error" role="alert">
+                  {task.errorMessage}
+                </p>
               ) : null}
               <div className="task-history-actions">
                 <button type="button" onClick={() => onReuseTask(task)}>
                   复用参数
                 </button>
                 {task.status === "failed" ? (
-                  <button type="button" onClick={() => onRetryTask(task)}>
+                  <button
+                    type="button"
+                    onClick={() => onRetryTask(task)}
+                    disabled={isRetryDisabled}
+                  >
                     重试
                   </button>
                 ) : null}
