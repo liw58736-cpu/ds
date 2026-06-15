@@ -1,6 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const port = 4289;
+const env =
+  (globalThis as typeof globalThis & {
+    process?: { env?: Record<string, string | undefined> };
+  }).process?.env ?? {};
+const configuredPort = Number.parseInt(env.PLAYWRIGHT_PORT ?? "", 10);
+const port =
+  Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort <= 65535
+    ? configuredPort
+    : 4289;
 const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
@@ -11,7 +19,7 @@ export default defineConfig({
   webServer: {
     command: `npm run dev -- --port ${port} --strictPort`,
     url: baseURL,
-    reuseExistingServer: true,
+    reuseExistingServer: !env.CI,
   },
   projects: [
     {
