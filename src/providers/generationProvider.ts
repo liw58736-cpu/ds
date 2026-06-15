@@ -42,8 +42,8 @@ export class MockGenerationProvider implements GenerationProvider {
 
     if (
       this.forceFailure ||
-      // Deterministic mock failure trigger for UI retry-flow testing.
-      input.config.sellingPoints.toLowerCase().includes("fail")
+      // Deterministic mock failure trigger for UI retry-flow testing: standalone "fail" or "[mock-fail]".
+      hasMockFailureTrigger(input.config.sellingPoints)
     ) {
       throw new GenerationProviderError(
         "mock_generation_failed",
@@ -76,7 +76,13 @@ function createMockResultUrl(input: GenerateInput): string {
   <text x="112" y="338" fill="#6b7280" font-family="Arial, sans-serif" font-size="30">${fileName}</text>
 </svg>`;
 
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function hasMockFailureTrigger(sellingPoints: string): boolean {
+  return /(^|[\s,;:()[\]{}])(?:fail|\[mock-fail\])(?=$|[\s,;:()[\]{}])/i.test(
+    sellingPoints,
+  );
 }
 
 function escapeSvgText(value: string): string {
