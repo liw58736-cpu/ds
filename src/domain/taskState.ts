@@ -1,9 +1,26 @@
-import type { GenerationConfig, GenerationTask, ProductInput } from "./types";
+import type {
+  GenerationConfig,
+  GenerationTask,
+  ProductInput,
+  TaskStatus,
+} from "./types";
 
 function createId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random()
     .toString(36)
     .slice(2, 10)}`;
+}
+
+function assertStatus(
+  task: GenerationTask,
+  expected: TaskStatus,
+  action: string,
+): void {
+  if (task.status !== expected) {
+    throw new Error(
+      `Cannot ${action} task from ${task.status} status; expected ${expected}.`,
+    );
+  }
 }
 
 export function createTask(input: {
@@ -24,6 +41,8 @@ export function createTask(input: {
 }
 
 export function markProcessing(task: GenerationTask): GenerationTask {
+  assertStatus(task, "queued", "process");
+
   return {
     ...task,
     status: "processing",
@@ -34,6 +53,8 @@ export function completeTask(
   task: GenerationTask,
   input: { resultUrls: string[]; completedAt: string; creditCost: number },
 ): GenerationTask {
+  assertStatus(task, "processing", "complete");
+
   const { errorCode: _errorCode, errorMessage: _errorMessage, ...rest } = task;
 
   return {
@@ -49,6 +70,8 @@ export function failTask(
   task: GenerationTask,
   input: { errorCode: string; errorMessage: string; completedAt: string },
 ): GenerationTask {
+  assertStatus(task, "processing", "fail");
+
   return {
     ...task,
     status: "failed",
@@ -61,6 +84,8 @@ export function failTask(
 }
 
 export function retryTask(task: GenerationTask, now: string): GenerationTask {
+  assertStatus(task, "failed", "retry");
+
   const {
     errorCode: _errorCode,
     errorMessage: _errorMessage,

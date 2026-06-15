@@ -59,17 +59,12 @@ describe("task lifecycle", () => {
   });
 
   it("completes a task and records result URL and credit cost", () => {
-    const task = failTask(
+    const task = markProcessing(
       createTask({
         product,
         config,
         now: "2026-06-15T01:00:00.000Z",
       }),
-      {
-        errorCode: "provider_timeout",
-        errorMessage: "Provider timed out",
-        completedAt: "2026-06-15T01:00:01.000Z",
-      },
     );
 
     const completed = completeTask(task, {
@@ -87,20 +82,15 @@ describe("task lifecycle", () => {
   });
 
   it("keeps failed tasks uncharged and retryable", () => {
-    const completed = completeTask(
+    const processing = markProcessing(
       createTask({
         product,
         config,
         now: "2026-06-15T01:00:00.000Z",
       }),
-      {
-        resultUrls: ["/mock/main-image.png"],
-        completedAt: "2026-06-15T01:00:02.000Z",
-        creditCost: 1,
-      },
     );
 
-    const failed = failTask(completed, {
+    const failed = failTask(processing, {
       errorCode: "provider_timeout",
       errorMessage: "Provider timed out",
       completedAt: "2026-06-15T01:00:03.000Z",
@@ -121,5 +111,71 @@ describe("task lifecycle", () => {
     expect(retried.completedAt).toBeUndefined();
     expect(retried.createdAt).toBe("2026-06-15T01:00:04.000Z");
     expect(retried.attempt).toBe(2);
+  });
+
+  it("throws when completing a failed task", () => {
+    const failed = failTask(
+      markProcessing(
+        createTask({
+          product,
+          config,
+          now: "2026-06-15T01:00:00.000Z",
+        }),
+      ),
+      {
+        errorCode: "provider_timeout",
+        errorMessage: "Provider timed out",
+        completedAt: "2026-06-15T01:00:03.000Z",
+      },
+    );
+
+    expect(() =>
+      completeTask(failed, {
+        resultUrls: ["/mock/main-image.png"],
+        completedAt: "2026-06-15T01:00:04.000Z",
+        creditCost: 1,
+      }),
+    ).toThrow("Cannot complete task from failed status; expected processing.");
+  });
+
+  it("throws when failing a completed task", () => {
+    const completed = completeTask(
+      markProcessing(
+        createTask({
+          product,
+          config,
+          now: "2026-06-15T01:00:00.000Z",
+        }),
+      ),
+      {
+        resultUrls: ["/mock/main-image.png"],
+        completedAt: "2026-06-15T01:00:02.000Z",
+        creditCost: 1,
+      },
+    );
+
+    expect(() =>
+      failTask(completed, {
+        errorCode: "provider_timeout",
+        errorMessage: "Provider timed out",
+        completedAt: "2026-06-15T01:00:03.000Z",
+      }),
+    ).toThrow("Cannot fail task from completed status; expected processing.");
+  });
+
+  it("throws when processing or retrying from the wrong status", () => {
+    const queued = createTask({
+      product,
+      config,
+      now: "2026-06-15T01:00:00.000Z",
+    });
+    const processing = markProcessing(queued);
+
+    expect(() => markProcessing(processing)).toThrow(
+      "Cannot process task from processing status; expected queued.",
+    );
+    expect(() => retryTask(queued, "2026-06-15T01:00:04.000Z")).toThrow(
+      "Cannot retry task from queued status; expected failed.",
+    );
   });
 });
