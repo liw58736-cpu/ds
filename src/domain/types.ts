@@ -32,8 +32,8 @@ export interface GenerationConfig {
   aspectRatio: AspectRatio;
   style: VisualStyle;
   outputFormat: OutputFormat;
-  sellingPoints: string[];
-  specifications: string[];
+  sellingPoints: string;
+  specifications: string;
 }
 
 export interface GenerationTask {

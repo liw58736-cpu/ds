@@ -5,6 +5,7 @@ import {
   markProcessing,
   retryTask,
 } from "./taskState";
+import { defaultConfig } from "./defaults";
 import type { GenerationConfig, ProductInput } from "./types";
 
 const product: ProductInput = {
@@ -21,11 +22,16 @@ const config: GenerationConfig = {
   aspectRatio: "1:1",
   style: "studio",
   outputFormat: "png",
-  sellingPoints: ["BPA-free", "Dishwasher safe"],
-  specifications: ["500ml", "Stainless steel"],
+  sellingPoints: "BPA-free, dishwasher safe",
+  specifications: "500ml, stainless steel",
 };
 
 describe("task lifecycle", () => {
+  it("defaults freeform text fields to empty strings", () => {
+    expect(defaultConfig.sellingPoints).toBe("");
+    expect(defaultConfig.specifications).toBe("");
+  });
+
   it("creates a queued task with success-only credit cost 0 and product reference", () => {
     const task = createTask({
       product,

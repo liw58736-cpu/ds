@@ -6,8 +6,8 @@ export const defaultConfig: GenerationConfig = {
   aspectRatio: "1:1",
   style: "studio",
   outputFormat: "png",
-  sellingPoints: [],
-  specifications: [],
+  sellingPoints: "",
+  specifications: "",
 };
 
 export const moduleLabels = {
