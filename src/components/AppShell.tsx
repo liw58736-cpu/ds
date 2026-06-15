@@ -1,18 +1,21 @@
 import type { ReactNode } from "react";
+import type { AppPage } from "../App";
 
 interface AppShellProps {
+  page: AppPage;
+  onPageChange: (page: AppPage) => void;
   children: ReactNode;
 }
 
 const topNavItems = [
-  { label: "工作台", active: true },
-  { label: "模板库", active: false },
-  { label: "历史任务", active: false },
-  { label: "价格", active: false },
-  { label: "账户", active: false },
-];
+  { page: "workspace", label: "工作台" },
+  { page: "templates", label: "模板库" },
+  { page: "history", label: "历史任务" },
+  { page: "pricing", label: "价格" },
+  { page: "account", label: "账户" },
+] satisfies Array<{ page: AppPage; label: string }>;
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ page, onPageChange, children }: AppShellProps) {
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -24,10 +27,10 @@ export function AppShell({ children }: AppShellProps) {
           {topNavItems.map((item) => (
             <button
               type="button"
-              key={item.label}
-              className={`topnav-button${item.active ? " is-active" : ""}`}
-              disabled={!item.active}
-              aria-current={item.active ? "page" : undefined}
+              key={item.page}
+              className={`topnav-button${page === item.page ? " nav-active" : ""}`}
+              onClick={() => onPageChange(item.page)}
+              aria-current={page === item.page ? "page" : undefined}
             >
               {item.label}
             </button>

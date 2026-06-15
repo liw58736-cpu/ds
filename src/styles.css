@@ -88,7 +88,7 @@ button {
   background: #dfe9ed;
 }
 
-.topnav-button.is-active {
+.topnav-button.nav-active {
   color: #0f3f3b;
   background: #dcebe7;
   font-weight: 700;
@@ -102,6 +102,88 @@ button {
 
 .topnav-button:disabled:hover {
   background: #f1f4f6;
+}
+
+.page-surface {
+  display: grid;
+  gap: 18px;
+  width: min(1120px, 100%);
+  margin: 0 auto;
+}
+
+.page-heading {
+  border: 1px solid #d9e0e7;
+  border-radius: 8px;
+  padding: 18px;
+  background: #ffffff;
+}
+
+.page-heading h1 {
+  margin: 0;
+  color: #14213d;
+  font-size: 1.45rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.template-grid,
+.pricing-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.template-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pricing-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.template-card,
+.price-card,
+.account-panel {
+  min-width: 0;
+  border: 1px solid #d9e0e7;
+  border-radius: 8px;
+  padding: 18px;
+  background: #ffffff;
+}
+
+.template-card h2,
+.price-card h2,
+.account-panel h2 {
+  margin: 0 0 8px;
+  color: #1f2933;
+  font-size: 1rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.template-card p,
+.price-card p,
+.account-panel p {
+  margin: 0;
+  color: #526171;
+}
+
+.template-card p + p,
+.price-card p + p,
+.account-panel p + p {
+  margin-top: 10px;
+}
+
+.card-meta,
+.credit-text {
+  color: #287c72;
+  font-size: 0.78rem;
+  font-weight: 740;
+}
+
+.price-value {
+  color: #14213d;
+  font-size: 1.3rem;
+  font-weight: 780;
 }
 
 .workspace {
@@ -529,7 +611,9 @@ button {
   }
 
   .upload-actions,
-  .preview-grid {
+  .preview-grid,
+  .template-grid,
+  .pricing-grid {
     grid-template-columns: 1fr;
   }
 

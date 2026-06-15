@@ -544,16 +544,24 @@ describe("Workspace", () => {
 });
 
 describe("AppShell", () => {
-  it("leaves only the current workspace nav button enabled", () => {
+  it("enables nav buttons and marks the current page active", async () => {
+    const user = userEvent.setup();
+    const onPageChange = vi.fn();
     render(
-      <AppShell>
+      <AppShell page="workspace" onPageChange={onPageChange}>
         <div />
       </AppShell>,
     );
 
-    expect(screen.getByRole("button", { name: "工作台" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "工作台" })).toHaveClass(
+      "nav-active",
+    );
     for (const label of ["模板库", "历史任务", "价格", "账户"]) {
-      expect(screen.getByRole("button", { name: label })).toBeDisabled();
+      expect(screen.getByRole("button", { name: label })).toBeEnabled();
     }
+
+    await user.click(screen.getByRole("button", { name: "价格" }));
+
+    expect(onPageChange).toHaveBeenCalledWith("pricing");
   });
 });
