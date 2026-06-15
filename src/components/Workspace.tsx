@@ -48,6 +48,10 @@ function getFailureDetails(error: unknown): {
   };
 }
 
+function hasUnavailableUploadSource(task: GenerationTask): boolean {
+  return task.errorCode === "upload_source_unavailable";
+}
+
 export function Workspace() {
   const [config, setConfig] = useState<GenerationConfig>(defaultConfig);
   const [product, setProduct] = useState<ProductInput | null>(null);
@@ -133,7 +137,7 @@ export function Workspace() {
   };
 
   const handleRetryTask = (task: GenerationTask) => {
-    if (hasRunningLatestTask) {
+    if (hasRunningLatestTask || hasUnavailableUploadSource(task)) {
       return;
     }
 
@@ -146,6 +150,10 @@ export function Workspace() {
   };
 
   const handleReuseTask = (task: GenerationTask) => {
+    if (hasUnavailableUploadSource(task)) {
+      return;
+    }
+
     handleProductChange(task.productInput);
     setConfig(task.config);
     setActivePreviewTaskId(null);

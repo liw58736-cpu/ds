@@ -15,6 +15,10 @@ const statusLabels = {
   failed: "失败",
 } as const satisfies Record<TaskStatus, string>;
 
+function hasUnavailableUploadSource(task: GenerationTask): boolean {
+  return task.errorCode === "upload_source_unavailable";
+}
+
 export function TaskHistory({
   tasks,
   onReuseTask,
@@ -40,20 +44,20 @@ export function TaskHistory({
                   {statusLabels[task.status]}
                 </span>
               </div>
-              {task.errorMessage ? (
-                <p className="task-error" role="alert">
-                  {task.errorMessage}
-                </p>
-              ) : null}
+              {task.errorMessage ? <p className="task-error">{task.errorMessage}</p> : null}
               <div className="task-history-actions">
-                <button type="button" onClick={() => onReuseTask(task)}>
+                <button
+                  type="button"
+                  onClick={() => onReuseTask(task)}
+                  disabled={hasUnavailableUploadSource(task)}
+                >
                   复用参数
                 </button>
                 {task.status === "failed" ? (
                   <button
                     type="button"
                     onClick={() => onRetryTask(task)}
-                    disabled={isRetryDisabled}
+                    disabled={isRetryDisabled || hasUnavailableUploadSource(task)}
                   >
                     重试
                   </button>

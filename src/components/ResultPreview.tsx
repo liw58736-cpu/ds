@@ -8,6 +8,16 @@ interface ResultPreviewProps {
   isGenerateDisabled: boolean;
 }
 
+function isSafeResultUrl(url: string): boolean {
+  return (
+    url.startsWith("data:image/") ||
+    url.startsWith("blob:") ||
+    url.startsWith("https://") ||
+    url.startsWith("http://") ||
+    (url.startsWith("/") && !url.startsWith("//"))
+  );
+}
+
 export function ResultPreview({
   product,
   latestTask,
@@ -20,13 +30,15 @@ export function ResultPreview({
   const resultUrl =
     latestTask?.status === "completed" ? latestTask.resultUrls[0] : undefined;
   const hasResult = Boolean(resultUrl);
+  const hasDownloadableResult =
+    resultUrl !== undefined && isSafeResultUrl(resultUrl);
   const resultFileName =
     latestTask?.status === "completed"
       ? `${latestTask.config.module}.${latestTask.config.outputFormat}`
       : "generated-result.png";
 
   const handleDownload = () => {
-    if (!resultUrl || !latestTask) {
+    if (!resultUrl || !latestTask || !isSafeResultUrl(resultUrl)) {
       return;
     }
 
@@ -72,7 +84,11 @@ export function ResultPreview({
           >
             生成素材
           </button>
-          <button type="button" onClick={handleDownload} disabled={!hasResult}>
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={!hasDownloadableResult}
+          >
             下载结果
           </button>
           <button

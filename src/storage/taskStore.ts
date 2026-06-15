@@ -16,6 +16,10 @@ const INTERRUPTED_TASK_ERROR = {
   errorCode: "task_interrupted",
   errorMessage: "任务在上次会话中断，请重新生成。",
 } as const;
+const UNAVAILABLE_UPLOAD_SOURCE_ERROR = {
+  errorCode: "upload_source_unavailable",
+  errorMessage: "原始上传图已失效，请重新上传后再生成。",
+} as const;
 
 const productSources = new Set<ProductSource>(["upload", "sample"]);
 const modules = new Set<GenerationModule>([
@@ -174,6 +178,16 @@ function parseTask(value: unknown): GenerationTask | null {
 
 function normalizeTask(task: GenerationTask, now: string): GenerationTask {
   if (task.status !== "queued" && task.status !== "processing") {
+    if (
+      task.productInput.source === "upload" &&
+      task.productInput.imageUrl.startsWith("blob:")
+    ) {
+      return {
+        ...task,
+        ...UNAVAILABLE_UPLOAD_SOURCE_ERROR,
+      };
+    }
+
     return task;
   }
 

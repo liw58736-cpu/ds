@@ -105,4 +105,30 @@ describe("taskStore", () => {
       JSON.parse(localStorage.getItem("commerce-studio-tasks-v1") ?? "[]"),
     ).toEqual(loadTasks());
   });
+
+  it("marks persisted upload blob tasks as source unavailable while preserving completed results", () => {
+    const uploadedBlobTask: GenerationTask = {
+      ...task,
+      productInput: {
+        ...task.productInput,
+        imageUrl: "blob:persisted-upload",
+        source: "upload",
+      },
+      status: "completed",
+      resultUrls: ["/mock/completed-result.png"],
+      creditCost: 1,
+    };
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([uploadedBlobTask]),
+    );
+
+    expect(loadTasks()).toEqual([
+      {
+        ...uploadedBlobTask,
+        errorCode: "upload_source_unavailable",
+        errorMessage: "原始上传图已失效，请重新上传后再生成。",
+      },
+    ]);
+  });
 });

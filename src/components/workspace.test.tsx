@@ -285,6 +285,61 @@ describe("Workspace", () => {
     expect(screen.getByRole("button", { name: "生成素材" })).toBeEnabled();
   });
 
+  it("treats persisted uploaded blob tasks as result-only after reload", () => {
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([
+        createStoredTask({
+          productInput: {
+            id: "uploaded-product",
+            imageUrl: "blob:persisted-upload",
+            fileName: "uploaded-product.png",
+            createdAt: "2026-06-15T00:00:00.000Z",
+            source: "upload",
+          },
+          resultUrls: ["/safe-result.png"],
+        }),
+      ]),
+    );
+    render(<Workspace />);
+
+    expect(
+      screen.getAllByText("原始上传图已失效，请重新上传后再生成。").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "复用参数" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下载结果" })).toBeEnabled();
+  });
+
+  it("disables retry for persisted failed upload blob tasks after reload", () => {
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([
+        createStoredTask({
+          status: "failed",
+          productInput: {
+            id: "uploaded-product",
+            imageUrl: "blob:persisted-upload",
+            fileName: "uploaded-product.png",
+            createdAt: "2026-06-15T00:00:00.000Z",
+            source: "upload",
+          },
+          resultUrls: [],
+          creditCost: 0,
+          errorCode: "mock_generation_failed",
+          errorMessage: "模拟生成失败，请重试。",
+        }),
+      ]),
+    );
+    render(<Workspace />);
+
+    expect(
+      screen.getAllByText("原始上传图已失效，请重新上传后再生成。").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "复用参数" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重试" })).toBeDisabled();
+  });
+
   it("disables retry while another task is processing", async () => {
     const user = userEvent.setup();
     localStorage.setItem(
@@ -308,6 +363,18 @@ describe("Workspace", () => {
     expect(screen.getByRole("button", { name: "重试" })).toBeDisabled();
   });
 
+  it("keeps historical task errors out of urgent alert regions", async () => {
+    const user = userEvent.setup();
+    render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.type(screen.getByLabelText("卖点"), "fail");
+    await user.click(screen.getByRole("button", { name: "生成素材" }));
+
+    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(2);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
   it("downloads completed results through a temporary anchor", async () => {
     const user = userEvent.setup();
     const anchorClick = vi
@@ -322,6 +389,28 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "下载结果" }));
 
     expect(anchorClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not enable download for unsafe persisted result URLs", async () => {
+    const user = userEvent.setup();
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([
+        createStoredTask({
+          resultUrls: ["javascript:alert(1)"],
+        }),
+      ]),
+    );
+    render(<Workspace />);
+
+    const downloadButton = screen.getByRole("button", { name: "下载结果" });
+    expect(downloadButton).toBeDisabled();
+    await user.click(downloadButton);
+
+    expect(anchorClick).not.toHaveBeenCalled();
   });
 
   it("copies completed task parameters to the clipboard", async () => {
