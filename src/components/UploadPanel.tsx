@@ -45,6 +45,7 @@ export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
       createdAt: new Date().toISOString(),
       source: "upload",
     });
+    event.currentTarget.value = "";
   };
 
   return (
@@ -64,7 +65,11 @@ export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
             onChange={handleFileChange}
           />
         </label>
-        <button type="button" className="secondary-button" onClick={() => onProductChange(createSampleProduct())}>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => onProductChange(createSampleProduct())}
+        >
           使用示例商品
         </button>
       </div>

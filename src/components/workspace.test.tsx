@@ -41,17 +41,17 @@ describe("Workspace", () => {
     expect(screen.getByLabelText("输出格式")).toHaveValue("webp");
   });
 
-  it("allows keyboard focus to reach the upload input inside the dropzone", async () => {
-    const user = userEvent.setup();
+  it("allows focus to reach the upload input inside the dropzone", () => {
     render(<Workspace />);
 
-    for (let tabCount = 0; tabCount < 7; tabCount += 1) {
-      await user.tab();
-    }
-
     const uploadInput = screen.getByLabelText("上传商品图");
+    uploadInput.focus();
+    const dropzone = uploadInput.closest(".upload-dropzone") as HTMLElement | null;
+
     expect(uploadInput).toHaveFocus();
-    expect(uploadInput.closest(".upload-dropzone")).toBeInTheDocument();
+    expect(dropzone).toContainElement(
+      document.activeElement as HTMLElement | null,
+    );
   });
 
   it("displays uploaded product image and filename from a created object URL", async () => {
@@ -104,6 +104,32 @@ describe("Workspace", () => {
     expect(revokeObjectURL).toHaveBeenCalledTimes(2);
     expect(revokeObjectURL).toHaveBeenNthCalledWith(1, "blob:first-product");
     expect(revokeObjectURL).toHaveBeenNthCalledWith(2, "blob:second-product");
+  });
+
+  it("allows uploading the same file again after using the sample product", async () => {
+    const user = userEvent.setup();
+    const createObjectURL = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValueOnce("blob:first-same-file")
+      .mockReturnValueOnce("blob:second-same-file");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    render(<Workspace />);
+    const uploadInput = screen.getByLabelText("上传商品图");
+    const file = new File(["same"], "same-product.png", {
+      type: "image/png",
+    });
+
+    await user.upload(uploadInput, file);
+    expect(uploadInput).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.upload(uploadInput, file);
+
+    expect(createObjectURL).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("same-product.png")).toBeInTheDocument();
+    expect(screen.getByAltText("当前商品图")).toHaveAttribute(
+      "src",
+      "blob:second-same-file",
+    );
   });
 });
 

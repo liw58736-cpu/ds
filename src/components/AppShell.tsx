@@ -19,7 +19,6 @@ export function AppShell({ children }: AppShellProps) {
         <div className="brand-block">
           <h1>Commerce Studio</h1>
           <p>跨境电商生图工作台</p>
-          <span className="sr-only">电商主图与详情页生成工作台</span>
         </div>
         <nav className="topnav" aria-label="主导航">
           {topNavItems.map((item) => (
