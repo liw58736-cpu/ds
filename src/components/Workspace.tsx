@@ -1,15 +1,62 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { defaultConfig } from "../domain/defaults";
-import type { GenerationConfig, GenerationModule, ProductInput } from "../domain/types";
+import {
+  completeTask,
+  createTask,
+  failTask,
+  markProcessing,
+  retryTask,
+} from "../domain/taskState";
+import type {
+  GenerationConfig,
+  GenerationModule,
+  GenerationTask,
+  ProductInput,
+} from "../domain/types";
+import {
+  GenerationProviderError,
+  MockGenerationProvider,
+} from "../providers/generationProvider";
+import { loadTasks, saveTasks } from "../storage/taskStore";
 import { ModuleNav } from "./ModuleNav";
 import { ParameterPanel } from "./ParameterPanel";
 import { ResultPreview } from "./ResultPreview";
+import { TaskHistory } from "./TaskHistory";
 import { UploadPanel } from "./UploadPanel";
+
+function moveTaskToTop(
+  tasks: GenerationTask[],
+  nextTask: GenerationTask,
+): GenerationTask[] {
+  return [nextTask, ...tasks.filter((task) => task.id !== nextTask.id)];
+}
+
+function getFailureDetails(error: unknown): {
+  errorCode: string;
+  errorMessage: string;
+} {
+  if (error instanceof GenerationProviderError) {
+    return {
+      errorCode: error.code,
+      errorMessage: error.message,
+    };
+  }
+
+  return {
+    errorCode: "unknown_generation_error",
+    errorMessage: "生成失败，请重试。",
+  };
+}
 
 export function Workspace() {
   const [config, setConfig] = useState<GenerationConfig>(defaultConfig);
   const [product, setProduct] = useState<ProductInput | null>(null);
+  const [tasks, setTasks] = useState<GenerationTask[]>(() => loadTasks());
+  const provider = useMemo(() => new MockGenerationProvider({ delayMs: 20 }), []);
   const productRef = useRef<ProductInput | null>(null);
+  const latestTask = tasks[0];
+  const hasRunningLatestTask =
+    latestTask?.status === "queued" || latestTask?.status === "processing";
 
   const revokeUploadedProduct = (productToRevoke: ProductInput | null) => {
     if (productToRevoke?.source === "upload") {
@@ -32,6 +79,66 @@ export function Workspace() {
     setProduct(nextProduct);
   };
 
+  const runProcessingTask = useCallback(
+    async (processingTask: GenerationTask) => {
+      try {
+        const result = await provider.generate({
+          product: processingTask.productInput,
+          config: processingTask.config,
+        });
+        const completedTask = completeTask(processingTask, {
+          resultUrls: result.resultUrls,
+          creditCost: result.creditCost,
+          completedAt: new Date().toISOString(),
+        });
+
+        setTasks((currentTasks) => moveTaskToTop(currentTasks, completedTask));
+      } catch (error) {
+        const failure = getFailureDetails(error);
+        const failedTask = failTask(processingTask, {
+          ...failure,
+          completedAt: new Date().toISOString(),
+        });
+
+        setTasks((currentTasks) => moveTaskToTop(currentTasks, failedTask));
+      }
+    },
+    [provider],
+  );
+
+  const handleGenerate = () => {
+    if (!product || hasRunningLatestTask) {
+      return;
+    }
+
+    const queuedTask = createTask({
+      product,
+      config,
+      now: new Date().toISOString(),
+    });
+    const processingTask = markProcessing(queuedTask);
+
+    setTasks((currentTasks) => [processingTask, ...currentTasks]);
+    void runProcessingTask(processingTask);
+  };
+
+  const handleRetryTask = (task: GenerationTask) => {
+    const queuedTask = retryTask(task, new Date().toISOString());
+    const processingTask = markProcessing(queuedTask);
+
+    setTasks((currentTasks) => moveTaskToTop(currentTasks, processingTask));
+    void runProcessingTask(processingTask);
+  };
+
+  const handleReuseTask = (task: GenerationTask) => {
+    handleProductChange(task.productInput);
+    setConfig(task.config);
+  };
+
+  useEffect(() => {
+    saveTasks(tasks);
+  }, [tasks]);
+
   useEffect(() => {
     return () => {
       revokeUploadedProduct(productRef.current);
@@ -40,10 +147,22 @@ export function Workspace() {
 
   return (
     <main className="workspace">
-      <ModuleNav selectedModule={config.module} onSelect={handleModuleSelect} />
+      <div className="workspace-sidebar">
+        <ModuleNav selectedModule={config.module} onSelect={handleModuleSelect} />
+        <TaskHistory
+          tasks={tasks}
+          onReuseTask={handleReuseTask}
+          onRetryTask={handleRetryTask}
+        />
+      </div>
       <div className="workspace-main">
         <UploadPanel product={product} onProductChange={handleProductChange} />
-        <ResultPreview product={product} />
+        <ResultPreview
+          product={product}
+          latestTask={latestTask}
+          onGenerate={handleGenerate}
+          isGenerateDisabled={!product || hasRunningLatestTask}
+        />
       </div>
       <ParameterPanel config={config} onChange={setConfig} />
     </main>

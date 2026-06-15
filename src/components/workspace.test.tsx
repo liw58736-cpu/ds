@@ -1,8 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { GenerationTask } from "../domain/types";
 import { AppShell } from "./AppShell";
 import { Workspace } from "./Workspace";
+
+beforeEach(() => {
+  localStorage.clear();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -130,6 +135,124 @@ describe("Workspace", () => {
       "src",
       "blob:second-same-file",
     );
+  });
+
+  it("generates material from the sample product and stores the completed task", async () => {
+    const user = userEvent.setup();
+    render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: "生成素材" }));
+
+    expect(screen.getAllByText("处理中").length).toBeGreaterThan(0);
+    expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
+    expect(screen.getByText("已完成")).toBeInTheDocument();
+
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+
+      expect(storedTasks[0]).toMatchObject({
+        status: "completed",
+        creditCost: 1,
+      });
+    });
+  });
+
+  it("shows provider failures without charging credits", async () => {
+    const user = userEvent.setup();
+    render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.type(screen.getByLabelText("卖点"), "fail");
+    await user.click(screen.getByRole("button", { name: "生成素材" }));
+
+    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(2);
+    expect(screen.getByText("失败")).toBeInTheDocument();
+
+    const storedTasks = JSON.parse(
+      localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+    ) as GenerationTask[];
+    expect(storedTasks[0]).toMatchObject({
+      status: "failed",
+      creditCost: 0,
+      errorMessage: "模拟生成失败，请重试。",
+    });
+  });
+
+  it("retries failed tasks and keeps the failed message when the same config fails again", async () => {
+    const user = userEvent.setup();
+    render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.type(screen.getByLabelText("卖点"), "fail");
+    await user.click(screen.getByRole("button", { name: "生成素材" }));
+
+    expect(await screen.findByRole("button", { name: "重试" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "重试" }));
+
+    expect(screen.getAllByText("处理中").length).toBeGreaterThan(0);
+    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(2);
+    expect(screen.getByText("失败")).toBeInTheDocument();
+
+    const storedTasks = JSON.parse(
+      localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+    ) as GenerationTask[];
+    expect(storedTasks[0]).toMatchObject({
+      status: "failed",
+      attempt: 2,
+      creditCost: 0,
+    });
+  });
+
+  it("reuses product and parameters from a history task", async () => {
+    const user = userEvent.setup();
+    const historyTask: GenerationTask = {
+      id: "task-history-1",
+      productInput: {
+        id: "history-product",
+        imageUrl: "/history-product.png",
+        fileName: "history-product.png",
+        createdAt: "2026-06-15T00:00:00.000Z",
+        source: "sample",
+      },
+      config: {
+        module: "shopify_banner",
+        platform: "shopify",
+        aspectRatio: "16:9",
+        style: "premium",
+        outputFormat: "webp",
+        sellingPoints: "Reusable history copy",
+        specifications: "1200 x 628",
+      },
+      status: "completed",
+      resultUrls: ["/result.png"],
+      creditCost: 1,
+      createdAt: "2026-06-15T01:00:00.000Z",
+      completedAt: "2026-06-15T01:00:01.000Z",
+      attempt: 1,
+    };
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([historyTask]),
+    );
+    render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "复用参数" }));
+
+    expect(screen.getByText("history-product.png")).toBeInTheDocument();
+    expect(screen.getByAltText("当前商品图")).toHaveAttribute(
+      "src",
+      "/history-product.png",
+    );
+    expect(screen.getByLabelText("模块")).toHaveValue("Shopify Banner");
+    expect(screen.getByLabelText("平台")).toHaveValue("shopify");
+    expect(screen.getByLabelText("尺寸")).toHaveValue("16:9");
+    expect(screen.getByLabelText("风格")).toHaveValue("premium");
+    expect(screen.getByLabelText("输出格式")).toHaveValue("webp");
+    expect(screen.getByLabelText("卖点")).toHaveValue("Reusable history copy");
+    expect(screen.getByLabelText("规格")).toHaveValue("1200 x 628");
   });
 });
 
