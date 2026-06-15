@@ -340,6 +340,64 @@ describe("Workspace", () => {
     expect(screen.getByRole("button", { name: "重试" })).toBeDisabled();
   });
 
+  it("disables reuse and retry for persisted processing upload blob tasks after reload", () => {
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([
+        createStoredTask({
+          status: "processing",
+          productInput: {
+            id: "uploaded-processing-product",
+            imageUrl: "blob:persisted-processing-upload",
+            fileName: "uploaded-processing-product.png",
+            createdAt: "2026-06-15T00:00:00.000Z",
+            source: "upload",
+          },
+          resultUrls: ["/stale-processing-result.png"],
+          creditCost: 1,
+          completedAt: undefined,
+        }),
+      ]),
+    );
+    render(<Workspace />);
+
+    expect(
+      screen.getAllByText("原始上传图已失效，请重新上传后再生成。").length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("任务在上次会话中断，请重新生成。")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复用参数" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重试" })).toBeDisabled();
+  });
+
+  it("disables reuse and retry for persisted queued upload blob tasks after reload", () => {
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([
+        createStoredTask({
+          status: "queued",
+          productInput: {
+            id: "uploaded-queued-product",
+            imageUrl: "blob:persisted-queued-upload",
+            fileName: "uploaded-queued-product.png",
+            createdAt: "2026-06-15T00:00:00.000Z",
+            source: "upload",
+          },
+          resultUrls: [],
+          creditCost: 0,
+          completedAt: undefined,
+        }),
+      ]),
+    );
+    render(<Workspace />);
+
+    expect(
+      screen.getAllByText("原始上传图已失效，请重新上传后再生成。").length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("任务在上次会话中断，请重新生成。")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复用参数" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重试" })).toBeDisabled();
+  });
+
   it("disables retry while another task is processing", async () => {
     const user = userEvent.setup();
     localStorage.setItem(

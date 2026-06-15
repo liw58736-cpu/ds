@@ -131,4 +131,70 @@ describe("taskStore", () => {
       },
     ]);
   });
+
+  it("marks persisted processing upload blob tasks as failed source-unavailable tasks", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T03:00:00.000Z"));
+    const processingBlobTask: GenerationTask = {
+      ...task,
+      productInput: {
+        ...task.productInput,
+        imageUrl: "blob:persisted-processing-upload",
+        source: "upload",
+      },
+      status: "processing",
+      resultUrls: ["/stale-result.png"],
+      creditCost: 1,
+      completedAt: undefined,
+    };
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([processingBlobTask]),
+    );
+
+    expect(loadTasks()).toEqual([
+      {
+        ...processingBlobTask,
+        status: "failed",
+        errorCode: "upload_source_unavailable",
+        errorMessage: "原始上传图已失效，请重新上传后再生成。",
+        completedAt: "2026-06-15T03:00:00.000Z",
+        creditCost: 0,
+        resultUrls: [],
+      },
+    ]);
+  });
+
+  it("marks persisted queued upload blob tasks as failed source-unavailable tasks", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T03:30:00.000Z"));
+    const queuedBlobTask: GenerationTask = {
+      ...task,
+      productInput: {
+        ...task.productInput,
+        imageUrl: "blob:persisted-queued-upload",
+        source: "upload",
+      },
+      status: "queued",
+      resultUrls: [],
+      creditCost: 0,
+      completedAt: undefined,
+    };
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([queuedBlobTask]),
+    );
+
+    expect(loadTasks()).toEqual([
+      {
+        ...queuedBlobTask,
+        status: "failed",
+        errorCode: "upload_source_unavailable",
+        errorMessage: "原始上传图已失效，请重新上传后再生成。",
+        completedAt: "2026-06-15T03:30:00.000Z",
+        creditCost: 0,
+        resultUrls: [],
+      },
+    ]);
+  });
 });

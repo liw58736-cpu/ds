@@ -176,18 +176,33 @@ function parseTask(value: unknown): GenerationTask | null {
   };
 }
 
+function hasUnavailableUploadSource(task: GenerationTask): boolean {
+  return (
+    task.productInput.source === "upload" &&
+    task.productInput.imageUrl.startsWith("blob:")
+  );
+}
+
 function normalizeTask(task: GenerationTask, now: string): GenerationTask {
-  if (task.status !== "queued" && task.status !== "processing") {
-    if (
-      task.productInput.source === "upload" &&
-      task.productInput.imageUrl.startsWith("blob:")
-    ) {
+  if (hasUnavailableUploadSource(task)) {
+    if (task.status === "completed") {
       return {
         ...task,
         ...UNAVAILABLE_UPLOAD_SOURCE_ERROR,
       };
     }
 
+    return {
+      ...task,
+      status: "failed",
+      ...UNAVAILABLE_UPLOAD_SOURCE_ERROR,
+      completedAt: task.completedAt ?? now,
+      creditCost: 0,
+      resultUrls: [],
+    };
+  }
+
+  if (task.status !== "queued" && task.status !== "processing") {
     return task;
   }
 
