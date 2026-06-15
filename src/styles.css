@@ -100,6 +100,22 @@ button {
   background: #dfe9ed;
 }
 
+.topnav-button.is-active {
+  color: #0f3f3b;
+  background: #dcebe7;
+  font-weight: 700;
+}
+
+.topnav-button:disabled {
+  color: #98a2ad;
+  background: #f1f4f6;
+  cursor: not-allowed;
+}
+
+.topnav-button:disabled:hover {
+  background: #f1f4f6;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr) 300px;
@@ -200,6 +216,13 @@ button {
 .upload-dropzone:hover {
   border-color: #287c72;
   background: #f3f8f6;
+}
+
+.upload-dropzone:focus-within {
+  border-color: #287c72;
+  background: #f3f8f6;
+  outline: 3px solid rgba(40, 124, 114, 0.24);
+  outline-offset: 2px;
 }
 
 .upload-dropzone input {
