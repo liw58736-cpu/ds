@@ -35,6 +35,22 @@ describe("MockGenerationProvider", () => {
     expect(decodeURIComponent(result.resultUrls[0])).toContain("detail_page");
   });
 
+  it("escapes dynamic text before writing it into SVG text nodes", async () => {
+    const provider = new MockGenerationProvider({ delayMs: 0 });
+
+    const result = await provider.generate({
+      ...input,
+      product: {
+        ...input.product,
+        fileName: "A & <B>.png",
+      },
+    });
+    const svg = decodeURIComponent(result.resultUrls[0]);
+
+    expect(svg).toContain("A &amp; &lt;B&gt;.png");
+    expect(svg).not.toContain("A & <B>.png");
+  });
+
   it("rejects controlled failures with provider code and Chinese message", async () => {
     const provider = new MockGenerationProvider({
       delayMs: 0,
@@ -49,5 +65,22 @@ describe("MockGenerationProvider", () => {
     await expect(provider.generate(input)).rejects.toBeInstanceOf(
       GenerationProviderError,
     );
+  });
+
+  it("rejects when selling points contain the fail sentinel", async () => {
+    const provider = new MockGenerationProvider({ delayMs: 0 });
+
+    await expect(
+      provider.generate({
+        ...input,
+        config: {
+          ...input.config,
+          sellingPoints: "Trigger FAIL state for retry QA",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "mock_generation_failed",
+      message: "模拟生成失败，请重试。",
+    });
   });
 });
