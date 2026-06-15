@@ -126,6 +126,15 @@ button {
   letter-spacing: 0;
 }
 
+.page-heading h1 + p {
+  margin: 8px 0 0;
+  color: #526171;
+}
+
+.history-notice {
+  margin-bottom: 18px;
+}
+
 .template-grid,
 .pricing-grid {
   display: grid;

@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import type { AppPage } from "../App";
+
+export type AppPage =
+  | "workspace"
+  | "templates"
+  | "history"
+  | "pricing"
+  | "account";
 
 interface AppShellProps {
   page: AppPage;
