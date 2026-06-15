@@ -1,18 +1,26 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const port = 4289;
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL,
   },
   webServer: {
-    command: "npm run dev -- --port 5173",
-    url: "http://127.0.0.1:5173",
+    command: `npm run dev -- --port ${port} --strictPort`,
+    url: baseURL,
+    reuseExistingServer: true,
   },
   projects: [
     {
-      name: "chromium",
+      name: "desktop chromium",
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "mobile chromium",
+      use: { ...devices["Pixel 5"] },
     },
   ],
 });
