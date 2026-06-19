@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { defaultConfig } from "../domain/defaults";
 import {
   completeTask,
@@ -6,6 +6,7 @@ import {
   failTask,
   markProcessing,
   retryTask,
+  updateTaskProgress,
 } from "../domain/taskState";
 import type {
   GenerationConfig,
@@ -14,14 +15,21 @@ import type {
   ProductInput,
 } from "../domain/types";
 import {
-  GenerationProviderError,
-  MockGenerationProvider,
-} from "../providers/generationProvider";
-import { loadTasks, saveTasks } from "../storage/taskStore";
-import { ModuleNav } from "./ModuleNav";
+  consumeCredits,
+  getCurrentAccount,
+  getCurrentAccountSnapshot,
+} from "../api/accountApi";
+import {
+  cancelGenerationTask,
+  generateAsset,
+  getGenerationTaskSnapshot,
+  listGenerationTasks,
+  resumeGenerationTask,
+  saveGenerationTasks,
+} from "../api/generationApi";
+import { GenerationProviderError } from "../providers/generationProvider";
 import { ParameterPanel } from "./ParameterPanel";
 import { ResultPreview } from "./ResultPreview";
-import { TaskHistory } from "./TaskHistory";
 import { UploadPanel } from "./UploadPanel";
 
 function moveTaskToTop(
@@ -48,19 +56,47 @@ function getFailureDetails(error: unknown): {
   };
 }
 
-function hasUnavailableUploadSource(task: GenerationTask): boolean {
-  return task.errorCode === "upload_source_unavailable";
+interface WorkspaceProps {
+  activeModule?: Extract<
+    GenerationModule,
+    "main_image" | "white_background" | "detail_page"
+  >;
+  isVisible?: boolean;
+  onOpenPricing?: () => void;
 }
 
-export function Workspace() {
+function getModuleDefaults(module: GenerationModule): Partial<GenerationConfig> {
+  if (module === "detail_page") {
+    return { module, aspectRatio: "long_page", outputFormat: "jpg" };
+  }
+
+  if (module === "white_background") {
+    return { module, aspectRatio: "1:1", outputFormat: "png" };
+  }
+
+  return { module, aspectRatio: "1:1", outputFormat: "png" };
+}
+
+export function Workspace({
+  activeModule = "main_image",
+  isVisible = true,
+  onOpenPricing,
+}: WorkspaceProps) {
   const [config, setConfig] = useState<GenerationConfig>(defaultConfig);
   const [product, setProduct] = useState<ProductInput | null>(null);
-  const [tasks, setTasks] = useState<GenerationTask[]>(() => loadTasks());
+  const [tasks, setTasks] = useState<GenerationTask[]>(
+    () => getGenerationTaskSnapshot(),
+  );
+  const [accountBalance, setAccountBalance] = useState(
+    () => getCurrentAccountSnapshot().balance,
+  );
   const [activePreviewTaskId, setActivePreviewTaskId] = useState<
     string | null | undefined
   >(undefined);
-  const provider = useMemo(() => new MockGenerationProvider({ delayMs: 20 }), []);
   const productRef = useRef<ProductInput | null>(null);
+  const activeModuleRef = useRef(activeModule);
+  const hasLoadedTasksRef = useRef(true);
+  const taskRunTokensRef = useRef<Record<string, number>>({});
   const latestTask = tasks[0];
   const activePreviewTask =
     activePreviewTaskId === undefined
@@ -70,6 +106,7 @@ export function Workspace() {
         : tasks.find((task) => task.id === activePreviewTaskId);
   const hasRunningLatestTask =
     latestTask?.status === "queued" || latestTask?.status === "processing";
+  const isOutOfCredits = accountBalance <= 0;
 
   const revokeUploadedProduct = (productToRevoke: ProductInput | null) => {
     if (productToRevoke?.source === "upload") {
@@ -77,9 +114,14 @@ export function Workspace() {
     }
   };
 
-  const handleModuleSelect = (module: GenerationModule) => {
-    setConfig((currentConfig) => ({ ...currentConfig, module }));
+  const startTaskRun = (taskId: string): number => {
+    const nextToken = (taskRunTokensRef.current[taskId] ?? 0) + 1;
+    taskRunTokensRef.current[taskId] = nextToken;
+    return nextToken;
   };
+
+  const isTaskRunCurrent = (taskId: string, token: number): boolean =>
+    taskRunTokensRef.current[taskId] === token;
 
   const handleProductChange = (nextProduct: ProductInput) => {
     const previousProduct = productRef.current;
@@ -93,22 +135,80 @@ export function Workspace() {
   };
 
   const runProcessingTask = useCallback(
-    async (processingTask: GenerationTask) => {
+    async (
+      processingTask: GenerationTask,
+      runToken: number,
+      mode: "submit" | "resume" = "submit",
+    ) => {
+      let currentProcessingTask = processingTask;
+
       try {
-        const result = await provider.generate({
-          product: processingTask.productInput,
-          config: processingTask.config,
-        });
-        const completedTask = completeTask(processingTask, {
+        const generationOptions = {
+          onProgress: (progress: string) => {
+            if (!isTaskRunCurrent(processingTask.id, runToken)) {
+              return;
+            }
+
+            setTasks((currentTasks) =>
+              currentTasks.map((task) =>
+                task.id === processingTask.id && task.status === "processing"
+                  ? updateTaskProgress(task, progress)
+                  : task,
+              ),
+            );
+          },
+          onTaskStarted: (backendTaskId: string) => {
+            if (!isTaskRunCurrent(processingTask.id, runToken)) {
+              return;
+            }
+
+            currentProcessingTask = {
+              ...currentProcessingTask,
+              backendTaskId,
+            };
+            setTasks((currentTasks) =>
+              currentTasks.map((task) =>
+                task.id === processingTask.id && task.status === "processing"
+                  ? { ...task, backendTaskId }
+                  : task,
+              ),
+            );
+          },
+          shouldContinue: () => isTaskRunCurrent(processingTask.id, runToken),
+        };
+        const result =
+          mode === "resume"
+            ? await resumeGenerationTask(processingTask, generationOptions)
+            : await generateAsset(
+                {
+                  product: processingTask.productInput,
+                  config: processingTask.config,
+                },
+                generationOptions,
+              );
+        if (!isTaskRunCurrent(processingTask.id, runToken)) {
+          return;
+        }
+
+        const completedTask = completeTask(currentProcessingTask, {
           resultUrls: result.resultUrls,
           creditCost: result.creditCost,
           completedAt: new Date().toISOString(),
         });
+        const account = await consumeCredits({
+          amount: result.creditCost,
+          label: "生成商品素材",
+        });
 
+        setAccountBalance(account.balance);
         setTasks((currentTasks) => moveTaskToTop(currentTasks, completedTask));
       } catch (error) {
+        if (!isTaskRunCurrent(processingTask.id, runToken)) {
+          return;
+        }
+
         const failure = getFailureDetails(error);
-        const failedTask = failTask(processingTask, {
+        const failedTask = failTask(currentProcessingTask, {
           ...failure,
           completedAt: new Date().toISOString(),
         });
@@ -116,10 +216,15 @@ export function Workspace() {
         setTasks((currentTasks) => moveTaskToTop(currentTasks, failedTask));
       }
     },
-    [provider],
+    [],
   );
 
   const handleGenerate = () => {
+    if (isOutOfCredits) {
+      onOpenPricing?.();
+      return;
+    }
+
     if (!product || hasRunningLatestTask) {
       return;
     }
@@ -133,35 +238,91 @@ export function Workspace() {
 
     setTasks((currentTasks) => [processingTask, ...currentTasks]);
     setActivePreviewTaskId(processingTask.id);
-    void runProcessingTask(processingTask);
+    void runProcessingTask(processingTask, startTaskRun(processingTask.id));
   };
 
-  const handleRetryTask = (task: GenerationTask) => {
-    if (hasRunningLatestTask || hasUnavailableUploadSource(task)) {
+  const handleCancelTask = (taskToCancel: GenerationTask) => {
+    if (taskToCancel.status !== "processing") {
       return;
     }
 
-    const queuedTask = retryTask(task, new Date().toISOString());
-    const processingTask = markProcessing(queuedTask);
+    taskRunTokensRef.current[taskToCancel.id] =
+      (taskRunTokensRef.current[taskToCancel.id] ?? 0) + 1;
+    void cancelGenerationTask(taskToCancel);
+
+    const canceledTask = failTask(taskToCancel, {
+      errorCode: "task_canceled",
+      errorMessage: "已取消本次生成。",
+      completedAt: new Date().toISOString(),
+    });
+
+    setTasks((currentTasks) => moveTaskToTop(currentTasks, canceledTask));
+  };
+
+  const handleRetryTask = (taskToRetry: GenerationTask) => {
+    if (taskToRetry.status !== "failed") {
+      return;
+    }
+
+    if (isOutOfCredits) {
+      onOpenPricing?.();
+      return;
+    }
+
+    if (hasRunningLatestTask) {
+      return;
+    }
+
+    const processingTask = markProcessing(
+      retryTask(taskToRetry, new Date().toISOString()),
+    );
 
     setTasks((currentTasks) => moveTaskToTop(currentTasks, processingTask));
     setActivePreviewTaskId(processingTask.id);
-    void runProcessingTask(processingTask);
-  };
-
-  const handleReuseTask = (task: GenerationTask) => {
-    if (hasUnavailableUploadSource(task)) {
-      return;
-    }
-
-    handleProductChange(task.productInput);
-    setConfig(task.config);
-    setActivePreviewTaskId(null);
+    void runProcessingTask(processingTask, startTaskRun(processingTask.id));
   };
 
   useEffect(() => {
-    saveTasks(tasks);
+    if (hasLoadedTasksRef.current) {
+      void saveGenerationTasks(tasks);
+    }
   }, [tasks]);
+
+  useEffect(() => {
+    void listGenerationTasks().then((storedTasks) => {
+      hasLoadedTasksRef.current = true;
+      setTasks(storedTasks);
+      storedTasks
+        .filter(
+          (task) => task.status === "processing" && Boolean(task.backendTaskId),
+        )
+        .forEach((task) => {
+          void runProcessingTask(task, startTaskRun(task.id), "resume");
+        });
+    });
+  }, [runProcessingTask]);
+
+  useEffect(() => {
+    if (isVisible) {
+      void getCurrentAccount().then((account) => {
+        setAccountBalance(account.balance);
+      });
+    }
+  }, [isVisible]);
+
+  useEffect(() => {
+    const didChangeModule = activeModuleRef.current !== activeModule;
+
+    setConfig((currentConfig) => ({
+      ...currentConfig,
+      ...getModuleDefaults(activeModule),
+    }));
+
+    if (didChangeModule) {
+      setActivePreviewTaskId(null);
+      activeModuleRef.current = activeModule;
+    }
+  }, [activeModule]);
 
   useEffect(() => {
     return () => {
@@ -171,25 +332,29 @@ export function Workspace() {
 
   return (
     <main className="workspace">
-      <div className="workspace-sidebar">
-        <ModuleNav selectedModule={config.module} onSelect={handleModuleSelect} />
-        <TaskHistory
-          tasks={tasks}
-          onReuseTask={handleReuseTask}
-          onRetryTask={handleRetryTask}
-          isRetryDisabled={hasRunningLatestTask}
-        />
+      <div className="studio-split">
+        <section className="studio-settings" aria-label="生成设置">
+          <UploadPanel product={product} onProductChange={handleProductChange} />
+          <ParameterPanel
+            activeModule={activeModule}
+            config={config}
+            onChange={setConfig}
+            onGenerate={handleGenerate}
+            onBuyCredits={onOpenPricing}
+            isGenerateDisabled={!product || hasRunningLatestTask}
+            hasRunningTask={hasRunningLatestTask}
+            isOutOfCredits={isOutOfCredits}
+          />
+        </section>
+        <section className="studio-preview" aria-label="生成预览">
+          <ResultPreview
+            product={product}
+            latestTask={activePreviewTask}
+            onCancelTask={handleCancelTask}
+            onRetryTask={handleRetryTask}
+          />
+        </section>
       </div>
-      <div className="workspace-main">
-        <UploadPanel product={product} onProductChange={handleProductChange} />
-        <ResultPreview
-          product={product}
-          latestTask={activePreviewTask}
-          onGenerate={handleGenerate}
-          isGenerateDisabled={!product || hasRunningLatestTask}
-        />
-      </div>
-      <ParameterPanel config={config} onChange={setConfig} />
     </main>
   );
 }

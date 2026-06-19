@@ -17,7 +17,7 @@ export default defineConfig({
     baseURL,
   },
   webServer: {
-    command: `npm run dev -- --port ${port} --strictPort`,
+    command: `npm run dev -- --mode test --port ${port} --strictPort`,
     url: baseURL,
     reuseExistingServer: !env.CI,
   },

@@ -1,134 +1,75 @@
-import { useState } from "react";
 import type { GenerationTask, ProductInput } from "../domain/types";
 
 interface ResultPreviewProps {
   product: ProductInput | null;
   latestTask?: GenerationTask;
-  onGenerate: () => void;
-  isGenerateDisabled: boolean;
-}
-
-function isSafeResultUrl(url: string): boolean {
-  return (
-    url.startsWith("data:image/") ||
-    url.startsWith("blob:") ||
-    url.startsWith("https://") ||
-    url.startsWith("http://") ||
-    (url.startsWith("/") && !url.startsWith("//"))
-  );
+  onCancelTask?: (task: GenerationTask) => void;
+  onRetryTask?: (task: GenerationTask) => void;
 }
 
 export function ResultPreview({
   product,
   latestTask,
-  onGenerate,
-  isGenerateDisabled,
+  onCancelTask,
+  onRetryTask,
 }: ResultPreviewProps) {
-  const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const isTaskRunning =
     latestTask?.status === "queued" || latestTask?.status === "processing";
   const resultUrl =
     latestTask?.status === "completed" ? latestTask.resultUrls[0] : undefined;
   const hasResult = Boolean(resultUrl);
-  const hasDownloadableResult =
-    resultUrl !== undefined && isSafeResultUrl(resultUrl);
-  const resultFileName =
-    latestTask?.status === "completed"
-      ? `${latestTask.config.module}.${latestTask.config.outputFormat}`
-      : "generated-result.png";
-
-  const handleDownload = () => {
-    if (!resultUrl || !latestTask || !isSafeResultUrl(resultUrl)) {
-      return;
-    }
-
-    const anchor = document.createElement("a");
-    anchor.href = resultUrl;
-    anchor.download = resultFileName;
-    anchor.rel = "noopener";
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-  };
-
-  const handleCopyParameters = () => {
-    if (!latestTask || latestTask.status !== "completed") {
-      return;
-    }
-
-    const clipboard = navigator.clipboard;
-
-    if (clipboard?.writeText === undefined) {
-      setCopyStatus("当前浏览器不支持复制参数。");
-      return;
-    }
-
-    void clipboard
-      .writeText(JSON.stringify(latestTask.config))
-      .then(() => setCopyStatus("参数已复制。"))
-      .catch(() => setCopyStatus("复制失败，请手动复制参数。"));
-  };
+  const runningProgress =
+    isTaskRunning && latestTask?.progress ? latestTask.progress : "处理中";
 
   return (
     <section className="panel result-panel" aria-labelledby="result-title">
-      <div className="panel-heading result-heading">
-        <div>
-          <p className="eyebrow">Preview</p>
-          <h2 id="result-title">预览</h2>
+      {!product && !latestTask ? (
+        <div className="preview-empty-state">
+          <h3>先上传产品图并填写生成设置</h3>
+          <p>左侧完成设置后，这里会显示生成预览和最终结果。</p>
         </div>
-        <div className="result-actions">
-          <button
-            type="button"
-            onClick={onGenerate}
-            disabled={isGenerateDisabled}
-          >
-            生成素材
-          </button>
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={!hasDownloadableResult}
-          >
-            下载结果
-          </button>
-          <button
-            type="button"
-            onClick={handleCopyParameters}
-            disabled={!hasResult}
-          >
-            复制参数
-          </button>
-        </div>
-      </div>
-      {copyStatus ? (
-        <p className="sr-only" role="status">
-          {copyStatus}
-        </p>
       ) : null}
 
-      <div className="preview-grid">
+      <div className="preview-grid preview-grid-single">
         <div className="preview-slot">
-          <p className="preview-title">原图</p>
-          {product ? (
-            <img src={product.imageUrl} alt="原始商品图" />
-          ) : (
-            <div className="preview-placeholder">未选择商品图</div>
-          )}
-        </div>
-        <div className="preview-slot">
-          <p className="preview-title">结果</p>
+          <div className="preview-title-row">
+            <p className="preview-title">生成预览</p>
+            <span>{hasResult ? "Ready" : "Draft"}</span>
+          </div>
           {resultUrl ? (
             <img src={resultUrl} alt="生成结果" />
           ) : isTaskRunning ? (
             <div className="preview-placeholder" role="status">
-              处理中
+              <strong>{runningProgress}</strong>
+              <span>请保持页面打开，生成完成后会自动显示结果。</span>
+              {latestTask ? (
+                <button
+                  type="button"
+                  className="ghost-action-button"
+                  onClick={() => onCancelTask?.(latestTask)}
+                  disabled={!onCancelTask}
+                >
+                  取消生成
+                </button>
+              ) : null}
             </div>
           ) : latestTask?.status === "failed" ? (
             <div className="preview-placeholder preview-error" role="alert">
-              {latestTask.errorMessage ?? "生成失败，请重试。"}
+              <strong>{latestTask.errorMessage ?? "生成失败，请重试。"}</strong>
+              <span>失败任务不会计入成功消耗。</span>
+              <button
+                type="button"
+                className="ghost-action-button"
+                onClick={() => onRetryTask?.(latestTask)}
+                disabled={!onRetryTask}
+              >
+                重新生成
+              </button>
             </div>
           ) : (
-            <div className="preview-placeholder">等待生成结果</div>
+            <div className="preview-placeholder">
+              {product ? "等待生成结果" : "未选择商品图"}
+            </div>
           )}
         </div>
       </div>

@@ -46,6 +46,19 @@ export function markProcessing(task: GenerationTask): GenerationTask {
   return {
     ...task,
     status: "processing",
+    progress: "正在准备生成",
+  };
+}
+
+export function updateTaskProgress(
+  task: GenerationTask,
+  progress: string,
+): GenerationTask {
+  assertStatus(task, "processing", "update progress");
+
+  return {
+    ...task,
+    progress,
   };
 }
 
@@ -55,7 +68,12 @@ export function completeTask(
 ): GenerationTask {
   assertStatus(task, "processing", "complete");
 
-  const { errorCode: _errorCode, errorMessage: _errorMessage, ...rest } = task;
+  const {
+    errorCode: _errorCode,
+    errorMessage: _errorMessage,
+    progress: _progress,
+    ...rest
+  } = task;
 
   return {
     ...rest,
@@ -78,6 +96,7 @@ export function failTask(
     resultUrls: [],
     errorCode: input.errorCode,
     errorMessage: input.errorMessage,
+    progress: undefined,
     completedAt: input.completedAt,
     creditCost: 0,
   };
@@ -89,7 +108,9 @@ export function retryTask(task: GenerationTask, now: string): GenerationTask {
   const {
     errorCode: _errorCode,
     errorMessage: _errorMessage,
+    progress: _progress,
     completedAt: _completedAt,
+    backendTaskId: _backendTaskId,
     ...rest
   } = task;
 

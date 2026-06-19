@@ -4,6 +4,7 @@ import {
   failTask,
   markProcessing,
   retryTask,
+  updateTaskProgress,
 } from "./taskState";
 import { defaultConfig } from "./defaults";
 import type { GenerationConfig, ProductInput } from "./types";
@@ -62,6 +63,30 @@ describe("task lifecycle", () => {
     expect(processing.creditCost).toBe(0);
     expect(processing.resultUrls).toEqual([]);
     expect(processing.productInput).toBe(product);
+    expect(processing.progress).toBe("正在准备生成");
+  });
+
+  it("updates processing progress and clears it when the task reaches a terminal state", () => {
+    const task = updateTaskProgress(
+      markProcessing(
+        createTask({
+          product,
+          config,
+          now: "2026-06-15T01:00:00.000Z",
+        }),
+      ),
+      "Trying HD channel...",
+    );
+
+    expect(task.progress).toBe("Trying HD channel...");
+
+    const completed = completeTask(task, {
+      resultUrls: ["/mock/main-image.png"],
+      completedAt: "2026-06-15T01:00:02.000Z",
+      creditCost: 1,
+    });
+
+    expect(completed.progress).toBeUndefined();
   });
 
   it("completes a task and records result URL and credit cost", () => {
@@ -96,7 +121,7 @@ describe("task lifecycle", () => {
       }),
     );
 
-    const failed = failTask(processing, {
+    const failed = failTask(updateTaskProgress(processing, "Provider running"), {
       errorCode: "provider_timeout",
       errorMessage: "Provider timed out",
       completedAt: "2026-06-15T01:00:03.000Z",
@@ -108,10 +133,12 @@ describe("task lifecycle", () => {
     expect(failed.creditCost).toBe(0);
     expect(failed.errorCode).toBe("provider_timeout");
     expect(failed.errorMessage).toBe("Provider timed out");
+    expect(failed.progress).toBeUndefined();
 
     expect(retried.status).toBe("queued");
     expect(retried.errorCode).toBeUndefined();
     expect(retried.errorMessage).toBeUndefined();
+    expect(retried.progress).toBeUndefined();
     expect(retried.resultUrls).toEqual([]);
     expect(retried.creditCost).toBe(0);
     expect(retried.completedAt).toBeUndefined();

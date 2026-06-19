@@ -15,6 +15,15 @@ const statusLabels = {
   failed: "失败",
 } as const satisfies Record<TaskStatus, string>;
 
+function formatTaskTime(createdAt: string): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(createdAt));
+}
+
 function hasUnavailableUploadSource(task: GenerationTask): boolean {
   return task.errorCode === "upload_source_unavailable";
 }
@@ -39,12 +48,21 @@ export function TaskHistory({
           {tasks.map((task) => (
             <article className="task-history-item" key={task.id}>
               <div className="task-history-summary">
-                <span className="task-module">{moduleLabels[task.config.module]}</span>
+                <span className="task-module">
+                  {moduleLabels[task.config.module]}
+                </span>
                 <span className={`task-status task-status-${task.status}`}>
                   {statusLabels[task.status]}
                 </span>
               </div>
-              {task.errorMessage ? <p className="task-error">{task.errorMessage}</p> : null}
+              <div className="task-meta-row">
+                <span>{formatTaskTime(task.createdAt)}</span>
+                <span>第 {task.attempt} 次</span>
+                <span>{task.creditCost} credits</span>
+              </div>
+              {task.errorMessage ? (
+                <p className="task-error">{task.errorMessage}</p>
+              ) : null}
               <div className="task-history-actions">
                 <button
                   type="button"

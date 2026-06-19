@@ -16,6 +16,45 @@ export type VisualStyle = "studio" | "lifestyle" | "premium" | "minimal";
 
 export type OutputFormat = "png" | "jpg" | "webp";
 
+export type GenerationResolution = "1K" | "2K" | "4K";
+
+export type GenerationQuality = "standard" | "2k" | "4k";
+
+export type MainImageModuleId =
+  | "hero_kv"
+  | "overall_show"
+  | "detail_closeup"
+  | "use_scene"
+  | "color_set"
+  | "function_compare"
+  | "packaging"
+  | "trust";
+
+export type DetailPageModuleId =
+  | "main_display"
+  | "brand_intro"
+  | "style_selling"
+  | "fabric_craft"
+  | "cutting"
+  | "color_size"
+  | "multi_color"
+  | "promotion"
+  | "specs"
+  | "care"
+  | "service"
+  | "faq"
+  | "buyer_show"
+  | "outfit_recommend"
+  | "scene_outfit"
+  | "blogger_outfit"
+  | "flat_lay"
+  | "hanger"
+  | "chapter";
+
+export type WhiteBackgroundMode = "pure_white" | "transparent" | "light_gray";
+
+export type ShadowMode = "natural" | "none" | "contact_shadow";
+
 export type TaskStatus = "queued" | "processing" | "completed" | "failed";
 
 export interface ProductInput {
@@ -34,6 +73,11 @@ export interface GenerationConfig {
   outputFormat: OutputFormat;
   sellingPoints: string;
   specifications: string;
+  resolution?: GenerationResolution;
+  selectedMainModules?: MainImageModuleId[];
+  detailModuleCounts?: Partial<Record<DetailPageModuleId, number>>;
+  whiteBackgroundMode?: WhiteBackgroundMode;
+  shadowMode?: ShadowMode;
 }
 
 export interface GenerationTask {
@@ -44,6 +88,8 @@ export interface GenerationTask {
   resultUrls: string[];
   errorCode?: string;
   errorMessage?: string;
+  progress?: string;
+  backendTaskId?: string;
   creditCost: number;
   createdAt: string;
   completedAt?: string;

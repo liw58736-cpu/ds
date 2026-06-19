@@ -8,12 +8,12 @@ interface UploadPanelProps {
 
 const sampleImageSvg = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900">
-  <rect width="900" height="900" fill="#f8fafc"/>
-  <rect x="175" y="135" width="550" height="630" rx="46" fill="#ffffff" stroke="#cbd5e1" stroke-width="8"/>
-  <rect x="252" y="230" width="396" height="430" rx="34" fill="#e8f1f8"/>
-  <path d="M336 624h228c20 0 32-22 21-39l-70-108c-10-16-34-16-44 0l-37 57-24-35c-10-15-32-15-42 0l-53 86c-11 17 2 39 21 39z" fill="#287c72"/>
-  <circle cx="553" cy="330" r="48" fill="#d99152"/>
-  <rect x="300" y="696" width="300" height="34" rx="17" fill="#1f2937"/>
+  <rect width="900" height="900" fill="#fbfbf5"/>
+  <rect x="170" y="130" width="560" height="640" rx="42" fill="#ffffff" stroke="#e4e4e7" stroke-width="8"/>
+  <rect x="250" y="225" width="400" height="430" rx="30" fill="#eaf8ef"/>
+  <path d="M338 622h224c20 0 32-22 21-39l-68-106c-10-16-34-16-44 0l-38 58-24-36c-10-15-32-15-42 0l-52 84c-11 17 2 39 23 39z" fill="#111111"/>
+  <circle cx="552" cy="328" r="48" fill="#c1fbd4"/>
+  <rect x="300" y="696" width="300" height="34" rx="17" fill="#111111"/>
 </svg>`;
 
 const sampleImageUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
@@ -51,13 +51,15 @@ export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
   return (
     <section className="panel upload-panel" aria-labelledby="upload-title">
       <div className="panel-heading">
-        <p className="eyebrow">Input</p>
-        <h2 id="upload-title">商品图</h2>
+        <p className="eyebrow">Product Material</p>
+        <h2 id="upload-title">产品素材</h2>
+        <p>上传清晰、干净、光线稳定的商品图。最多先准备 1 张主素材。</p>
       </div>
 
       <div className="upload-actions">
         <label className="upload-dropzone">
           <span>上传商品图</span>
+          <small>支持 JPG、PNG、WebP</small>
           <input
             type="file"
             accept="image/*"
@@ -85,6 +87,7 @@ export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
       ) : (
         <div className="empty-upload">
           <p>等待商品图</p>
+          <span>先上传产品图，再填写生成简报。</span>
         </div>
       )}
     </section>

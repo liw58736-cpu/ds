@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 1200" role="img" aria-label="Premium white background and cutout ecommerce image example">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.54" stop-color="#f7faf6"/>
+      <stop offset="1" stop-color="#edf6fb"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#c1fbd4"/>
+      <stop offset="1" stop-color="#8ee4d0"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="30" stdDeviation="30" flood-color="#111827" flood-opacity="0.13"/>
+    </filter>
+    <filter id="productShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#111827" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect width="1800" height="1200" fill="url(#bg)"/>
+  <g opacity="0.58">
+    <path d="M110 150 H1690" stroke="#e3e9ee" stroke-width="3"/>
+    <path d="M110 360 H1690" stroke="#e3e9ee" stroke-width="3"/>
+    <path d="M110 570 H1690" stroke="#e3e9ee" stroke-width="3"/>
+    <path d="M110 780 H1690" stroke="#e3e9ee" stroke-width="3"/>
+    <path d="M110 990 H1690" stroke="#e3e9ee" stroke-width="3"/>
+    <path d="M350 88 V1076" stroke="#edf1f4" stroke-width="3"/>
+    <path d="M660 88 V1076" stroke="#edf1f4" stroke-width="3"/>
+    <path d="M970 88 V1076" stroke="#edf1f4" stroke-width="3"/>
+    <path d="M1280 88 V1076" stroke="#edf1f4" stroke-width="3"/>
+  </g>
+  <g filter="url(#softShadow)">
+    <rect x="152" y="108" width="1496" height="914" rx="58" fill="#ffffff" stroke="#d8e1e8" stroke-width="4"/>
+  </g>
+  <rect x="230" y="190" width="300" height="54" rx="27" fill="#111111"/>
+  <rect x="268" y="208" width="124" height="18" rx="9" fill="#ffffff" opacity="0.88"/>
+  <rect x="412" y="208" width="70" height="18" rx="9" fill="#c1fbd4"/>
+  <rect x="230" y="282" width="378" height="34" rx="17" fill="#dce5ea"/>
+  <rect x="230" y="338" width="260" height="26" rx="13" fill="#edf1f4"/>
+  <g filter="url(#productShadow)">
+    <ellipse cx="902" cy="770" rx="430" ry="62" fill="#d7e1e8"/>
+    <path d="M524 636 C590 440 744 314 914 314 C1102 314 1266 456 1340 646 C1264 704 1162 724 1034 696 C946 676 846 676 746 704 C646 732 570 706 524 636Z" fill="#111111"/>
+    <path d="M636 602 C708 500 806 450 920 450 C1052 450 1150 512 1220 610 C1116 636 1038 622 956 602 C854 578 760 596 636 602Z" fill="#f9faf7"/>
+    <path d="M654 628 C770 646 890 626 986 616 C1074 608 1146 620 1212 646" fill="none" stroke="#c1fbd4" stroke-width="26" stroke-linecap="round"/>
+  </g>
+  <g>
+    <rect x="256" y="742" width="320" height="220" rx="32" fill="#ffffff" stroke="#d8e1e8" stroke-width="4"/>
+    <circle cx="336" cy="828" r="42" fill="url(#mint)"/>
+    <rect x="406" y="800" width="118" height="26" rx="13" fill="#111111"/>
+    <rect x="406" y="850" width="92" height="20" rx="10" fill="#d8e1e8"/>
+    <rect x="406" y="890" width="132" height="20" rx="10" fill="#d8e1e8"/>
+  </g>
+  <g>
+    <rect x="1234" y="238" width="262" height="214" rx="34" fill="#f7faf6" stroke="#d8e1e8" stroke-width="4"/>
+    <rect x="1300" y="296" width="126" height="96" rx="26" fill="#111111"/>
+    <circle cx="1420" cy="312" r="28" fill="#c1fbd4"/>
+    <rect x="1234" y="502" width="262" height="214" rx="34" fill="#ffffff" stroke="#d8e1e8" stroke-width="4"/>
+    <ellipse cx="1365" cy="644" rx="92" ry="16" fill="#d8e1e8"/>
+    <path d="M1296 604 C1328 538 1398 538 1436 604 C1400 620 1338 620 1296 604Z" fill="#111111"/>
+    <path d="M1324 594 C1352 570 1386 570 1410 596" fill="none" stroke="#c1fbd4" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <g>
+    <rect x="650" y="884" width="500" height="82" rx="41" fill="#111111"/>
+    <circle cx="704" cy="925" r="22" fill="#c1fbd4"/>
+    <rect x="746" y="912" width="156" height="26" rx="13" fill="#ffffff" opacity="0.88"/>
+    <rect x="928" y="912" width="142" height="26" rx="13" fill="#ffffff" opacity="0.28"/>
+  </g>
+</svg>

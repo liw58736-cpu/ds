@@ -28,6 +28,18 @@ const task: GenerationTask = {
   attempt: 1,
 };
 
+const taskWithHydratedConfig: GenerationTask = {
+  ...task,
+  config: {
+    ...task.config,
+    resolution: "1K",
+    selectedMainModules: [],
+    detailModuleCounts: {},
+    whiteBackgroundMode: "pure_white",
+    shadowMode: "natural",
+  },
+};
+
 describe("taskStore", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -40,7 +52,7 @@ describe("taskStore", () => {
   it("round trips saved generation tasks", () => {
     saveTasks([task]);
 
-    expect(loadTasks()).toEqual([task]);
+    expect(loadTasks()).toEqual([taskWithHydratedConfig]);
   });
 
   it("returns empty tasks for invalid JSON", () => {
@@ -71,7 +83,23 @@ describe("taskStore", () => {
       JSON.stringify([{}, task, { ...task, id: 42 }]),
     );
 
-    expect(loadTasks()).toEqual([task]);
+    expect(loadTasks()).toEqual([taskWithHydratedConfig]);
+  });
+
+  it("round trips progress on stored task snapshots", () => {
+    saveTasks([
+      {
+        ...task,
+        progress: "Trying HD channel...",
+        backendTaskId: "kroma-task-1",
+      },
+    ]);
+
+    expect(loadTasks()[0]).toMatchObject({
+      id: "task-1",
+      progress: "Trying HD channel...",
+      backendTaskId: "kroma-task-1",
+    });
   });
 
   it("normalizes stored transient tasks into interrupted failures and persists them", () => {
@@ -93,6 +121,7 @@ describe("taskStore", () => {
     expect(loadTasks()).toEqual([
       {
         ...processingTask,
+        config: taskWithHydratedConfig.config,
         status: "failed",
         errorCode: "task_interrupted",
         errorMessage: "任务在上次会话中断，请重新生成。",
@@ -104,6 +133,30 @@ describe("taskStore", () => {
     expect(
       JSON.parse(localStorage.getItem("commerce-studio-tasks-v1") ?? "[]"),
     ).toEqual(loadTasks());
+  });
+
+  it("keeps resumable backend processing tasks when resume support is enabled", () => {
+    const processingTask: GenerationTask = {
+      ...task,
+      id: "task-resumable",
+      status: "processing",
+      backendTaskId: "kroma-task-resume",
+      progress: "Trying Wuyinkeji HD...",
+      resultUrls: [],
+      creditCost: 0,
+      completedAt: undefined,
+    };
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([processingTask]),
+    );
+
+    expect(loadTasks({ keepResumableTasks: true })).toEqual([
+      {
+        ...processingTask,
+        config: taskWithHydratedConfig.config,
+      },
+    ]);
   });
 
   it("marks persisted upload blob tasks as source unavailable while preserving completed results", () => {
@@ -126,6 +179,7 @@ describe("taskStore", () => {
     expect(loadTasks()).toEqual([
       {
         ...uploadedBlobTask,
+        config: taskWithHydratedConfig.config,
         errorCode: "upload_source_unavailable",
         errorMessage: "原始上传图已失效，请重新上传后再生成。",
       },
@@ -155,6 +209,7 @@ describe("taskStore", () => {
     expect(loadTasks()).toEqual([
       {
         ...processingBlobTask,
+        config: taskWithHydratedConfig.config,
         status: "failed",
         errorCode: "upload_source_unavailable",
         errorMessage: "原始上传图已失效，请重新上传后再生成。",
@@ -188,6 +243,7 @@ describe("taskStore", () => {
     expect(loadTasks()).toEqual([
       {
         ...queuedBlobTask,
+        config: taskWithHydratedConfig.config,
         status: "failed",
         errorCode: "upload_source_unavailable",
         errorMessage: "原始上传图已失效，请重新上传后再生成。",

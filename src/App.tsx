@@ -1,45 +1,92 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import type { AppPage } from "./components/AppShell";
 import { AccountPage } from "./components/AccountPage";
+import { HomePage } from "./components/HomePage";
+import { HistoryPage } from "./components/HistoryPage";
+import { LegalPage } from "./components/LegalPage";
+import { LoginPage } from "./components/LoginPage";
 import { PricingPage } from "./components/PricingPage";
-import { TemplatesPage } from "./components/TemplatesPage";
 import { Workspace } from "./components/Workspace";
 
+const studioPages = [
+  "main_image",
+  "white_background",
+  "detail_page",
+] as const satisfies readonly AppPage[];
+
+type StudioPage = (typeof studioPages)[number];
+
+function isStudioPage(page: AppPage): page is StudioPage {
+  return (studioPages as readonly AppPage[]).includes(page);
+}
+
 export default function App() {
-  const [page, setPage] = useState<AppPage>("workspace");
-  const isWorkspaceVisible = page === "workspace" || page === "history";
+  const [page, setPage] = useState<AppPage>("home");
+  const [activeStudioModule, setActiveStudioModule] =
+    useState<StudioPage>("main_image");
+  const isWorkspaceVisible = isStudioPage(page);
+  const shouldMountWorkspace = page !== "home" && page !== "history";
+
+  const handlePageChange = (nextPage: AppPage) => {
+    if (isStudioPage(nextPage)) {
+      setActiveStudioModule(nextPage);
+    }
+
+    setPage(nextPage);
+  };
 
   const secondaryPage =
-    page === "templates" ? (
-      <TemplatesPage />
+    page === "home" ? (
+      <HomePage onOpenStudio={handlePageChange} />
+    ) : page === "history" ? (
+      <HistoryPage />
     ) : page === "pricing" ? (
       <PricingPage />
     ) : page === "account" ? (
       <AccountPage />
+    ) : page === "login" ? (
+      <LoginPage onOpenLegal={handlePageChange} />
+    ) : page === "terms" ? (
+      <LegalPage type="terms" />
+    ) : page === "privacy" ? (
+      <LegalPage type="privacy" />
+    ) : page === "refund" ? (
+      <LegalPage type="refund" />
+    ) : page === "credits" ? (
+      <LegalPage type="credits" />
+    ) : page === "support" ? (
+      <LegalPage type="support" />
+    ) : page === "about" ? (
+      <LegalPage type="about" />
+    ) : page === "business" ? (
+      <LegalPage type="business" />
     ) : null;
 
+  useEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+
+    if (!navigator.userAgent.toLowerCase().includes("jsdom")) {
+      window.scrollTo({ top: 0, left: 0 });
+    }
+  }, [page]);
+
   return (
-    <AppShell page={page} onPageChange={setPage}>
+    <AppShell page={page} onPageChange={handlePageChange}>
       {secondaryPage}
       <section
         className="workspace-route"
         hidden={!isWorkspaceVisible}
         aria-hidden={!isWorkspaceVisible}
       >
-        {page === "history" ? (
-          <section
-            className="page-surface history-notice"
-            aria-labelledby="history-page-title"
-          >
-            <div className="page-heading">
-              <p className="eyebrow">History</p>
-              <h1 id="history-page-title">历史任务</h1>
-              <p>在工作台左侧查看最近任务，并复用参数或重试失败任务。</p>
-            </div>
-          </section>
+        {shouldMountWorkspace ? (
+          <Workspace
+            activeModule={activeStudioModule}
+            isVisible={isWorkspaceVisible}
+            onOpenPricing={() => handlePageChange("pricing")}
+          />
         ) : null}
-        <Workspace />
       </section>
     </AppShell>
   );

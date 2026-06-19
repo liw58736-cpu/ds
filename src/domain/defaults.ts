@@ -8,6 +8,11 @@ export const defaultConfig: GenerationConfig = {
   outputFormat: "png",
   sellingPoints: "",
   specifications: "",
+  resolution: "1K",
+  selectedMainModules: [],
+  detailModuleCounts: {},
+  whiteBackgroundMode: "pure_white",
+  shadowMode: "natural",
 };
 
 export const moduleLabels = {

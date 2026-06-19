@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GenerationTask } from "../domain/types";
+import { getAccountSnapshot } from "../storage/accountStore";
 import { AppShell } from "./AppShell";
 import { Workspace } from "./Workspace";
 
@@ -10,6 +11,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -53,26 +57,51 @@ describe("Workspace", () => {
     expect(screen.getByText("sample-product.jpg")).toBeInTheDocument();
   });
 
-  it("preserves the current product image and updates the module display when changing modules", async () => {
+  it("renders detail page settings as a separate studio page", async () => {
     const user = userEvent.setup();
-    render(<Workspace />);
+    render(<Workspace activeModule="detail_page" />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    await user.click(screen.getByRole("button", { name: "详情页长图" }));
 
     expect(screen.getByAltText("当前商品图")).toBeInTheDocument();
     expect(screen.getByLabelText("模块")).toHaveValue("详情页长图");
+    expect(screen.getByText("服装详情内容模块")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /品牌介绍/ })).toBeEnabled();
   });
 
-  it("updates platform and output controls", async () => {
+  it("updates selectable page controls", async () => {
     const user = userEvent.setup();
     render(<Workspace />);
 
-    await user.selectOptions(screen.getByLabelText("平台"), "shopify");
-    await user.selectOptions(screen.getByLabelText("输出格式"), "webp");
+    await user.selectOptions(screen.getByLabelText("输出语言"), "English");
+    await user.click(screen.getByRole("button", { name: "4K" }));
+    await user.click(screen.getByRole("button", { name: "标准版快速出图，适合批量 SKU" }));
 
-    expect(screen.getByLabelText("平台")).toHaveValue("shopify");
-    expect(screen.getByLabelText("输出格式")).toHaveValue("webp");
+    expect(screen.getByLabelText("输出语言")).toHaveValue("English");
+    expect(screen.getByRole("button", { name: "4K" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("button", { name: "标准版快速出图，适合批量 SKU" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("does not show model selection controls", () => {
+    render(<Workspace activeModule="white_background" />);
+
+    expect(screen.getByLabelText("输出语言")).toBeInTheDocument();
+    expect(screen.queryByLabelText("模型")).not.toBeInTheDocument();
+    expect(screen.queryByText("Commerce Image V2")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fast Product V1")).not.toBeInTheDocument();
+  });
+
+  it("does not render the account overview cards inside generation pages", () => {
+    render(<Workspace activeModule="white_background" />);
+
+    expect(screen.queryByLabelText("工作台概览")).not.toBeInTheDocument();
+    expect(screen.queryByText("积分余额")).not.toBeInTheDocument();
+    expect(screen.queryByText("本月消耗")).not.toBeInTheDocument();
   });
 
   it("allows focus to reach the upload input inside the dropzone", () => {
@@ -106,10 +135,7 @@ describe("Workspace", () => {
       "src",
       "blob:product-photo",
     );
-    expect(screen.getByAltText("原始商品图")).toHaveAttribute(
-      "src",
-      "blob:product-photo",
-    );
+    expect(screen.queryByAltText("原始商品图")).not.toBeInTheDocument();
     expect(screen.getByText("product-photo.png")).toBeInTheDocument();
   });
 
@@ -171,11 +197,12 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    await user.click(screen.getByRole("button", { name: "生成素材" }));
+    await user.click(screen.getByRole("button", { name: /细节特写/ }));
+    await user.click(screen.getByRole("button", { name: "4K" }));
+    await user.click(screen.getByRole("button", { name: "生成商品主图" }));
 
-    expect(screen.getAllByText("处理中").length).toBeGreaterThan(0);
     expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
-    expect(screen.getByText("已完成")).toBeInTheDocument();
+    expect(screen.queryByText("已生成")).not.toBeInTheDocument();
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
@@ -185,7 +212,31 @@ describe("Workspace", () => {
       expect(storedTasks[0]).toMatchObject({
         status: "completed",
         creditCost: 1,
+        config: {
+          resolution: "4K",
+          selectedMainModules: ["detail_closeup"],
+        },
       });
+    });
+  });
+
+  it("does not render inline recent tasks in the workspace settings column", async () => {
+    const user = userEvent.setup();
+    render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: "生成商品主图" }));
+
+    expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "最近任务" })).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+
+      expect(storedTasks).toHaveLength(1);
+      expect(storedTasks[0]?.status).toBe("completed");
     });
   });
 
@@ -194,73 +245,101 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    await user.type(screen.getByLabelText("卖点"), "fail");
-    await user.click(screen.getByRole("button", { name: "生成素材" }));
+    await user.type(screen.getByLabelText("设计简报"), "fail");
+    await user.click(screen.getByRole("button", { name: "生成商品主图" }));
 
-    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(2);
-    expect(screen.getByText("失败")).toBeInTheDocument();
+    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(1);
+    expect(screen.queryByText("生成失败")).not.toBeInTheDocument();
 
-    const storedTasks = JSON.parse(
-      localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
-    ) as GenerationTask[];
-    expect(storedTasks[0]).toMatchObject({
-      status: "failed",
-      creditCost: 0,
-      errorMessage: "模拟生成失败，请重试。",
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+
+      expect(storedTasks[0]).toMatchObject({
+        status: "failed",
+        creditCost: 0,
+        errorMessage: "模拟生成失败，请重试。",
+      });
     });
   });
 
-  it("retries failed tasks and keeps the failed message when the same config fails again", async () => {
+  it("cancels an in-flight generation without applying the stale completion", async () => {
     const user = userEvent.setup();
     render(<Workspace />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    await user.type(screen.getByLabelText("卖点"), "fail");
-    await user.click(screen.getByRole("button", { name: "生成素材" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成商品主图" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消生成" }));
 
-    expect(await screen.findByRole("button", { name: "重试" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(screen.getByText("已取消本次生成。")).toBeInTheDocument();
 
-    expect(screen.getAllByText("处理中").length).toBeGreaterThan(0);
-    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(2);
-    expect(screen.getByText("失败")).toBeInTheDocument();
-
-    const storedTasks = JSON.parse(
-      localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
-    ) as GenerationTask[];
-    expect(storedTasks[0]).toMatchObject({
-      status: "failed",
-      attempt: 2,
-      creditCost: 0,
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 40);
     });
+
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+
+      expect(storedTasks[0]).toMatchObject({
+        status: "failed",
+        creditCost: 0,
+        errorCode: "task_canceled",
+      });
+    });
+    expect(getAccountSnapshot().balance).toBe(4);
+    expect(screen.queryByAltText("生成结果")).not.toBeInTheDocument();
   });
 
-  it("reuses product and parameters from a history task", async () => {
-    const user = userEvent.setup();
-    const historyTask = createStoredTask();
+  it("requests backend cancellation when a processing task has a backend task id", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const storedTask = createStoredTask({
+      id: "task-cancel-ui",
+      status: "processing",
+      backendTaskId: "kroma-task-cancel-ui",
+      progress: "Trying Wuyinkeji HD...",
+      resultUrls: [],
+      creditCost: 0,
+      completedAt: undefined,
+      productInput: {
+        id: "remote-product",
+        imageUrl: "https://cdn.example.com/product.png",
+        fileName: "product.png",
+        createdAt: "2026-06-15T00:00:00.000Z",
+        source: "upload",
+      },
+    });
     localStorage.setItem(
       "commerce-studio-tasks-v1",
-      JSON.stringify([historyTask]),
+      JSON.stringify([storedTask]),
     );
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          task_id: "kroma-task-cancel-ui",
+          status: "processing",
+          progress: "Trying Wuyinkeji HD...",
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     render(<Workspace />);
 
-    await user.click(screen.getByRole("button", { name: "复用参数" }));
+    fireEvent.click(await screen.findByRole("button", { name: "取消生成" }));
 
-    expect(screen.getByText("history-product.png")).toBeInTheDocument();
-    expect(screen.getByAltText("当前商品图")).toHaveAttribute(
-      "src",
-      "/history-product.png",
-    );
-    expect(screen.getByLabelText("模块")).toHaveValue("Shopify Banner");
-    expect(screen.getByLabelText("平台")).toHaveValue("shopify");
-    expect(screen.getByLabelText("尺寸")).toHaveValue("16:9");
-    expect(screen.getByLabelText("风格")).toHaveValue("premium");
-    expect(screen.getByLabelText("输出格式")).toHaveValue("webp");
-    expect(screen.getByLabelText("卖点")).toHaveValue("Reusable history copy");
-    expect(screen.getByLabelText("规格")).toHaveValue("1200 x 628");
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://127.0.0.1:8000/api/v1/image/task/kroma-task-cancel-ui/cancel",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    expect(screen.getByText("已取消本次生成。")).toBeInTheDocument();
   });
 
-  it("loads stored processing tasks as retryable interrupted failures without locking generation", async () => {
+  it("loads stored processing tasks as interrupted preview failures without locking generation", async () => {
     const user = userEvent.setup();
     localStorage.setItem(
       "commerce-studio-tasks-v1",
@@ -276,13 +355,82 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     expect(
-      screen.getAllByText("任务在上次会话中断，请重新生成。").length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "重试" })).toBeEnabled();
+      screen.getByText("任务在上次会话中断，请重新生成。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "复用参数" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
 
-    expect(screen.getByRole("button", { name: "生成素材" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "生成商品主图" })).toBeEnabled();
+  });
+
+  it("resumes a stored backend processing task after reload", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const storedTask = createStoredTask({
+      id: "task-resume-ui",
+      status: "processing",
+      backendTaskId: "kroma-task-resume-ui",
+      progress: "Trying Wuyinkeji HD...",
+      resultUrls: [],
+      creditCost: 0,
+      completedAt: undefined,
+      productInput: {
+        id: "remote-product",
+        imageUrl: "https://cdn.example.com/product.png",
+        fileName: "product.png",
+        createdAt: "2026-06-15T00:00:00.000Z",
+        source: "upload",
+      },
+    });
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([storedTask]),
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            task_id: "kroma-task-resume-ui",
+            status: "processing",
+            progress: "Trying Wuyinkeji HD...",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            task_id: "kroma-task-resume-ui",
+            status: "done",
+            image_url: "https://cdn.example.com/resumed-result.png",
+          }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Workspace />);
+
+    expect(screen.getByText("Trying Wuyinkeji HD...")).toBeInTheDocument();
+    expect(
+      await screen.findByAltText("生成结果", {}, { timeout: 3500 }),
+    ).toHaveAttribute(
+      "src",
+      "https://cdn.example.com/resumed-result.png",
+    );
+
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+
+      expect(storedTasks[0]).toMatchObject({
+        id: "task-resume-ui",
+        status: "completed",
+        backendTaskId: "kroma-task-resume-ui",
+        resultUrls: ["https://cdn.example.com/resumed-result.png"],
+      });
+    });
   });
 
   it("treats persisted uploaded blob tasks as result-only after reload", () => {
@@ -303,15 +451,15 @@ describe("Workspace", () => {
     );
     render(<Workspace />);
 
-    expect(
-      screen.getAllByText("原始上传图已失效，请重新上传后再生成。").length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "复用参数" })).toBeDisabled();
+    expect(screen.getByAltText("生成结果")).toHaveAttribute(
+      "src",
+      "/safe-result.png",
+    );
+    expect(screen.queryByRole("button", { name: "复用参数" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "下载结果" })).toBeEnabled();
   });
 
-  it("disables retry for persisted failed upload blob tasks after reload", () => {
+  it("shows persisted failed upload blob tasks as non-actionable preview errors", () => {
     localStorage.setItem(
       "commerce-studio-tasks-v1",
       JSON.stringify([
@@ -334,13 +482,13 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     expect(
-      screen.getAllByText("原始上传图已失效，请重新上传后再生成。").length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "复用参数" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重试" })).toBeDisabled();
+      screen.getByText("原始上传图已失效，请重新上传后再生成。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "复用参数" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
   });
 
-  it("disables reuse and retry for persisted processing upload blob tasks after reload", () => {
+  it("shows persisted processing upload blob tasks as upload-source preview errors", () => {
     localStorage.setItem(
       "commerce-studio-tasks-v1",
       JSON.stringify([
@@ -362,14 +510,14 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     expect(
-      screen.getAllByText("原始上传图已失效，请重新上传后再生成。").length,
-    ).toBeGreaterThan(0);
+      screen.getByText("原始上传图已失效，请重新上传后再生成。"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("任务在上次会话中断，请重新生成。")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "复用参数" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重试" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "复用参数" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
   });
 
-  it("disables reuse and retry for persisted queued upload blob tasks after reload", () => {
+  it("shows persisted queued upload blob tasks as upload-source preview errors", () => {
     localStorage.setItem(
       "commerce-studio-tasks-v1",
       JSON.stringify([
@@ -391,34 +539,11 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     expect(
-      screen.getAllByText("原始上传图已失效，请重新上传后再生成。").length,
-    ).toBeGreaterThan(0);
+      screen.getByText("原始上传图已失效，请重新上传后再生成。"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("任务在上次会话中断，请重新生成。")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "复用参数" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重试" })).toBeDisabled();
-  });
-
-  it("disables retry while another task is processing", async () => {
-    const user = userEvent.setup();
-    localStorage.setItem(
-      "commerce-studio-tasks-v1",
-      JSON.stringify([
-        createStoredTask({
-          id: "failed-task",
-          status: "failed",
-          resultUrls: [],
-          creditCost: 0,
-          errorCode: "mock_generation_failed",
-          errorMessage: "模拟生成失败，请重试。",
-        }),
-      ]),
-    );
-    render(<Workspace />);
-
-    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    await user.click(screen.getByRole("button", { name: "生成素材" }));
-
-    expect(screen.getByRole("button", { name: "重试" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "复用参数" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
   });
 
   it("keeps historical task errors out of urgent alert regions", async () => {
@@ -426,121 +551,13 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    await user.type(screen.getByLabelText("卖点"), "fail");
-    await user.click(screen.getByRole("button", { name: "生成素材" }));
+    await user.type(screen.getByLabelText("设计简报"), "fail");
+    await user.click(screen.getByRole("button", { name: "生成商品主图" }));
 
-    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(2);
+    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(1);
     expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
 
-  it("downloads completed results through a temporary anchor", async () => {
-    const user = userEvent.setup();
-    const anchorClick = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => undefined);
-    render(<Workspace />);
-
-    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    await user.click(screen.getByRole("button", { name: "生成素材" }));
-    expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "下载结果" }));
-
-    expect(anchorClick).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not enable download for unsafe persisted result URLs", async () => {
-    const user = userEvent.setup();
-    const anchorClick = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => undefined);
-    localStorage.setItem(
-      "commerce-studio-tasks-v1",
-      JSON.stringify([
-        createStoredTask({
-          resultUrls: ["javascript:alert(1)"],
-        }),
-      ]),
-    );
-    render(<Workspace />);
-
-    const downloadButton = screen.getByRole("button", { name: "下载结果" });
-    expect(downloadButton).toBeDisabled();
-    await user.click(downloadButton);
-
-    expect(anchorClick).not.toHaveBeenCalled();
-  });
-
-  it("copies completed task parameters to the clipboard", async () => {
-    const user = userEvent.setup();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
-    render(<Workspace />);
-
-    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    await user.click(screen.getByRole("button", { name: "生成素材" }));
-    expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "复制参数" }));
-
-    expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining('"module":"main_image"'),
-    );
-  });
-
-  it("clears unrelated preview result when reusing an older task", async () => {
-    const user = userEvent.setup();
-    localStorage.setItem(
-      "commerce-studio-tasks-v1",
-      JSON.stringify([
-        createStoredTask({
-          id: "latest-task",
-          productInput: {
-            id: "latest-product",
-            imageUrl: "/latest-product.png",
-            fileName: "latest-product.png",
-            createdAt: "2026-06-15T00:00:00.000Z",
-            source: "sample",
-          },
-          resultUrls: ["/latest-result.png"],
-        }),
-        createStoredTask({
-          id: "older-task",
-          productInput: {
-            id: "older-product",
-            imageUrl: "/older-product.png",
-            fileName: "older-product.png",
-            createdAt: "2026-06-15T00:00:00.000Z",
-            source: "sample",
-          },
-          config: {
-            module: "detail_page",
-            platform: "amazon",
-            aspectRatio: "long_page",
-            style: "minimal",
-            outputFormat: "jpg",
-            sellingPoints: "Older task copy",
-            specifications: "Long page",
-          },
-          resultUrls: ["/older-result.png"],
-        }),
-      ]),
-    );
-    render(<Workspace />);
-
-    expect(screen.getByAltText("生成结果")).toHaveAttribute(
-      "src",
-      "/latest-result.png",
-    );
-    await user.click(screen.getAllByRole("button", { name: "复用参数" })[1]);
-
-    expect(screen.getByText("older-product.png")).toBeInTheDocument();
-    expect(screen.queryByAltText("生成结果")).not.toBeInTheDocument();
-    expect(screen.getByText("等待生成结果")).toBeInTheDocument();
-  });
 });
 
 describe("AppShell", () => {
@@ -548,17 +565,18 @@ describe("AppShell", () => {
     const user = userEvent.setup();
     const onPageChange = vi.fn();
     render(
-      <AppShell page="workspace" onPageChange={onPageChange}>
+      <AppShell page="main_image" onPageChange={onPageChange}>
         <div />
       </AppShell>,
     );
 
-    expect(screen.getByRole("button", { name: "工作台" })).toHaveClass(
+    expect(screen.getByRole("button", { name: "商品主图" })).toHaveClass(
       "nav-active",
     );
-    for (const label of ["模板库", "历史任务", "价格", "账户"]) {
+    for (const label of ["白底图", "详情页", "历史任务", "价格", "账户", "登录"]) {
       expect(screen.getByRole("button", { name: label })).toBeEnabled();
     }
+    expect(screen.queryByRole("button", { name: "模板库" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "价格" }));
 

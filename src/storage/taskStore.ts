@@ -1,14 +1,19 @@
 import type {
   AspectRatio,
+  DetailPageModuleId,
   GenerationConfig,
+  GenerationResolution,
   GenerationModule,
+  MainImageModuleId,
   GenerationTask,
   OutputFormat,
   Platform,
   ProductInput,
   ProductSource,
+  ShadowMode,
   TaskStatus,
   VisualStyle,
+  WhiteBackgroundMode,
 } from "../domain/types";
 
 const TASKS_STORAGE_KEY = "commerce-studio-tasks-v1";
@@ -48,12 +53,54 @@ const styles = new Set<VisualStyle>([
   "minimal",
 ]);
 const outputFormats = new Set<OutputFormat>(["png", "jpg", "webp"]);
+const resolutions = new Set<GenerationResolution>(["1K", "2K", "4K"]);
+const mainImageModules = new Set<MainImageModuleId>([
+  "hero_kv",
+  "overall_show",
+  "detail_closeup",
+  "use_scene",
+  "color_set",
+  "function_compare",
+  "packaging",
+  "trust",
+]);
+const detailPageModules = new Set<DetailPageModuleId>([
+  "main_display",
+  "brand_intro",
+  "style_selling",
+  "fabric_craft",
+  "cutting",
+  "color_size",
+  "multi_color",
+  "promotion",
+  "specs",
+  "care",
+  "service",
+  "faq",
+  "buyer_show",
+  "outfit_recommend",
+  "scene_outfit",
+  "blogger_outfit",
+  "flat_lay",
+  "hanger",
+  "chapter",
+]);
+const whiteBackgroundModes = new Set<WhiteBackgroundMode>([
+  "pure_white",
+  "transparent",
+  "light_gray",
+]);
+const shadowModes = new Set<ShadowMode>(["natural", "none", "contact_shadow"]);
 const statuses = new Set<TaskStatus>([
   "queued",
   "processing",
   "completed",
   "failed",
 ]);
+
+export interface LoadTasksOptions {
+  keepResumableTasks?: boolean;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -65,6 +112,41 @@ function isString(value: unknown): value is string {
 
 function readOptionalString(value: unknown): string | undefined {
   return isString(value) ? value : undefined;
+}
+
+function parseSelectedMainModules(value: unknown): MainImageModuleId[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (moduleId): moduleId is MainImageModuleId =>
+      isString(moduleId) && mainImageModules.has(moduleId as MainImageModuleId),
+  );
+}
+
+function parseDetailModuleCounts(
+  value: unknown,
+): Partial<Record<DetailPageModuleId, number>> {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<Partial<Record<DetailPageModuleId, number>>>(
+    (counts, [moduleId, count]) => {
+      if (
+        detailPageModules.has(moduleId as DetailPageModuleId) &&
+        typeof count === "number" &&
+        Number.isFinite(count) &&
+        count > 0
+      ) {
+        counts[moduleId as DetailPageModuleId] = Math.floor(count);
+      }
+
+      return counts;
+    },
+    {},
+  );
 }
 
 function parseProductInput(value: unknown): ProductInput | null {
@@ -107,6 +189,11 @@ function parseConfig(value: unknown): GenerationConfig | null {
     outputFormat,
     sellingPoints,
     specifications,
+    resolution,
+    selectedMainModules,
+    detailModuleCounts,
+    whiteBackgroundMode,
+    shadowMode,
   } = value;
 
   if (
@@ -134,6 +221,21 @@ function parseConfig(value: unknown): GenerationConfig | null {
     outputFormat: outputFormat as OutputFormat,
     sellingPoints,
     specifications,
+    resolution:
+      isString(resolution) && resolutions.has(resolution as GenerationResolution)
+        ? (resolution as GenerationResolution)
+        : "1K",
+    selectedMainModules: parseSelectedMainModules(selectedMainModules),
+    detailModuleCounts: parseDetailModuleCounts(detailModuleCounts),
+    whiteBackgroundMode:
+      isString(whiteBackgroundMode) &&
+      whiteBackgroundModes.has(whiteBackgroundMode as WhiteBackgroundMode)
+        ? (whiteBackgroundMode as WhiteBackgroundMode)
+        : "pure_white",
+    shadowMode:
+      isString(shadowMode) && shadowModes.has(shadowMode as ShadowMode)
+        ? (shadowMode as ShadowMode)
+        : "natural",
   };
 }
 
@@ -161,18 +263,26 @@ function parseTask(value: unknown): GenerationTask | null {
     return null;
   }
 
+  const errorCode = readOptionalString(value.errorCode);
+  const errorMessage = readOptionalString(value.errorMessage);
+  const completedAt = readOptionalString(value.completedAt);
+  const progress = readOptionalString(value.progress);
+  const backendTaskId = readOptionalString(value.backendTaskId);
+
   return {
     id,
     productInput,
     config,
     status: status as TaskStatus,
     resultUrls,
-    errorCode: readOptionalString(value.errorCode),
-    errorMessage: readOptionalString(value.errorMessage),
     creditCost,
     createdAt,
-    completedAt: readOptionalString(value.completedAt),
     attempt,
+    ...(errorCode ? { errorCode } : {}),
+    ...(errorMessage ? { errorMessage } : {}),
+    ...(completedAt ? { completedAt } : {}),
+    ...(progress ? { progress } : {}),
+    ...(backendTaskId ? { backendTaskId } : {}),
   };
 }
 
@@ -183,7 +293,11 @@ function hasUnavailableUploadSource(task: GenerationTask): boolean {
   );
 }
 
-function normalizeTask(task: GenerationTask, now: string): GenerationTask {
+function normalizeTask(
+  task: GenerationTask,
+  now: string,
+  options: LoadTasksOptions,
+): GenerationTask {
   if (hasUnavailableUploadSource(task)) {
     if (task.status === "completed") {
       return {
@@ -206,6 +320,14 @@ function normalizeTask(task: GenerationTask, now: string): GenerationTask {
     return task;
   }
 
+  if (
+    options.keepResumableTasks === true &&
+    task.status === "processing" &&
+    task.backendTaskId
+  ) {
+    return task;
+  }
+
   return {
     ...task,
     status: "failed",
@@ -216,7 +338,7 @@ function normalizeTask(task: GenerationTask, now: string): GenerationTask {
   };
 }
 
-export function loadTasks(): GenerationTask[] {
+export function loadTasks(options: LoadTasksOptions = {}): GenerationTask[] {
   const storedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
 
   if (storedTasks === null) {
@@ -233,7 +355,7 @@ export function loadTasks(): GenerationTask[] {
     const normalizedTasks = parsedTasks
       .map(parseTask)
       .filter((task): task is GenerationTask => task !== null)
-      .map((task) => normalizeTask(task, now));
+      .map((task) => normalizeTask(task, now, options));
 
     if (JSON.stringify(parsedTasks) !== JSON.stringify(normalizedTasks)) {
       saveTasks(normalizedTasks);

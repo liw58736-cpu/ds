@@ -37,6 +37,28 @@ describe("MockGenerationProvider", () => {
     expect(decodeURIComponent(result.resultUrls[0])).toContain("detail_page");
   });
 
+  it("writes the selected sequential route and module prompt summary into the mock SVG", async () => {
+    const provider = new MockGenerationProvider({ delayMs: 0 });
+
+    const result = await provider.generate({
+      ...input,
+      config: {
+        ...input.config,
+        module: "main_image",
+        resolution: "4K",
+        selectedMainModules: ["detail_closeup"],
+      },
+    });
+    const svg = decodeURIComponent(result.resultUrls[0]);
+
+    expect(svg).toContain("Quality: 4k");
+    expect(svg).toContain(
+      "Route: wuyinkeji hd -&gt; rightcode hd -&gt; gptsapi -&gt; packyapi hd",
+    );
+    expect(svg).toContain("Prompt: 细节特写");
+    expect(svg).toContain("macro material");
+  });
+
   it("escapes dynamic text before writing it into SVG text nodes", async () => {
     const provider = new MockGenerationProvider({ delayMs: 0 });
 

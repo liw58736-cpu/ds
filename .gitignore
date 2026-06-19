@@ -3,8 +3,10 @@ dist
 coverage
 playwright-report
 test-results
+tmp
 .superpowers
 .env
+.env.development
 *.log
 .worktrees
 tsconfig.tsbuildinfo
