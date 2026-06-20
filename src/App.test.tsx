@@ -6,13 +6,33 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import App from "./App";
-import { deductCredits, getAccountSnapshot } from "./storage/accountStore";
+import {
+  deductCredits,
+  getAccountSnapshot,
+  initializeSession,
+} from "./storage/accountStore";
 
 beforeEach(() => {
   localStorage.clear();
 });
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
+
+function signInForTest(identifier = "seller@example.com") {
+  initializeSession({
+    identifier,
+    authView: "login",
+    mode: "password",
+    storeName: "",
+    inviteCode: "",
+    createdAt: "2026-06-20T00:00:00.000Z",
+  });
+}
 
 describe("App", () => {
   it("renders the kroma homepage", () => {
@@ -24,18 +44,18 @@ describe("App", () => {
     expect(screen.getByText("跨境电商 AI 生图工作台")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "一键上传 即刻成片",
+        name: "AI 商品图，一键生成可上架素材",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByAltText("单商品电商主图展示")).toBeInTheDocument();
+    expect(screen.getByAltText("kroma 商品图生成首页主视觉")).toBeInTheDocument();
     expect(
-      screen.getByAltText("商品主图 KV出图前：普通商品素材"),
+      screen.getByAltText("商品主图和首屏 KV出图前"),
     ).toBeInTheDocument();
     expect(
-      screen.getByAltText("白底图 / 抠图出图后：白底商品图"),
+      screen.getByAltText("白底图和平台抠图出图后"),
     ).toBeInTheDocument();
     expect(
-      screen.getByAltText("服装详情页组图出图后：详情页组图"),
+      screen.getByAltText("服装详情页组图出图后"),
     ).toBeInTheDocument();
   });
 
@@ -43,7 +63,7 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "进入工作台" }));
+    await user.click(screen.getByRole("button", { name: "开始生成商品图" }));
 
     expect(
       screen.getByRole("heading", { name: "产品素材" }),
@@ -53,24 +73,39 @@ describe("App", () => {
     );
   });
 
+  it("hides private pages and routes guest generation to login", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.queryByRole("button", { name: "账户" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "历史任务" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "商品主图" }));
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: "生成商品主图" }));
+
+    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(screen.queryByAltText("生成结果")).not.toBeInTheDocument();
+  });
+
   it("opens detail page from the homepage secondary action", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "查看详情页生成" }));
+    await user.click(screen.getByRole("button", { name: "生成详情页组图" }));
     expect(
       screen.getByRole("heading", { name: "服装详情页生成" }),
     ).toBeInTheDocument();
   });
 
-  it("opens white background from top navigation after homepage card removal", async () => {
+  it("opens AI tools from top navigation", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "白底图" }));
+    await user.click(screen.getByRole("button", { name: "AI工具" }));
 
     expect(
-      screen.getByRole("heading", { name: "白底图生成" }),
+      screen.getByRole("heading", { name: "AI工具" }),
     ).toBeInTheDocument();
   });
 
@@ -113,10 +148,12 @@ describe("App", () => {
       "aria-pressed",
       "true",
     );
+    expect(screen.queryByText(/视频积分/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nano Banana 2/)).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "支付" })).toHaveLength(3);
     await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
     expect(screen.getByRole("status")).toHaveTextContent(
-      "已确认 专业包，10,500 积分已入账，当前余额 10,504 积分。",
+      "已确认 专业包，10,500 积分已入账，当前余额 10,505 积分。",
     );
 
     await user.click(screen.getByRole("button", { name: "订阅方案" }));
@@ -128,27 +165,32 @@ describe("App", () => {
     expect(screen.queryByRole("heading", { name: "一次性购买" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "支付" })).toHaveLength(3);
     expect(screen.getByRole("heading", { name: "轻度创作首选" })).toBeInTheDocument();
+    expect(screen.queryByText(/视频积分/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nano Banana 2/)).not.toBeInTheDocument();
   });
 
   it("adds purchased credits from pricing and shows them on the account page", async () => {
     const user = userEvent.setup();
+    signInForTest();
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "价格" }));
     await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "已确认 专业包，10,500 积分已入账，当前余额 10,504 积分。",
+      "已确认 专业包，10,500 积分已入账，当前余额 10,505 积分。",
     );
 
     await user.click(screen.getByRole("button", { name: "账户" }));
 
-    expect(screen.getByText("10,504 credits")).toBeInTheDocument();
-    expect(screen.getByText("购买 专业包")).toBeInTheDocument();
+    expect(screen.getByText("10,505 credits")).toBeInTheDocument();
+    expect(screen.queryByText("最近积分记录")).not.toBeInTheDocument();
+    expect(screen.queryByText("购买 专业包")).not.toBeInTheDocument();
   });
 
   it("opens the account page", async () => {
     const user = userEvent.setup();
+    signInForTest();
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "账户" }));
@@ -168,7 +210,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "登录" }));
 
     expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "注册" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "注册" })).toBeInTheDocument();
     expect(screen.queryByText("扫码登录预留")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "微信" })).not.toBeInTheDocument();
 
@@ -182,6 +224,20 @@ describe("App", () => {
       within(loginForm).getByLabelText("手机号或邮箱"),
       "seller@example.com",
     );
+    expect(within(loginForm).getByLabelText("密码")).toBeInTheDocument();
+    expect(within(loginForm).queryByLabelText("验证码")).not.toBeInTheDocument();
+
+    await user.type(within(loginForm).getByLabelText("密码"), "secret-password");
+    await user.click(within(loginForm).getByLabelText("我已阅读并同意"));
+    await user.click(
+      within(loginForm).getByRole("button", { name: "登录 kroma" }),
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "已为 seller@example.com 创建当前会话",
+    );
+
+    await user.click(within(loginForm).getByRole("button", { name: "使用验证码登录" }));
     await user.click(
       within(loginForm).getByRole("button", { name: "获取验证码" }),
     );
@@ -190,7 +246,6 @@ describe("App", () => {
     );
 
     await user.type(within(loginForm).getByLabelText("验证码"), "123456");
-    await user.click(within(loginForm).getByLabelText("我已阅读并同意"));
     await user.click(
       within(loginForm).getByRole("button", { name: "登录 kroma" }),
     );
@@ -203,6 +258,47 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "隐私政策" })).toBeInTheDocument();
   });
 
+  it("registers through Kroma and waits for real email verification", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          access_token: "",
+          refresh_token: "",
+          user_id: "user-1",
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "登录" }));
+    await user.click(screen.getByRole("button", { name: "注册" }));
+    const registerForm = screen.getByRole("form", { name: "注册表单" });
+
+    expect(screen.getByRole("heading", { name: "注册" })).toBeInTheDocument();
+    await user.click(within(registerForm).getByRole("button", { name: "注册 kroma" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("请输入手机号或邮箱。");
+
+    await user.type(
+      within(registerForm).getByLabelText("手机号或邮箱"),
+      "new-seller@example.com",
+    );
+    await user.type(within(registerForm).getByLabelText("密码"), "new-password");
+    await user.click(within(registerForm).getByLabelText("我已阅读并同意"));
+    await user.click(within(registerForm).getByRole("button", { name: "注册 kroma" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "请查看邮箱完成账户验证",
+    );
+    expect(getAccountSnapshot().session).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/v1/auth/signup",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("keeps the login page focused on one simple login form", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -211,8 +307,9 @@ describe("App", () => {
     const loginForm = screen.getByRole("form", { name: "登录表单" });
 
     expect(within(loginForm).getByLabelText("手机号或邮箱")).toBeInTheDocument();
-    expect(within(loginForm).getByLabelText("验证码")).toBeInTheDocument();
-    expect(within(loginForm).getByRole("button", { name: "获取验证码" })).toBeInTheDocument();
+    expect(within(loginForm).getByLabelText("密码")).toBeInTheDocument();
+    expect(within(loginForm).getByRole("button", { name: "使用验证码登录" })).toBeInTheDocument();
+    expect(within(loginForm).queryByLabelText("验证码")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("店铺或团队名称")).not.toBeInTheDocument();
     expect(screen.queryByText("或使用快捷方式")).not.toBeInTheDocument();
     expect(screen.queryByText("企业账号登录")).not.toBeInTheDocument();
@@ -220,6 +317,7 @@ describe("App", () => {
 
   it("preserves workspace product and parameter edits after visiting secondary pages", async () => {
     const user = userEvent.setup();
+    signInForTest();
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "商品主图" }));
@@ -228,6 +326,8 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "账户" }));
     expect(screen.getByRole("heading", { name: "账户与用量" })).toBeInTheDocument();
+    expect(screen.queryByText("最近积分记录")).not.toBeInTheDocument();
+    expect(screen.queryByText("新用户试用额度")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "价格" }));
     expect(
@@ -244,6 +344,7 @@ describe("App", () => {
 
   it("lets an in-progress generation complete after visiting pricing", async () => {
     const user = userEvent.setup();
+    signInForTest();
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "商品主图" }));
@@ -271,28 +372,31 @@ describe("App", () => {
 
   it("deducts credits after successful generations and preserves credits on failures", async () => {
     const user = userEvent.setup();
+    signInForTest();
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "商品主图" }));
-    expect(getAccountSnapshot().balance).toBe(4);
+    expect(getAccountSnapshot().balance).toBe(5);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: /标准版/ }));
     await user.click(screen.getByRole("button", { name: "生成商品主图" }));
     expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
 
-    expect(getAccountSnapshot().balance).toBe(3);
+    expect(getAccountSnapshot().balance).toBe(4);
 
     await user.type(screen.getByLabelText("设计简报"), "fail");
     await user.click(screen.getByRole("button", { name: "生成商品主图" }));
     expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(1);
 
-    expect(getAccountSnapshot().balance).toBe(3);
+    expect(getAccountSnapshot().balance).toBe(4);
   });
 
   it("routes exhausted trial users to pricing instead of generating", async () => {
     const user = userEvent.setup();
+    signInForTest();
     getAccountSnapshot();
-    deductCredits(4, "试用额度耗尽");
+    deductCredits(5, "试用额度耗尽");
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "商品主图" }));
@@ -324,6 +428,7 @@ describe("App", () => {
 
   it("shows coherent history content and active nav", async () => {
     const user = userEvent.setup();
+    signInForTest();
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "历史任务" }));

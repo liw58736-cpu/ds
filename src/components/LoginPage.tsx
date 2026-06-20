@@ -2,20 +2,33 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import type { AppPage } from "./AppShell";
 import { loginOrRegister } from "../api/accountApi";
+import type { AuthView, LoginMode } from "../storage/accountStore";
 import kromaLogo from "../assets/brand/kroma-logo.png";
 
 type LegalTarget = Extract<AppPage, "terms" | "privacy">;
 
 interface LoginPageProps {
   onOpenLegal: (page: LegalTarget) => void;
+  onAuthenticated?: () => void;
 }
 
-export function LoginPage({ onOpenLegal }: LoginPageProps) {
+const INITIAL_STATUS = "使用手机号或邮箱登录，保存积分、订单和历史任务。";
+const EMAIL_VERIFICATION_MESSAGE = "请查看邮箱完成账户验证，验证后再返回登录。";
+
+export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
+  const [authView, setAuthView] = useState<AuthView>("login");
+  const [loginMode, setLoginMode] = useState<LoginMode>("password");
   const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [agreed, setAgreed] = useState(false);
-  const [message, setMessage] = useState("使用手机号或邮箱登录，保存积分、订单和历史任务。");
+  const [message, setMessage] = useState(INITIAL_STATUS);
   const [messageType, setMessageType] = useState<"status" | "alert">("status");
+
+  const isRegister = authView === "register";
+  const activeMode: LoginMode = isRegister ? "password" : loginMode;
+  const title = isRegister ? "注册" : "登录";
+  const submitLabel = `${title} kroma`;
 
   const showStatus = (nextMessage: string) => {
     setMessage(nextMessage);
@@ -25,6 +38,28 @@ export function LoginPage({ onOpenLegal }: LoginPageProps) {
   const showError = (nextMessage: string) => {
     setMessage(nextMessage);
     setMessageType("alert");
+  };
+
+  const switchAuthView = (nextView: AuthView) => {
+    setAuthView(nextView);
+    setLoginMode("password");
+    setMessage(
+      nextView === "register"
+        ? "注册后即可同步积分、订单和历史任务。"
+        : INITIAL_STATUS,
+    );
+    setMessageType("status");
+  };
+
+  const toggleLoginMode = () => {
+    const nextMode = activeMode === "password" ? "code" : "password";
+    setLoginMode(nextMode);
+    setMessage(
+      nextMode === "code"
+        ? "验证码登录仅用于快速进入当前会话。"
+        : INITIAL_STATUS,
+    );
+    setMessageType("status");
   };
 
   const handleSendCode = () => {
@@ -41,15 +76,18 @@ export function LoginPage({ onOpenLegal }: LoginPageProps) {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalizedIdentifier = identifier.trim();
+    const normalizedPassword = password.trim();
     const normalizedCode = code.trim();
+    const credential =
+      activeMode === "password" ? normalizedPassword : normalizedCode;
 
     if (!normalizedIdentifier) {
       showError("请输入手机号或邮箱。");
       return;
     }
 
-    if (!normalizedCode) {
-      showError("请输入验证码。");
+    if (!credential) {
+      showError(activeMode === "password" ? "请输入密码。" : "请输入验证码。");
       return;
     }
 
@@ -61,25 +99,41 @@ export function LoginPage({ onOpenLegal }: LoginPageProps) {
     try {
       const account = await loginOrRegister({
         identifier: normalizedIdentifier,
-        credential: normalizedCode,
-        authView: "login",
-        mode: "code",
+        credential,
+        authView,
+        mode: activeMode,
         storeName: "",
         inviteCode: "",
         createdAt: new Date().toISOString(),
       });
 
       if (account.session?.provider === "kroma") {
-        showStatus("登录成功，已同步账户积分。");
+        onAuthenticated?.();
+        showStatus(
+          isRegister
+            ? "注册成功，已同步账户积分。"
+            : "登录成功，已同步账户积分。",
+        );
         return;
       }
 
-      showStatus(`已为 ${normalizedIdentifier} 创建当前会话，积分与历史任务会在此账户下保存。`);
+      showStatus(
+        `已为 ${normalizedIdentifier} 创建当前会话，积分与历史任务会在此账户下保存。`,
+      );
+      onAuthenticated?.();
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : `${title}失败，请检查账户后重试。`;
+
+      if (isRegister && errorMessage.includes("请查看邮箱完成账户验证")) {
+        showStatus(EMAIL_VERIFICATION_MESSAGE);
+        return;
+      }
+
       showError(
         error instanceof Error
-          ? `登录失败：${error.message}`
-          : "登录失败，请检查账户后重试。",
+          ? `${title}失败：${error.message}`
+          : errorMessage,
       );
     }
   };
@@ -90,15 +144,31 @@ export function LoginPage({ onOpenLegal }: LoginPageProps) {
         <div className="login-card-header">
           <div className="login-logo-row">
             <img className="login-brand-mark" src={kromaLogo} alt="kroma logo" />
-            <div>
-              <p className="eyebrow">Secure Access</p>
-              <h1 id="login-title">登录</h1>
-            </div>
+            <h1 id="login-title">{title}</h1>
           </div>
-          <p>登录后同步积分、订单和历史任务。</p>
+          <p>{isRegister ? "创建账户后开始管理积分和订单。" : "登录后同步积分、订单和历史任务。"}</p>
         </div>
 
-        <form className="login-form" aria-label="登录表单" onSubmit={handleSubmit}>
+        <div className="login-auth-switch" aria-label="账户操作">
+          <button
+            type="button"
+            className={!isRegister ? "is-active" : ""}
+            aria-pressed={!isRegister}
+            onClick={() => switchAuthView("login")}
+          >
+            登录
+          </button>
+          <button
+            type="button"
+            className={isRegister ? "is-active" : ""}
+            aria-pressed={isRegister}
+            onClick={() => switchAuthView("register")}
+          >
+            注册
+          </button>
+        </div>
+
+        <form className="login-form" aria-label={`${title}表单`} onSubmit={handleSubmit}>
           <label className="field login-field">
             <span>手机号或邮箱</span>
             <input
@@ -110,26 +180,49 @@ export function LoginPage({ onOpenLegal }: LoginPageProps) {
             />
           </label>
 
-          <div className="login-code-row">
+          {activeMode === "password" ? (
             <label className="field login-field">
-              <span>验证码</span>
+              <span>密码</span>
               <input
-                type="text"
-                inputMode="numeric"
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-                autoComplete="one-time-code"
-                placeholder="6 位验证码"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete={isRegister ? "new-password" : "current-password"}
+                placeholder="请输入密码"
               />
             </label>
+          ) : (
+            <div className="login-code-row">
+              <label className="field login-field">
+                <span>验证码</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                  autoComplete="one-time-code"
+                  placeholder="6 位验证码"
+                />
+              </label>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleSendCode}
+              >
+                获取验证码
+              </button>
+            </div>
+          )}
+
+          {!isRegister ? (
             <button
               type="button"
-              className="secondary-button"
-              onClick={handleSendCode}
+              className="login-mode-toggle"
+              onClick={toggleLoginMode}
             >
-              获取验证码
+              {activeMode === "password" ? "使用验证码登录" : "使用密码登录"}
             </button>
-          </div>
+          ) : null}
 
           <div className="login-agreement">
             <label>
@@ -157,7 +250,7 @@ export function LoginPage({ onOpenLegal }: LoginPageProps) {
           </p>
 
           <button type="submit" className="primary-button login-submit">
-            登录 kroma
+            {submitLabel}
           </button>
         </form>
       </section>

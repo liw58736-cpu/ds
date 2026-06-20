@@ -9,15 +9,16 @@ export const defaultConfig: GenerationConfig = {
   sellingPoints: "",
   specifications: "",
   resolution: "1K",
+  generationVersion: "brand",
   selectedMainModules: [],
   detailModuleCounts: {},
-  whiteBackgroundMode: "pure_white",
+  whiteBackgroundMode: "white_background",
   shadowMode: "natural",
 };
 
 export const moduleLabels = {
   main_image: "商品主图",
-  white_background: "白底图",
+  white_background: "AI工具",
   lifestyle: "生活方式场景图",
   detail_page: "详情页长图",
   shopify_banner: "Shopify Banner",

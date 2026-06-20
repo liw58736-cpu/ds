@@ -160,7 +160,7 @@ describe("kromaGenerationAdapter", () => {
       taskId: "kroma-task-1",
       status: "completed",
       resultUrls: ["https://cdn.example.com/result.png"],
-      creditCost: 1,
+      creditCost: 2,
       routeMode: "standard",
     });
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -219,7 +219,7 @@ describe("kromaGenerationAdapter", () => {
       taskId: "kroma-task-resume",
       status: "completed",
       resultUrls: ["https://cdn.example.com/resumed.png"],
-      creditCost: 1,
+      creditCost: 2,
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenNthCalledWith(

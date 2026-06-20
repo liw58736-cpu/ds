@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { defaultConfig } from "../domain/defaults";
+import { estimateGenerationCredits } from "../domain/creditCost";
 import {
   completeTask,
   createTask,
@@ -62,7 +63,9 @@ interface WorkspaceProps {
     "main_image" | "white_background" | "detail_page"
   >;
   isVisible?: boolean;
+  isAuthenticated?: boolean;
   onOpenPricing?: () => void;
+  onRequireLogin?: () => void;
 }
 
 function getModuleDefaults(module: GenerationModule): Partial<GenerationConfig> {
@@ -71,7 +74,12 @@ function getModuleDefaults(module: GenerationModule): Partial<GenerationConfig> 
   }
 
   if (module === "white_background") {
-    return { module, aspectRatio: "1:1", outputFormat: "png" };
+    return {
+      module,
+      aspectRatio: "original",
+      outputFormat: "png",
+      whiteBackgroundMode: "white_background",
+    };
   }
 
   return { module, aspectRatio: "1:1", outputFormat: "png" };
@@ -80,7 +88,9 @@ function getModuleDefaults(module: GenerationModule): Partial<GenerationConfig> 
 export function Workspace({
   activeModule = "main_image",
   isVisible = true,
+  isAuthenticated = true,
   onOpenPricing,
+  onRequireLogin,
 }: WorkspaceProps) {
   const [config, setConfig] = useState<GenerationConfig>(defaultConfig);
   const [product, setProduct] = useState<ProductInput | null>(null);
@@ -106,7 +116,8 @@ export function Workspace({
         : tasks.find((task) => task.id === activePreviewTaskId);
   const hasRunningLatestTask =
     latestTask?.status === "queued" || latestTask?.status === "processing";
-  const isOutOfCredits = accountBalance <= 0;
+  const estimatedCreditCost = estimateGenerationCredits(config);
+  const isOutOfCredits = accountBalance < estimatedCreditCost;
 
   const revokeUploadedProduct = (productToRevoke: ProductInput | null) => {
     if (productToRevoke?.source === "upload") {
@@ -220,6 +231,11 @@ export function Workspace({
   );
 
   const handleGenerate = () => {
+    if (!isAuthenticated) {
+      onRequireLogin?.();
+      return;
+    }
+
     if (isOutOfCredits) {
       onOpenPricing?.();
       return;
@@ -261,6 +277,11 @@ export function Workspace({
 
   const handleRetryTask = (taskToRetry: GenerationTask) => {
     if (taskToRetry.status !== "failed") {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      onRequireLogin?.();
       return;
     }
 
@@ -343,7 +364,7 @@ export function Workspace({
             onBuyCredits={onOpenPricing}
             isGenerateDisabled={!product || hasRunningLatestTask}
             hasRunningTask={hasRunningLatestTask}
-            isOutOfCredits={isOutOfCredits}
+            isOutOfCredits={isAuthenticated && isOutOfCredits}
           />
         </section>
         <section className="studio-preview" aria-label="生成预览">

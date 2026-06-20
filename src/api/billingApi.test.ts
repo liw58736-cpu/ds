@@ -26,7 +26,7 @@ describe("billingApi", () => {
       creditedAmount: 10500,
     });
     expect(result.orderId).toMatch(/^mock-order-/);
-    expect(result.account.balance).toBe(10504);
+    expect(result.account.balance).toBe(10505);
 
     const account = await getCurrentAccount();
     expect(account.transactions[0]).toMatchObject({

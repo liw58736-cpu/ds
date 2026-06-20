@@ -50,7 +50,7 @@ export interface RecordCreditSpendInput {
 
 const ACCOUNT_STORAGE_KEY = "commerce-studio-account-v1";
 const SESSION_STORAGE_KEY = "commerce-studio-session-v1";
-const TRIAL_CREDITS = 4;
+const TRIAL_CREDITS = 5;
 
 function createTransactionId(type: CreditTransactionType): string {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

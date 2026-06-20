@@ -21,13 +21,14 @@ export type AppPage =
 interface AppShellProps {
   page: AppPage;
   onPageChange: (page: AppPage) => void;
+  isAuthenticated?: boolean;
   children: ReactNode;
 }
 
 const topNavItems = [
   { page: "home", label: "首页" },
   { page: "main_image", label: "商品主图" },
-  { page: "white_background", label: "白底图" },
+  { page: "white_background", label: "AI工具" },
   { page: "detail_page", label: "详情页" },
   { page: "history", label: "历史任务" },
   { page: "pricing", label: "价格" },
@@ -45,7 +46,18 @@ const legalLinks = [
   { page: "business", label: "企业采购" },
 ] satisfies Array<{ page: AppPage; label: string }>;
 
-export function AppShell({ page, onPageChange, children }: AppShellProps) {
+const privatePages = new Set<AppPage>(["history", "account"]);
+
+export function AppShell({
+  page,
+  onPageChange,
+  isAuthenticated = false,
+  children,
+}: AppShellProps) {
+  const visibleTopNavItems = topNavItems.filter(
+    (item) => isAuthenticated || !privatePages.has(item.page),
+  );
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -57,7 +69,7 @@ export function AppShell({ page, onPageChange, children }: AppShellProps) {
           </div>
         </div>
         <nav className="topnav" aria-label="主导航">
-          {topNavItems.map((item) => (
+          {visibleTopNavItems.map((item) => (
             <button
               type="button"
               key={item.page}

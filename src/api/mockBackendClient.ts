@@ -28,7 +28,7 @@ export async function submitGenerationTask(
       taskId: createMockTaskId(),
       status: "completed",
       resultUrls: result.resultUrls,
-      creditCost: result.creditCost,
+      creditCost: request.body.billing.estimatedCreditCost,
       routeMode: request.body.routeMode,
     };
   } catch (error) {

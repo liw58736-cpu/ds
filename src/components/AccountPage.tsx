@@ -58,21 +58,6 @@ export function AccountPage() {
         <p className="account-disclosure">
           生成成功后才会扣除积分；失败、取消或通道异常的任务不会计入成功消耗。
         </p>
-        <div className="account-ledger" aria-label="最近积分记录">
-          <h3>最近积分记录</h3>
-          {account.transactions.slice(0, 5).map((transaction) => (
-            <article key={transaction.id}>
-              <div>
-                <strong>{transaction.label}</strong>
-                <span>{transaction.note}</span>
-              </div>
-              <p className={transaction.amount >= 0 ? "is-positive" : "is-negative"}>
-                {transaction.amount >= 0 ? "+" : ""}
-                {formatNumber(transaction.amount)}
-              </p>
-            </article>
-          ))}
-        </div>
       </section>
     </main>
   );

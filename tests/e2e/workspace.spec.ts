@@ -1,6 +1,24 @@
 import { expect, test, type Page } from "@playwright/test";
 
 async function loadSampleProduct(page: Page) {
+  await page.addInitScript(() => {
+    const session = {
+      identifier: "seller@example.com",
+      authView: "login",
+      mode: "password",
+      storeName: "",
+      inviteCode: "",
+      createdAt: "2026-06-20T00:00:00.000Z",
+    };
+    localStorage.setItem(
+      "commerce-studio-account-v1",
+      JSON.stringify({
+        balance: 5,
+        session,
+        transactions: [],
+      }),
+    );
+  });
   await page.goto("/");
   await page.getByRole("button", { name: "商品主图", exact: true }).click();
   const uploadRegion = page.getByRole("region", { name: "产品素材" });
@@ -12,6 +30,7 @@ async function loadSampleProduct(page: Page) {
 }
 
 async function generateSampleAsset(page: Page) {
+  await page.locator(".version-grid button").first().click();
   await page.getByRole("button", { name: "4K", exact: true }).click();
   await page.getByRole("button", { name: "生成商品主图", exact: true }).click();
 }
@@ -72,7 +91,7 @@ test("mobile workspace avoids horizontal document overflow", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "一键上传 即刻成片",
+      name: "AI 商品图，一键生成可上架素材",
     }),
   ).toBeVisible();
   await expectNoHorizontalDocumentOverflow(page);
@@ -101,7 +120,7 @@ test("navigation surfaces render and preserve generated history", async ({
   await expect(payButtons).toHaveCount(3);
   await payButtons.nth(2).click();
   await expect(page.getByRole("status")).toContainText(
-    "已确认 专业包，10,500 积分已入账，当前余额 10,503 积分。",
+    "已确认 专业包，10,500 积分已入账，当前余额 10,501 积分。",
   );
   await page.getByRole("button", { name: "订阅方案" }).click();
   await expect(page.getByRole("button", { name: "订阅方案" })).toHaveAttribute(
@@ -118,8 +137,8 @@ test("navigation surfaces render and preserve generated history", async ({
   await expect(
     page.getByRole("heading", { name: "账户与用量", level: 2 }),
   ).toBeVisible();
-  await expect(page.getByText("10,503 credits")).toBeVisible();
-  await expect(page.getByText("购买 专业包")).toBeVisible();
+  await expect(page.getByText("10,501 credits")).toBeVisible();
+  await expect(page.getByText("购买 专业包")).toHaveCount(0);
 
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(

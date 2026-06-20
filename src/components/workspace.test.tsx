@@ -64,9 +64,13 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
 
     expect(screen.getByAltText("当前商品图")).toBeInTheDocument();
-    expect(screen.getByLabelText("模块")).toHaveValue("详情页长图");
+    expect(screen.getByLabelText("模块")).toHaveValue("详情页");
     expect(screen.getByText("服装详情内容模块")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /品牌介绍/ })).toBeEnabled();
+    expect(
+      screen.getByRole("button", {
+        name: "品牌介绍 编辑式封面 + 品牌定位",
+      }),
+    ).toHaveAttribute("aria-pressed", "false");
   });
 
   it("updates selectable page controls", async () => {
@@ -87,10 +91,61 @@ describe("Workspace", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("updates estimated credits from selected modules, resolution, and edition", async () => {
+    const user = userEvent.setup();
+    render(<Workspace />);
+
+    expect(screen.getByText(/预计消耗 3 积分/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /首屏 KV/ }));
+    await user.click(screen.getByRole("button", { name: /整体展示/ }));
+
+    expect(screen.getByText(/预计消耗 4 积分/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "2K" }));
+
+    expect(screen.getByText(/预计消耗 6 积分/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "标准版快速出图，适合批量 SKU" }));
+
+    expect(screen.getByText(/预计消耗 4 积分/)).toBeInTheDocument();
+  });
+
+  it("lets detail modules stack multiple images and updates the estimate", async () => {
+    const user = userEvent.setup();
+    render(<Workspace activeModule="detail_page" />);
+
+    await user.click(
+      screen.getByRole("button", { name: "品牌介绍 编辑式封面 + 品牌定位" }),
+    );
+    await user.click(screen.getByRole("button", { name: "品牌介绍 增加 1 张" }));
+
+    expect(screen.getByText("已选 2")).toBeInTheDocument();
+    expect(screen.getByText(/预计消耗 4 积分/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "品牌介绍 减少 1 张" }));
+
+    expect(screen.getByText("已选 1")).toBeInTheDocument();
+    expect(screen.getByText(/预计消耗 3 积分/)).toBeInTheDocument();
+  });
+
+  it("shows AI tool controls without copy fields on the AI tools page", () => {
+    render(<Workspace activeModule="white_background" />);
+
+    expect(screen.getByRole("heading", { name: "AI工具" })).toBeInTheDocument();
+    expect(screen.getByLabelText("模块")).toHaveValue("AI工具");
+    expect(screen.queryByLabelText("输出语言")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("设计简报")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("促销信息")).not.toBeInTheDocument();
+    for (const label of ["白底图", "幽灵模特", "AI背景", "精修", "换装", "产品展示"]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+    expect(screen.getByRole("button", { name: "原图尺寸" })).toBeInTheDocument();
+  });
+
   it("does not show model selection controls", () => {
     render(<Workspace activeModule="white_background" />);
 
-    expect(screen.getByLabelText("输出语言")).toBeInTheDocument();
     expect(screen.queryByLabelText("模型")).not.toBeInTheDocument();
     expect(screen.queryByText("Commerce Image V2")).not.toBeInTheDocument();
     expect(screen.queryByText("Fast Product V1")).not.toBeInTheDocument();
@@ -198,6 +253,7 @@ describe("Workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
     await user.click(screen.getByRole("button", { name: /细节特写/ }));
+    await user.click(screen.getByRole("button", { name: "标准版快速出图，适合批量 SKU" }));
     await user.click(screen.getByRole("button", { name: "4K" }));
     await user.click(screen.getByRole("button", { name: "生成商品主图" }));
 
@@ -211,8 +267,9 @@ describe("Workspace", () => {
 
       expect(storedTasks[0]).toMatchObject({
         status: "completed",
-        creditCost: 1,
+        creditCost: 4,
         config: {
+          generationVersion: "standard",
           resolution: "4K",
           selectedMainModules: ["detail_closeup"],
         },
@@ -289,7 +346,7 @@ describe("Workspace", () => {
         errorCode: "task_canceled",
       });
     });
-    expect(getAccountSnapshot().balance).toBe(4);
+    expect(getAccountSnapshot().balance).toBe(5);
     expect(screen.queryByAltText("生成结果")).not.toBeInTheDocument();
   });
 
@@ -565,7 +622,11 @@ describe("AppShell", () => {
     const user = userEvent.setup();
     const onPageChange = vi.fn();
     render(
-      <AppShell page="main_image" onPageChange={onPageChange}>
+      <AppShell
+        page="main_image"
+        onPageChange={onPageChange}
+        isAuthenticated
+      >
         <div />
       </AppShell>,
     );
@@ -573,7 +634,7 @@ describe("AppShell", () => {
     expect(screen.getByRole("button", { name: "商品主图" })).toHaveClass(
       "nav-active",
     );
-    for (const label of ["白底图", "详情页", "历史任务", "价格", "账户", "登录"]) {
+    for (const label of ["AI工具", "详情页", "历史任务", "价格", "账户", "登录"]) {
       expect(screen.getByRole("button", { name: label })).toBeEnabled();
     }
     expect(screen.queryByRole("button", { name: "模板库" })).not.toBeInTheDocument();

@@ -41,7 +41,7 @@ describe("generationApi", () => {
 
     expect(response).toMatchObject({
       status: "completed",
-      creditCost: 1,
+      creditCost: 2,
       routeMode: "hd",
     });
     expect(response.taskId).toMatch(/^mock-generation-/);
@@ -108,7 +108,7 @@ describe("generationApi", () => {
       taskId: "kroma-task-1",
       status: "completed",
       resultUrls: ["https://cdn.example.com/kroma-result.png"],
-      creditCost: 1,
+      creditCost: 2,
     });
     expect(fetchMock).toHaveBeenCalledWith("/sample/product.png");
     expect(fetchMock).toHaveBeenCalledWith(
@@ -152,7 +152,7 @@ describe("generationApi", () => {
   it("generates an asset through the backend-ready API boundary", async () => {
     const result = await generateAsset(input);
 
-    expect(result.creditCost).toBe(1);
+    expect(result.creditCost).toBe(2);
     expect(result.resultUrls[0]).toContain("data:image/svg+xml;charset=utf-8,");
   });
 

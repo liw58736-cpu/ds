@@ -8,6 +8,7 @@ import { LegalPage } from "./components/LegalPage";
 import { LoginPage } from "./components/LoginPage";
 import { PricingPage } from "./components/PricingPage";
 import { Workspace } from "./components/Workspace";
+import { getCurrentAccountSnapshot } from "./api/accountApi";
 
 const studioPages = [
   "main_image",
@@ -23,12 +24,23 @@ function isStudioPage(page: AppPage): page is StudioPage {
 
 export default function App() {
   const [page, setPage] = useState<AppPage>("home");
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    () => Boolean(getCurrentAccountSnapshot().session),
+  );
   const [activeStudioModule, setActiveStudioModule] =
     useState<StudioPage>("main_image");
   const isWorkspaceVisible = isStudioPage(page);
   const shouldMountWorkspace = page !== "home" && page !== "history";
 
   const handlePageChange = (nextPage: AppPage) => {
+    if (
+      (nextPage === "history" || nextPage === "account") &&
+      !isAuthenticated
+    ) {
+      setPage("login");
+      return;
+    }
+
     if (isStudioPage(nextPage)) {
       setActiveStudioModule(nextPage);
     }
@@ -46,7 +58,10 @@ export default function App() {
     ) : page === "account" ? (
       <AccountPage />
     ) : page === "login" ? (
-      <LoginPage onOpenLegal={handlePageChange} />
+      <LoginPage
+        onOpenLegal={handlePageChange}
+        onAuthenticated={() => setIsAuthenticated(true)}
+      />
     ) : page === "terms" ? (
       <LegalPage type="terms" />
     ) : page === "privacy" ? (
@@ -73,7 +88,11 @@ export default function App() {
   }, [page]);
 
   return (
-    <AppShell page={page} onPageChange={handlePageChange}>
+    <AppShell
+      page={page}
+      onPageChange={handlePageChange}
+      isAuthenticated={isAuthenticated}
+    >
       {secondaryPage}
       <section
         className="workspace-route"
@@ -84,7 +103,9 @@ export default function App() {
           <Workspace
             activeModule={activeStudioModule}
             isVisible={isWorkspaceVisible}
+            isAuthenticated={isAuthenticated}
             onOpenPricing={() => handlePageChange("pricing")}
+            onRequireLogin={() => handlePageChange("login")}
           />
         ) : null}
       </section>

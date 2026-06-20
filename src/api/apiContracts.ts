@@ -3,6 +3,7 @@ import { buildGenerationPrompt } from "../domain/promptBuilder";
 import type { BuiltGenerationPrompt } from "../domain/promptBuilder";
 import { selectGenerationRoute } from "../domain/generationRoutes";
 import type { GenerationRoute } from "../domain/generationRoutes";
+import { estimateGenerationCredits } from "../domain/creditCost";
 import type {
   GenerationConfig,
   GenerationResolution,
@@ -82,7 +83,7 @@ export function buildGenerationTaskRequest(
       route,
       prompt: buildGenerationPrompt(config),
       billing: {
-        estimatedCreditCost: 1,
+        estimatedCreditCost: estimateGenerationCredits(config),
         chargePolicy: "success_only",
         ...(input.account
           ? { creditBalanceBefore: input.account.creditBalance }

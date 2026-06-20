@@ -11,13 +11,13 @@ beforeEach(() => {
 });
 
 describe("accountStore", () => {
-  it("creates a guest account with four trial credits", () => {
+  it("creates a guest account with five trial credits", () => {
     expect(getAccountSnapshot()).toMatchObject({
-      balance: 4,
+      balance: 5,
       session: null,
     });
     expect(getAccountSnapshot().transactions[0]).toMatchObject({
-      amount: 4,
+      amount: 5,
       type: "trial_grant",
     });
   });
@@ -33,7 +33,7 @@ describe("accountStore", () => {
     });
 
     expect(getAccountSnapshot()).toMatchObject({
-      balance: 4,
+      balance: 5,
       session: {
         identifier: "seller@example.com",
         authView: "login",
@@ -71,7 +71,7 @@ describe("accountStore", () => {
       note: "支付通道待接入支付宝 / 微信",
     });
 
-    expect(snapshot.balance).toBe(10504);
+    expect(snapshot.balance).toBe(10505);
     expect(snapshot.transactions[0]).toMatchObject({
       amount: 10500,
       planName: "专业包",
@@ -80,8 +80,8 @@ describe("accountStore", () => {
   });
 
   it("deducts credits only when the balance is sufficient", () => {
-    expect(deductCredits(1, "生成商品主图").balance).toBe(3);
-    expect(deductCredits(10, "超额生成").balance).toBe(3);
+    expect(deductCredits(1, "生成商品主图").balance).toBe(4);
+    expect(deductCredits(10, "超额生成").balance).toBe(4);
     expect(getAccountSnapshot().transactions[0]).toMatchObject({
       amount: -1,
       type: "generation",

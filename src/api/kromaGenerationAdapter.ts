@@ -369,18 +369,21 @@ function getKromaSize(
 ): string {
   const sizes: Record<GenerationResolution, Record<AspectRatio, string>> = {
     "1K": {
+      original: "1024x1024",
       "1:1": "1024x1024",
       "4:5": "1024x1280",
       "16:9": "1024x576",
       long_page: "1024x1536",
     },
     "2K": {
+      original: "2048x2048",
       "1:1": "2048x2048",
       "4:5": "2048x2560",
       "16:9": "2048x1152",
       long_page: "1536x3072",
     },
     "4K": {
+      original: "2880x2880",
       "1:1": "2880x2880",
       "4:5": "2560x3200",
       "16:9": "3840x2160",

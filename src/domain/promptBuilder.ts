@@ -165,6 +165,12 @@ const detailPrompts: Record<
 };
 
 const whiteBackgroundCopy: Record<WhiteBackgroundMode, string> = {
+  white_background: "clean marketplace white-background product image with precise cutout edges and platform-ready lighting",
+  ghost_model: "ghost mannequin product image that preserves garment shape, volume, seams, and fit without a visible model",
+  ai_background: "AI-generated commercial background that matches product category, realistic scale, and premium ecommerce tone",
+  retouch: "high-end product retouching with cleaner surface, corrected lighting, dust removal, and preserved product identity",
+  outfit_change: "outfit try-on transformation with realistic fabric drape, body fit, and unchanged garment design details",
+  product_showcase: "premium product showcase composition with refined studio setup, depth, props only when useful, and clear product focus",
   pure_white: "clean pure white background",
   transparent: "transparent-background cutout look with clean edges",
   light_gray: "soft light gray inspection background",
@@ -200,13 +206,24 @@ export function buildGenerationPrompt(
 
 function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
   if (config.module === "white_background") {
-    const backgroundMode = config.whiteBackgroundMode ?? "pure_white";
+    const backgroundMode = config.whiteBackgroundMode ?? "white_background";
     const shadowMode = config.shadowMode ?? "natural";
+    const toolTitles: Record<WhiteBackgroundMode, string> = {
+      white_background: "白底图",
+      ghost_model: "幽灵模特",
+      ai_background: "AI背景",
+      retouch: "精修",
+      outfit_change: "换装",
+      product_showcase: "产品展示",
+      pure_white: "白底图",
+      transparent: "透明底",
+      light_gray: "浅灰检测",
+    };
 
     return [
       {
-        id: "white_background",
-        title: "白底图",
+        id: backgroundMode,
+        title: toolTitles[backgroundMode],
         prompt: `preserve the original product geometry, material, proportions, and edges; place it on a ${whiteBackgroundCopy[backgroundMode]}; apply ${shadowCopy[shadowMode]}; platform-ready ecommerce cutout, no extra props.`,
       },
     ];

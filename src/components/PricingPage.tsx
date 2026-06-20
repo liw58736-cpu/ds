@@ -16,7 +16,6 @@ interface CreditPlan {
   campaignCredits?: string;
   firstPurchaseBonus: string;
   cumulativeBonus?: string;
-  videoCredits?: string;
   description: string;
   features: string[];
   paymentNote?: string;
@@ -48,7 +47,7 @@ const topUpPlans: CreditPlan[] = [
       "按积分用量计费",
       "万能画板：上传 / 历史图编辑",
       "AI 编辑、裁剪、下载",
-      "GPT Image 2 / Nano Banana 2 标准模型",
+      "GPT Image 2 标准模型",
       "单次购买积分不过期",
     ],
   },
@@ -62,7 +61,6 @@ const topUpPlans: CreditPlan[] = [
     baseCredits: "3,750 积分",
     campaignCredits: "5,250 积分",
     firstPurchaseBonus: "含首购赠送 750",
-    videoCredits: "赠送 940 视频积分",
     description: "主图、详情页和画板编辑都能稳定覆盖，适合固定上新。",
     features: [
       "单次充值权益",
@@ -85,13 +83,12 @@ const topUpPlans: CreditPlan[] = [
     campaignCredits: "10,500 积分",
     firstPurchaseBonus: "含首购赠送 1,500",
     cumulativeBonus: "购买本档可领 200 积分累充奖励",
-    videoCredits: "赠送 1,880 视频积分",
     description: "适合稳定店铺素材周转，覆盖主图、详情页和风格复刻。",
     features: [
       "万能画板完整基础能力",
       "详情页 16 模块、主图 2.0",
       "风格复刻、服装试穿 / 搭配",
-      "GPT Image 2 / Nano Banana 2，支持 4K",
+      "GPT Image 2，支持 4K",
       "适合稳定店铺素材周转",
       "单次购买积分不过期",
     ],
@@ -110,13 +107,12 @@ const subscriptionPlans: CreditPlan[] = [
     baseCredits: "2,500 积分",
     campaignCredits: "3,550 积分",
     firstPurchaseBonus: "含首购赠送 400",
-    videoCredits: "赠送 470 视频积分",
     description: "每月固定积分，适合轻量持续创作。",
     features: [
       "持续创作权益",
       "按积分用量计费",
       "万能画板、主图、详情页、修图全可用",
-      "GPT Image 2 / Nano Banana 2 标准模型",
+      "GPT Image 2 标准模型",
       "到期后可手动续购",
     ],
     paymentNote: "支付宝 / 微信",
@@ -133,7 +129,6 @@ const subscriptionPlans: CreditPlan[] = [
     campaignCredits: "10,050 积分",
     firstPurchaseBonus: "含首购赠送 900",
     cumulativeBonus: "购买本档可领 200 积分累充奖励",
-    videoCredits: "赠送 1,880 视频积分",
     description: "季度额度，适合固定上新节奏。",
     features: [
       "画板编辑、详情页、风格复刻持续可用",
@@ -156,11 +151,10 @@ const subscriptionPlans: CreditPlan[] = [
     campaignCredits: "36,000 积分",
     firstPurchaseBonus: "含首购赠送 3,000",
     cumulativeBonus: "购买本档可领 650 积分累充奖励",
-    videoCredits: "赠送 6,580 视频积分",
     description: "全年素材预算，适合长期运营。",
     features: [
       "主图 2.0、详情页 16 模块、画板编辑",
-      "风格复刻、服装试穿、视频复刻入口",
+      "风格复刻、服装试穿",
       "最高性价比普通订阅",
       "到期后可手动续购",
     ],
@@ -207,7 +201,6 @@ function PricingCard({
       <div className="bonus-stack">
         <span>{plan.firstPurchaseBonus}</span>
         {plan.cumulativeBonus ? <span>{plan.cumulativeBonus}</span> : null}
-        {plan.videoCredits ? <span>{plan.videoCredits}</span> : null}
       </div>
       <ul className="feature-list">
         {plan.features.map((feature) => (
@@ -270,7 +263,7 @@ export function PricingPage() {
         <div className="panel-heading">
           <p className="eyebrow">Plan Settings</p>
           <h2>按你的电商创作节奏选择套餐</h2>
-          <p>积分按实际生成、编辑、下载等能力消耗，失败任务不计入成功消耗。</p>
+          <p>积分按实际生成消耗，失败任务不计入消耗。</p>
         </div>
         {selectedPlan ? (
           <p className="pricing-payment-status" role="status">

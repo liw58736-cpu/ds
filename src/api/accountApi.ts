@@ -48,6 +48,10 @@ export async function loginOrRegister(
     return loginOrRegisterWithKroma(session);
   }
 
+  if (session.authView === "register" && !shouldUseRemoteBackend()) {
+    throw new Error("注册需要连接真实账号服务，请先配置后端账号接口。");
+  }
+
   const request = buildAccountSessionRequest(session);
 
   if (shouldUseRemoteBackend()) {
@@ -126,6 +130,14 @@ async function loginOrRegisterWithKroma(
       password: session.credential,
     }),
   });
+
+  if (
+    session.authView === "register" &&
+    (!auth.access_token || !auth.refresh_token || !auth.user_id)
+  ) {
+    throw new Error("请查看邮箱完成账户验证，验证后再返回登录。");
+  }
+
   const authenticatedSession: AccountSession = {
     ...session,
     provider: "kroma",
@@ -194,7 +206,7 @@ async function consumeKromaCredits(
   }
 
   const response = await requestKromaJson<KromaDeductCreditsResponse>(
-    `${baseUrl}/user/credits/deduct?amount=${encodeURIComponent(String(amount))}`,
+    `${baseUrl}/user/credits/deduct?amount=${encodeURIComponent(String(amount))}&task_status=completed&charge_policy=success_only`,
     {
       method: "POST",
       headers: {
@@ -211,11 +223,17 @@ async function consumeKromaCredits(
   });
 }
 
-async function requestKromaJson<Response>(
+async function requestKromaJson<Payload>(
   url: string,
   init: RequestInit,
-): Promise<Response> {
-  const response = await fetch(url, init);
+): Promise<Payload> {
+  let response: globalThis.Response;
+
+  try {
+    response = await fetch(url, init);
+  } catch {
+    throw new Error("无法连接账号服务，请确认后端已启动或接口地址正确。");
+  }
 
   if (!response.ok) {
     const text = await response.text();
@@ -223,7 +241,7 @@ async function requestKromaJson<Response>(
     throw new Error(`Kroma API request failed: ${response.status} ${text}`);
   }
 
-  return response.json() as Promise<Response>;
+  return response.json() as Promise<Payload>;
 }
 
 function initializeSessionSnapshot(snapshot: AccountSnapshot): AccountSnapshot {

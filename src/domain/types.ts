@@ -10,13 +10,15 @@ export type GenerationModule =
 
 export type Platform = "amazon" | "shopify" | "independent_store";
 
-export type AspectRatio = "1:1" | "4:5" | "16:9" | "long_page";
+export type AspectRatio = "original" | "1:1" | "4:5" | "16:9" | "long_page";
 
 export type VisualStyle = "studio" | "lifestyle" | "premium" | "minimal";
 
 export type OutputFormat = "png" | "jpg" | "webp";
 
 export type GenerationResolution = "1K" | "2K" | "4K";
+
+export type GenerationVersion = "standard" | "brand";
 
 export type GenerationQuality = "standard" | "2k" | "4k";
 
@@ -51,7 +53,16 @@ export type DetailPageModuleId =
   | "hanger"
   | "chapter";
 
-export type WhiteBackgroundMode = "pure_white" | "transparent" | "light_gray";
+export type WhiteBackgroundMode =
+  | "white_background"
+  | "ghost_model"
+  | "ai_background"
+  | "retouch"
+  | "outfit_change"
+  | "product_showcase"
+  | "pure_white"
+  | "transparent"
+  | "light_gray";
 
 export type ShadowMode = "natural" | "none" | "contact_shadow";
 
@@ -74,6 +85,7 @@ export interface GenerationConfig {
   sellingPoints: string;
   specifications: string;
   resolution?: GenerationResolution;
+  generationVersion?: GenerationVersion;
   selectedMainModules?: MainImageModuleId[];
   detailModuleCounts?: Partial<Record<DetailPageModuleId, number>>;
   whiteBackgroundMode?: WhiteBackgroundMode;

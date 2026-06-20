@@ -1,4 +1,10 @@
 import { useMemo, useState } from "react";
+import {
+  brandVersionExtraCredits,
+  estimateGenerationCredits,
+  getGenerationImageCount,
+  getResolutionCreditCost,
+} from "../domain/creditCost";
 import { moduleLabels } from "../domain/defaults";
 import type {
   AspectRatio,
@@ -6,8 +12,8 @@ import type {
   GenerationConfig,
   GenerationModule,
   GenerationResolution,
+  GenerationVersion,
   MainImageModuleId,
-  ShadowMode,
   WhiteBackgroundMode,
 } from "../domain/types";
 
@@ -34,9 +40,9 @@ const pageMeta = {
     description: "选择主图结构、尺寸和促销信息，生成适合首图转化的素材。",
   },
   white_background: {
-    eyebrow: "White Background Settings",
-    title: "白底图生成",
-    description: "专注干净抠图、白底陈列和平台审核友好的主视觉。",
+    eyebrow: "AI Tools",
+    title: "AI工具",
+    description: "选择常用 AI 商品图工具，上传商品图后快速生成对应素材。",
   },
   detail_page: {
     eyebrow: "Detail Page Settings",
@@ -48,7 +54,14 @@ const pageMeta = {
   { eyebrow: string; title: string; description: string }
 >;
 
+const moduleDisplayLabels: Record<StudioModule, string> = {
+  main_image: "商品主图",
+  white_background: "AI工具",
+  detail_page: "详情页",
+};
+
 const aspectRatioOptions: Array<{ value: AspectRatio; label: string }> = [
+  { value: "original", label: "原图尺寸" },
   { value: "1:1", label: "1:1 方图" },
   { value: "4:5", label: "4:5 竖图" },
   { value: "16:9", label: "16:9 横图" },
@@ -57,10 +70,22 @@ const aspectRatioOptions: Array<{ value: AspectRatio; label: string }> = [
 
 const outputLanguages = ["中文", "English"];
 const resolutionOptions: GenerationResolution[] = ["1K", "2K", "4K"];
-const versionOptions = [
-  { name: "标准版", description: "快速出图，适合批量 SKU" },
-  { name: "品牌版", description: "更重质感、光影和转化表达", recommended: true },
+const versionOptions: Array<{
+  value: GenerationVersion;
+  name: string;
+  description: string;
+  recommended?: boolean;
+}> = [
+  { value: "standard", name: "标准版", description: "快速出图，适合批量 SKU" },
+  {
+    value: "brand",
+    name: "品牌版",
+    description: "更重质感、光影和转化表达",
+    recommended: true,
+  },
 ];
+
+const maxDetailModuleCount = 9;
 
 const mainImageModules: Array<{
   id: MainImageModuleId;
@@ -107,16 +132,13 @@ const whiteBackgroundModes: Array<{
   value: WhiteBackgroundMode;
   label: string;
 }> = [
-  { value: "pure_white", label: "纯白背景" },
-  { value: "transparent", label: "透明底" },
-  { value: "light_gray", label: "浅灰检视" },
+  { value: "white_background", label: "白底图" },
+  { value: "ghost_model", label: "幽灵模特" },
+  { value: "ai_background", label: "AI背景" },
+  { value: "retouch", label: "精修" },
+  { value: "outfit_change", label: "换装" },
+  { value: "product_showcase", label: "产品展示" },
 ];
-const shadowModes: Array<{ value: ShadowMode; label: string }> = [
-  { value: "natural", label: "自然阴影" },
-  { value: "none", label: "无阴影" },
-  { value: "contact_shadow", label: "轻微接触阴影" },
-];
-
 export function ParameterPanel({
   activeModule,
   config,
@@ -128,17 +150,27 @@ export function ParameterPanel({
   isOutOfCredits = false,
 }: ParameterPanelProps) {
   const [outputLanguage, setOutputLanguage] = useState(outputLanguages[0]);
-  const [version, setVersion] = useState("品牌版");
-  const resolution = config.resolution ?? "2K";
+  const resolution = config.resolution ?? "1K";
+  const generationVersion = config.generationVersion ?? "brand";
   const selectedMainModules = config.selectedMainModules ?? [];
   const detailCounts = config.detailModuleCounts ?? {};
-  const whiteBackgroundMode = config.whiteBackgroundMode ?? "pure_white";
-  const shadowMode = config.shadowMode ?? "natural";
+  const whiteBackgroundMode = config.whiteBackgroundMode ?? "white_background";
   const meta = pageMeta[activeModule];
+  const normalizedConfig = { ...config, resolution, generationVersion };
   const selectedDetailCount = useMemo(
-    () => Object.values(detailCounts).reduce((sum, count) => sum + count, 0),
+    () =>
+      Object.values(detailCounts).reduce(
+        (sum, count) => sum + Math.max(0, Math.floor(count ?? 0)),
+        0,
+      ),
     [detailCounts],
   );
+  const estimatedCredits = estimateGenerationCredits(normalizedConfig);
+  const estimatedImageCount = getGenerationImageCount(normalizedConfig);
+  const resolutionCreditCost = getResolutionCreditCost(resolution);
+  const activeAiToolLabel =
+    whiteBackgroundModes.find((mode) => mode.value === whiteBackgroundMode)
+      ?.label ?? "AI工具";
 
   const updateConfig = <Key extends keyof GenerationConfig>(
     key: Key,
@@ -155,14 +187,27 @@ export function ParameterPanel({
     onChange({ ...config, selectedMainModules: nextModules });
   };
 
-  const toggleDetailModule = (moduleId: DetailPageModuleId) => {
-    onChange({
-      ...config,
-      detailModuleCounts: {
-        ...detailCounts,
-        [moduleId]: detailCounts[moduleId] ? 0 : 1,
-      },
-    });
+  const setDetailModuleCount = (
+    moduleId: DetailPageModuleId,
+    nextCount: number,
+  ) => {
+    const normalizedCount = Math.max(
+      0,
+      Math.min(maxDetailModuleCount, Math.floor(nextCount)),
+    );
+    const nextDetailCounts = { ...detailCounts };
+
+    if (normalizedCount === 0) {
+      delete nextDetailCounts[moduleId];
+    } else {
+      nextDetailCounts[moduleId] = normalizedCount;
+    }
+
+    onChange({ ...config, detailModuleCounts: nextDetailCounts });
+  };
+
+  const addDetailModule = (moduleId: DetailPageModuleId) => {
+    setDetailModuleCount(moduleId, (detailCounts[moduleId] ?? 0) + 1);
   };
 
   return (
@@ -178,7 +223,7 @@ export function ParameterPanel({
       <input
         className="sr-only"
         id="module-label"
-        value={moduleLabels[config.module]}
+        value={moduleDisplayLabels[config.module as StudioModule] ?? moduleLabels[config.module]}
         readOnly
         aria-readonly="true"
       />
@@ -215,7 +260,7 @@ export function ParameterPanel({
         <section className="setting-group" aria-labelledby="detail-modules">
           <div className="setting-group-heading">
             <span id="detail-modules">服装详情内容模块</span>
-            <small>点击未选模块会添加 1 张图。</small>
+            <small>点击未选模块会添加 1 张图，右上角可继续叠加数量。</small>
           </div>
           <p className="selection-count">已选 {selectedDetailCount}</p>
           <div className="detail-module-grid">
@@ -224,18 +269,54 @@ export function ParameterPanel({
               const isActive = count > 0;
 
               return (
-                <button
-                  type="button"
+                <div
                   key={module.id}
+                  role="button"
+                  tabIndex={0}
                   className={`detail-module-button${isActive ? " is-active" : ""}`}
                   aria-pressed={isActive}
-                  onClick={() => toggleDetailModule(module.id)}
+                  aria-label={`${module.title} ${module.description}`}
+                  onClick={() => {
+                    if (!isActive) {
+                      addDetailModule(module.id);
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") {
+                      return;
+                    }
+                    event.preventDefault();
+                    if (!isActive) {
+                      addDetailModule(module.id);
+                    }
+                  }}
                 >
                   <strong>{module.title}</strong>
                   <span>{module.description}</span>
-                  <b>{count}</b>
-                  <em>{isActive ? "点击移除" : "点击添加"}</em>
-                </button>
+                  <div
+                    className="detail-module-stepper"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      aria-label={`${module.title} 减少 1 张`}
+                      onClick={() => setDetailModuleCount(module.id, count - 1)}
+                      disabled={count === 0}
+                    >
+                      -
+                    </button>
+                    <b>{count}</b>
+                    <button
+                      type="button"
+                      aria-label={`${module.title} 增加 1 张`}
+                      onClick={() => addDetailModule(module.id)}
+                      disabled={count >= maxDetailModuleCount}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <em>{isActive ? "已加入，可继续加图" : "点击添加"}</em>
+                </div>
               );
             })}
           </div>
@@ -245,10 +326,10 @@ export function ParameterPanel({
       {activeModule === "white_background" ? (
         <section className="setting-group">
           <div className="setting-group-heading">
-            <span>白底处理</span>
-            <small>可切换</small>
+            <span>AI工具</span>
+            <small>选择要生成的工具类型</small>
           </div>
-          <div className="segmented-control" aria-label="白底处理">
+          <div className="segmented-control" aria-label="AI工具">
             {whiteBackgroundModes.map((mode) => (
               <button
                 type="button"
@@ -263,42 +344,27 @@ export function ParameterPanel({
               </button>
             ))}
           </div>
-          <div className="setting-group-heading setting-subheading">
-            <span>阴影处理</span>
-            <small>可切换</small>
-          </div>
-          <div className="segmented-control" aria-label="阴影处理">
-            {shadowModes.map((mode) => (
-              <button
-                type="button"
-                key={mode.value}
-                className={mode.value === shadowMode ? "is-active" : undefined}
-                aria-pressed={mode.value === shadowMode}
-                onClick={() => updateConfig("shadowMode", mode.value)}
-              >
-                {mode.label}
-              </button>
-            ))}
-          </div>
         </section>
       ) : null}
 
-      <div className="setting-group">
-        <div className="field">
-          <label htmlFor="output-language">输出语言</label>
-          <select
-            id="output-language"
-            value={outputLanguage}
-            onChange={(event) => setOutputLanguage(event.target.value)}
-          >
-            {outputLanguages.map((language) => (
-              <option key={language} value={language}>
-                {language}
-              </option>
-            ))}
-          </select>
+      {activeModule !== "white_background" ? (
+        <div className="setting-group">
+          <div className="field">
+            <label htmlFor="output-language">输出语言</label>
+            <select
+              id="output-language"
+              value={outputLanguage}
+              onChange={(event) => setOutputLanguage(event.target.value)}
+            >
+              {outputLanguages.map((language) => (
+                <option key={language} value={language}>
+                  {language}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="setting-group">
         <div className="setting-group-heading">
@@ -340,40 +406,44 @@ export function ParameterPanel({
         </div>
       </div>
 
-      <div className="field">
-        <label htmlFor="selling-points">
-          {activeModule === "detail_page" ? "组图要求" : "设计简报"}
-        </label>
-        <textarea
-          id="selling-points"
-          value={config.sellingPoints}
-          rows={activeModule === "detail_page" ? 6 : 4}
-          onChange={(event) => updateConfig("sellingPoints", event.target.value)}
-          placeholder={
-            activeModule === "detail_page"
-              ? "描述您的产品信息和期望的图片风格。例如：这是一款法式复古连衣裙，采用重磅真丝面料，特色是精致的蕾丝拼接和珍珠扣设计，适合25-35岁都市女性通勤或约会穿。"
-              : "描述产品核心卖点、视觉方向和希望强调的主图风格。"
-          }
-        />
-        {activeModule === "detail_page" ? (
-          <p className="field-hint">
-            建议输入：款式名称、面料材质、设计亮点、适合人群、风格调性等。输入组图要求并选择输出语言后，系统会自动分析产品并生成共享文案。
-          </p>
-        ) : null}
-      </div>
+      {activeModule !== "white_background" ? (
+        <>
+          <div className="field">
+            <label htmlFor="selling-points">
+              {activeModule === "detail_page" ? "组图要求" : "设计简报"}
+            </label>
+            <textarea
+              id="selling-points"
+              value={config.sellingPoints}
+              rows={activeModule === "detail_page" ? 6 : 4}
+              onChange={(event) => updateConfig("sellingPoints", event.target.value)}
+              placeholder={
+                activeModule === "detail_page"
+                  ? "描述您的产品信息和期望的图片风格。例如：这是一款法式复古连衣裙，采用重磅真丝面料，特色是蕾丝拼接和珍珠扣设计，适合25-35岁都市女性通勤或约会穿。"
+                  : "描述产品核心卖点、视觉方向和希望强调的主图风格。"
+              }
+            />
+            {activeModule === "detail_page" ? (
+              <p className="field-hint">
+                建议输入：款式名称、面料材质、设计亮点、适合人群、风格调性等。输入组图要求并选择输出语言后，系统会自动分析产品并生成共享文案。
+              </p>
+            ) : null}
+          </div>
 
-      <div className="field">
-        <label htmlFor="promotion-info">促销信息</label>
-        <textarea
-          id="promotion-info"
-          value={config.specifications}
-          rows={4}
-          onChange={(event) =>
-            updateConfig("specifications", event.target.value)
-          }
-          placeholder="填写促销活动详情，如折扣信息、活动名称、优惠力度等。"
-        />
-      </div>
+          <div className="field">
+            <label htmlFor="promotion-info">促销信息</label>
+            <textarea
+              id="promotion-info"
+              value={config.specifications}
+              rows={4}
+              onChange={(event) =>
+                updateConfig("specifications", event.target.value)
+              }
+              placeholder="填写促销活动详情，如折扣信息、活动名称、优惠力度等。"
+            />
+          </div>
+        </>
+      ) : null}
 
       <div className="setting-group">
         <div className="setting-group-heading">
@@ -384,10 +454,12 @@ export function ParameterPanel({
           {versionOptions.map((option) => (
             <button
               type="button"
-              key={option.name}
-              className={version === option.name ? "is-active" : undefined}
-              aria-pressed={version === option.name}
-              onClick={() => setVersion(option.name)}
+              key={option.value}
+              className={
+                generationVersion === option.value ? "is-active" : undefined
+              }
+              aria-pressed={generationVersion === option.value}
+              onClick={() => updateConfig("generationVersion", option.value)}
             >
               {option.recommended ? <em>推荐</em> : null}
               <strong>{option.name}</strong>
@@ -399,10 +471,19 @@ export function ParameterPanel({
 
       <div className="generation-footer">
         <div className="generation-summary">
-          <span>{moduleLabels[activeModule]}</span>
+          <span>
+            {activeModule === "white_background"
+              ? activeAiToolLabel
+              : moduleDisplayLabels[activeModule]}
+          </span>
           <span>{config.aspectRatio}</span>
           <span>{resolution}</span>
-          <span>{version}</span>
+          <span>
+            {
+              versionOptions.find((option) => option.value === generationVersion)
+                ?.name
+            }
+          </span>
         </div>
         <button
           type="button"
@@ -414,12 +495,14 @@ export function ParameterPanel({
             ? "购买积分"
             : hasRunningTask
               ? "生成中"
-              : `生成${moduleLabels[activeModule]}`}
+              : `生成${
+                  activeModule === "white_background"
+                    ? activeAiToolLabel
+                    : moduleDisplayLabels[activeModule]
+                }`}
         </button>
         <p>
-          {isOutOfCredits
-            ? "试用额度已用完，购买积分后可继续生成。"
-            : "预计消耗 1 credit，失败不计入成功消耗。"}
+          {`预计消耗 ${estimatedCredits} 积分（${estimatedImageCount} 张 × ${resolution} 每张 ${resolutionCreditCost} 分${generationVersion === "brand" ? ` + 品牌版 ${brandVersionExtraCredits} 分` : ""}），失败不扣点。${isOutOfCredits ? "当前余额不足，请购买积分后继续生成。" : ""}`}
         </p>
       </div>
     </aside>
