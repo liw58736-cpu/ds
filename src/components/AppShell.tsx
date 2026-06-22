@@ -27,8 +27,8 @@ interface AppShellProps {
 const topNavItems = [
   { page: "home", label: "首页" },
   { page: "main_image", label: "商品主图" },
-  { page: "white_background", label: "AI工具" },
   { page: "detail_page", label: "详情页" },
+  { page: "white_background", label: "AI工具" },
   { page: "history", label: "历史任务" },
   { page: "pricing", label: "价格" },
   { page: "account", label: "账户" },

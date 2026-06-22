@@ -109,6 +109,23 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("places AI tools after the detail page in the top navigation", () => {
+    const { container } = render(<App />);
+    const navLabels = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".topnav-button"),
+      (button) => button.textContent,
+    );
+
+    expect(navLabels).toEqual([
+      "首页",
+      "商品主图",
+      "详情页",
+      "AI工具",
+      "价格",
+      "登录",
+    ]);
+  });
+
   it("opens pricing and returns to the workspace", async () => {
     const user = userEvent.setup();
     render(<App />);
