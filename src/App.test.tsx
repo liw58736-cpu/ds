@@ -299,6 +299,63 @@ describe("App", () => {
     );
   });
 
+  it("shows immediate feedback while a Kroma registration is being submitted", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    let resolveSignup: (response: Response) => void = () => {};
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveSignup = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    const topNavButtons = container.querySelectorAll<HTMLButtonElement>(".topnav-button");
+    await user.click(topNavButtons[topNavButtons.length - 1]);
+    const authSwitchButtons =
+      container.querySelectorAll<HTMLButtonElement>(".login-auth-switch button");
+    await user.click(authSwitchButtons[1]);
+
+    const registerForm = container.querySelector<HTMLFormElement>(".login-form");
+    expect(registerForm).not.toBeNull();
+    const emailInput = registerForm!.querySelector<HTMLInputElement>('input[type="text"]');
+    const passwordInput = registerForm!.querySelector<HTMLInputElement>(
+      'input[type="password"]',
+    );
+    const agreementInput = registerForm!.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    );
+    const submitButton =
+      registerForm!.querySelector<HTMLButtonElement>(".login-submit");
+    expect(emailInput).not.toBeNull();
+    expect(passwordInput).not.toBeNull();
+    expect(agreementInput).not.toBeNull();
+    expect(submitButton).not.toBeNull();
+    const initialButtonText = submitButton!.textContent;
+
+    await user.type(emailInput!, "new-seller@example.com");
+    await user.type(passwordInput!, "new-password");
+    await user.click(agreementInput!);
+    await user.click(submitButton!);
+
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(submitButton).toBeDisabled();
+    expect(submitButton!.textContent).not.toBe(initialButtonText);
+
+    resolveSignup(
+      new Response(
+        JSON.stringify({
+          access_token: "",
+          refresh_token: "",
+          user_id: "user-1",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+  });
+
   it("keeps the login page focused on one simple login form", async () => {
     const user = userEvent.setup();
     render(<App />);

@@ -24,11 +24,16 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
   const [agreed, setAgreed] = useState(false);
   const [message, setMessage] = useState(INITIAL_STATUS);
   const [messageType, setMessageType] = useState<"status" | "alert">("status");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isRegister = authView === "register";
   const activeMode: LoginMode = isRegister ? "password" : loginMode;
   const title = isRegister ? "注册" : "登录";
-  const submitLabel = `${title} kroma`;
+  const submitLabel = isSubmitting
+    ? isRegister
+      ? "\u6b63\u5728\u6ce8\u518c..."
+      : "\u6b63\u5728\u767b\u5f55..."
+    : `${title} kroma`;
 
   const showStatus = (nextMessage: string) => {
     setMessage(nextMessage);
@@ -41,6 +46,10 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
   };
 
   const switchAuthView = (nextView: AuthView) => {
+    if (isSubmitting) {
+      return;
+    }
+
     setAuthView(nextView);
     setLoginMode("password");
     setMessage(
@@ -52,6 +61,10 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
   };
 
   const toggleLoginMode = () => {
+    if (isSubmitting) {
+      return;
+    }
+
     const nextMode = activeMode === "password" ? "code" : "password";
     setLoginMode(nextMode);
     setMessage(
@@ -63,6 +76,10 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
   };
 
   const handleSendCode = () => {
+    if (isSubmitting) {
+      return;
+    }
+
     const normalizedIdentifier = identifier.trim();
 
     if (!normalizedIdentifier) {
@@ -75,6 +92,11 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (isSubmitting) {
+      return;
+    }
+
     const normalizedIdentifier = identifier.trim();
     const normalizedPassword = password.trim();
     const normalizedCode = code.trim();
@@ -95,6 +117,13 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
       showError("请先同意服务条款和隐私政策。");
       return;
     }
+
+    setIsSubmitting(true);
+    showStatus(
+      isRegister
+        ? "\u6b63\u5728\u521b\u5efa\u8d26\u6237\uff0c\u8bf7\u7a0d\u5019..."
+        : "\u6b63\u5728\u767b\u5f55\uff0c\u8bf7\u7a0d\u5019...",
+    );
 
     try {
       const account = await loginOrRegister({
@@ -135,6 +164,8 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
           ? `${title}失败：${error.message}`
           : errorMessage,
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -249,7 +280,12 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
             {message}
           </p>
 
-          <button type="submit" className="primary-button login-submit">
+          <button
+            type="submit"
+            className="primary-button login-submit"
+            disabled={isSubmitting}
+            aria-busy={isSubmitting}
+          >
             {submitLabel}
           </button>
         </form>
