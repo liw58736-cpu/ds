@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getCurrentAccount } from "./accountApi";
 import { purchasePlan } from "./billingApi";
+import { getAccountSnapshot } from "../storage/accountStore";
 
 beforeEach(() => {
   localStorage.clear();
@@ -16,21 +17,21 @@ describe("billingApi", () => {
     const result = await purchasePlan({
       planId: "pro-top-up",
       planName: "专业包",
-      credits: 10500,
+      credits: 950,
       paymentChannel: "mock",
       note: "支付通道待接入支付宝 / 微信。",
     });
 
     expect(result).toMatchObject({
       status: "paid",
-      creditedAmount: 10500,
+      creditedAmount: 950,
     });
     expect(result.orderId).toMatch(/^mock-order-/);
-    expect(result.account.balance).toBe(10505);
+    expect(result.account.balance).toBe(955);
 
     const account = await getCurrentAccount();
     expect(account.transactions[0]).toMatchObject({
-      amount: 10500,
+      amount: 950,
       planId: "pro-top-up",
       planName: "专业包",
       type: "purchase",
@@ -42,7 +43,7 @@ describe("billingApi", () => {
     const remoteResult = {
       orderId: "remote-order-1",
       status: "paid",
-      creditedAmount: 10500,
+      creditedAmount: 950,
       account: {
         session: null,
         balance: 10504,
@@ -58,7 +59,7 @@ describe("billingApi", () => {
     const result = await purchasePlan({
       planId: "pro-top-up",
       planName: "专业包",
-      credits: 10500,
+      credits: 950,
       paymentChannel: "mock",
       note: "支付通道待接入支付宝 / 微信。",
     });
@@ -68,5 +69,46 @@ describe("billingApi", () => {
       "https://api.example.com/api/billing/checkouts",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("opens Paddle checkout when Paddle is configured", async () => {
+    vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
+    vi.stubEnv("VITE_PADDLE_PRICE_BASIC_TOP_UP", "pri_basic");
+
+    const appendChild = vi.spyOn(document.head, "appendChild");
+    const checkoutOpen = vi.fn();
+    vi.stubGlobal("Paddle", {
+      Initialize: vi.fn(),
+      Checkout: { open: checkoutOpen },
+    });
+
+    const result = await purchasePlan({
+      planId: "basic-top-up",
+      planName: "基础包",
+      credits: 120,
+      paymentChannel: "paddle",
+      note: "Paddle checkout",
+      userId: "user-1",
+      email: "seller@example.com",
+    });
+
+    expect(result).toMatchObject({
+      orderId: "paddle-checkout-basic-top-up",
+      status: "pending",
+      creditedAmount: 0,
+    });
+    expect(checkoutOpen).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [{ priceId: "pri_basic", quantity: 1 }],
+        customer: { email: "seller@example.com" },
+        customData: expect.objectContaining({
+          user_id: "user-1",
+          plan_id: "basic-top-up",
+          credits: 120,
+        }),
+      }),
+    );
+    expect(getAccountSnapshot().balance).toBe(5);
+    expect(appendChild).not.toHaveBeenCalled();
   });
 });

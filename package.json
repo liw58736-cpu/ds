@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
+    "deploy:kroma-backend": "npm run build && node scripts/deploy-kroma-backend.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",

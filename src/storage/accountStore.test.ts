@@ -65,15 +65,15 @@ describe("accountStore", () => {
 
   it("adds purchased credits and records the selected plan", () => {
     const snapshot = addCredits({
-      amount: 10500,
+      amount: 950,
       planId: "pro-top-up",
       planName: "专业包",
       note: "支付通道待接入支付宝 / 微信",
     });
 
-    expect(snapshot.balance).toBe(10505);
+    expect(snapshot.balance).toBe(955);
     expect(snapshot.transactions[0]).toMatchObject({
-      amount: 10500,
+      amount: 950,
       planName: "专业包",
       type: "purchase",
     });

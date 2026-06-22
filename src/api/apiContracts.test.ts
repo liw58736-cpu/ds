@@ -112,7 +112,7 @@ describe("apiContracts", () => {
       buildPurchasePlanRequest({
         planId: "pro-top-up",
         planName: "专业包",
-        credits: 10500,
+        credits: 950,
         paymentChannel: "mock",
         note: "支付通道待接入",
       }),
@@ -121,7 +121,7 @@ describe("apiContracts", () => {
       method: "POST",
       body: {
         planId: "pro-top-up",
-        credits: 10500,
+        credits: 950,
         currency: "CNY",
       },
     });

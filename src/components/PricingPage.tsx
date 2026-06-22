@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { purchasePlan } from "../api/billingApi";
+import { isPaddleCheckoutConfigured, purchasePlan } from "../api/billingApi";
+import { getAccountSnapshot } from "../storage/accountStore";
 
 type BillingType = "top-up" | "subscription";
 
@@ -39,8 +40,9 @@ const topUpPlans: CreditPlan[] = [
     name: "基础包",
     originalPrice: "¥72",
     currentPrice: "¥36",
-    baseCredits: "1,500 积分",
-    firstPurchaseBonus: "含首购赠送 250",
+    baseCredits: "100 积分",
+    campaignCredits: "120 积分",
+    firstPurchaseBonus: "含首购赠送 20",
     description: "灵活充值，积分永不过期，适合少量主图和详情图试用。",
     features: [
       "单次充值权益",
@@ -58,9 +60,9 @@ const topUpPlans: CreditPlan[] = [
     name: "标准包",
     originalPrice: "¥216",
     currentPrice: "¥108",
-    baseCredits: "3,750 积分",
-    campaignCredits: "5,250 积分",
-    firstPurchaseBonus: "含首购赠送 750",
+    baseCredits: "360 积分",
+    campaignCredits: "420 积分",
+    firstPurchaseBonus: "含首购赠送 60",
     description: "主图、详情页和画板编辑都能稳定覆盖，适合固定上新。",
     features: [
       "单次充值权益",
@@ -79,10 +81,9 @@ const topUpPlans: CreditPlan[] = [
     badge: "最受欢迎",
     originalPrice: "¥436",
     currentPrice: "¥218",
-    baseCredits: "7,500 积分",
-    campaignCredits: "10,500 积分",
-    firstPurchaseBonus: "含首购赠送 1,500",
-    cumulativeBonus: "购买本档可领 200 积分累充奖励",
+    baseCredits: "800 积分",
+    campaignCredits: "950 积分",
+    firstPurchaseBonus: "含首购赠送 150",
     description: "适合稳定店铺素材周转，覆盖主图、详情页和风格复刻。",
     features: [
       "万能画板完整基础能力",
@@ -104,9 +105,9 @@ const subscriptionPlans: CreditPlan[] = [
     originalPrice: "¥144",
     currentPrice: "¥72",
     period: "/ 月",
-    baseCredits: "2,500 积分",
-    campaignCredits: "3,550 积分",
-    firstPurchaseBonus: "含首购赠送 400",
+    baseCredits: "220 积分",
+    campaignCredits: "260 积分",
+    firstPurchaseBonus: "含首购赠送 40",
     description: "每月固定积分，适合轻量持续创作。",
     features: [
       "持续创作权益",
@@ -125,10 +126,9 @@ const subscriptionPlans: CreditPlan[] = [
     originalPrice: "¥404",
     currentPrice: "¥202",
     period: "/ 季",
-    baseCredits: "7,000 积分",
-    campaignCredits: "10,050 积分",
-    firstPurchaseBonus: "含首购赠送 900",
-    cumulativeBonus: "购买本档可领 200 积分累充奖励",
+    baseCredits: "720 积分",
+    campaignCredits: "840 积分",
+    firstPurchaseBonus: "含首购赠送 120",
     description: "季度额度，适合固定上新节奏。",
     features: [
       "画板编辑、详情页、风格复刻持续可用",
@@ -147,10 +147,9 @@ const subscriptionPlans: CreditPlan[] = [
     originalPrice: "¥1436",
     currentPrice: "¥718",
     period: "/ 年",
-    baseCredits: "25,000 积分",
-    campaignCredits: "36,000 积分",
-    firstPurchaseBonus: "含首购赠送 3,000",
-    cumulativeBonus: "购买本档可领 650 积分累充奖励",
+    baseCredits: "3,000 积分",
+    campaignCredits: "3,500 积分",
+    firstPurchaseBonus: "含首购赠送 500",
     description: "全年素材预算，适合长期运营。",
     features: [
       "主图 2.0、详情页 16 模块、画板编辑",
@@ -193,7 +192,7 @@ function PricingCard({
         <strong>{plan.baseCredits}</strong>
         {plan.campaignCredits ? (
           <p>
-            <span>618 1.5x</span>
+            <span>首购合计</span>
             {plan.campaignCredits}
           </p>
         ) : null}
@@ -239,17 +238,35 @@ export function PricingPage() {
 
   const handleSelectPlan = async (plan: CreditPlan) => {
     const creditAmount = parseCreditAmount(plan.campaignCredits ?? plan.baseCredits);
+    const session = getAccountSnapshot().session;
+    const usePaddle = isPaddleCheckoutConfigured();
+
+    if (usePaddle && !session?.userId) {
+      setSelectedPlan(plan);
+      setPaymentStatus("请先登录 kroma 账户，再购买积分。");
+      return;
+    }
+
     const result = await purchasePlan({
       credits: creditAmount,
       planId: plan.id,
       planName: plan.name,
-      paymentChannel: "mock",
-      note: "订单已确认，积分已入账。",
+      paymentChannel: usePaddle ? "paddle" : "mock",
+      note: usePaddle ? "Paddle checkout pending." : "订单已确认，积分已入账。",
+      userId: session?.userId,
+      email: session?.identifier,
     });
 
     const snapshot = result.account;
 
     setSelectedPlan(plan);
+    if (result.status === "pending") {
+      setPaymentStatus(
+        `已打开 ${plan.name} 支付窗口，付款成功后积分会自动入账。`,
+      );
+      return;
+    }
+
     setPaymentStatus(
       `已确认 ${plan.name}，${formatCredits(
         result.creditedAmount,

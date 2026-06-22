@@ -6,8 +6,26 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
     envVars:
+      - key: VITE_API_BASE_URL
+        value: https://kroma-api.onrender.com
       - key: VITE_KROMA_API_BASE_URL
         value: https://kroma-api.onrender.com/api/v1
+      - key: VITE_PADDLE_ENVIRONMENT
+        value: production
+      - key: VITE_PADDLE_CLIENT_TOKEN
+        sync: false
+      - key: VITE_PADDLE_PRICE_BASIC_TOP_UP
+        value: pri_01kvq85dsggpt3qcb5pk02s10a
+      - key: VITE_PADDLE_PRICE_STANDARD_TOP_UP
+        value: pri_01kvq89wc6w551q949arne6xvt
+      - key: VITE_PADDLE_PRICE_PRO_TOP_UP
+        value: pri_01kvq8cmj8xb0412zr80hracsp
+      - key: VITE_PADDLE_PRICE_MONTHLY_SUBSCRIPTION
+        value: pri_01kvq8dppzzfbrbb5yqf15x7se
+      - key: VITE_PADDLE_PRICE_QUARTERLY_SUBSCRIPTION
+        value: pri_01kvq8g8wwx973evrvc2dgcfad
+      - key: VITE_PADDLE_PRICE_YEARLY_SUBSCRIPTION
+        value: pri_01kvq8f3masyt9nfcgs9zscrq5
     routes:
       - type: rewrite
         source: /*

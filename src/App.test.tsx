@@ -34,6 +34,21 @@ function signInForTest(identifier = "seller@example.com") {
   });
 }
 
+function signInWithKromaForTest(identifier = "seller@example.com") {
+  initializeSession({
+    identifier,
+    authView: "login",
+    mode: "password",
+    storeName: "",
+    inviteCode: "",
+    createdAt: "2026-06-20T00:00:00.000Z",
+    provider: "kroma",
+    userId: "user-1",
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+  });
+}
+
 describe("App", () => {
   it("renders the kroma homepage", () => {
     render(<App />);
@@ -170,7 +185,7 @@ describe("App", () => {
     expect(screen.getAllByRole("button", { name: "支付" })).toHaveLength(3);
     await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
     expect(screen.getByRole("status")).toHaveTextContent(
-      "已确认 专业包，10,500 积分已入账，当前余额 10,505 积分。",
+      "已确认 专业包，950 积分已入账，当前余额 955 积分。",
     );
 
     await user.click(screen.getByRole("button", { name: "订阅方案" }));
@@ -195,14 +210,64 @@ describe("App", () => {
     await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "已确认 专业包，10,500 积分已入账，当前余额 10,505 积分。",
+      "已确认 专业包，950 积分已入账，当前余额 955 积分。",
     );
 
     await user.click(screen.getByRole("button", { name: "账户" }));
 
-    expect(screen.getByText("10,505 credits")).toBeInTheDocument();
+    expect(screen.getByText("955 credits")).toBeInTheDocument();
     expect(screen.queryByText("最近积分记录")).not.toBeInTheDocument();
     expect(screen.queryByText("购买 专业包")).not.toBeInTheDocument();
+  });
+
+  it("opens Paddle checkout from pricing without crediting before webhook", async () => {
+    vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
+    vi.stubEnv("VITE_PADDLE_PRICE_PRO_TOP_UP", "pri_pro");
+    const checkoutOpen = vi.fn();
+    vi.stubGlobal("Paddle", {
+      Initialize: vi.fn(),
+      Checkout: { open: checkoutOpen },
+    });
+    const user = userEvent.setup();
+    signInWithKromaForTest("seller@example.com");
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "价格" }));
+    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "已打开 专业包 支付窗口，付款成功后积分会自动入账。",
+    );
+    expect(checkoutOpen).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [{ priceId: "pri_pro", quantity: 1 }],
+        customData: expect.objectContaining({
+          plan_id: "pro-top-up",
+          credits: 950,
+        }),
+      }),
+    );
+    expect(getAccountSnapshot().balance).toBe(5);
+  });
+
+  it("requires a Kroma account before opening Paddle checkout", async () => {
+    vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
+    vi.stubEnv("VITE_PADDLE_PRICE_PRO_TOP_UP", "pri_pro");
+    const checkoutOpen = vi.fn();
+    vi.stubGlobal("Paddle", {
+      Initialize: vi.fn(),
+      Checkout: { open: checkoutOpen },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "价格" }));
+    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "请先登录 kroma 账户，再购买积分。",
+    );
+    expect(checkoutOpen).not.toHaveBeenCalled();
   });
 
   it("opens the account page", async () => {
@@ -489,12 +554,12 @@ describe("App", () => {
 
     await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
     expect(screen.getByRole("status")).toHaveTextContent(
-      "已确认 专业包，10,500 积分已入账，当前余额 10,500 积分。",
+      "已确认 专业包，950 积分已入账，当前余额 950 积分。",
     );
 
     await user.click(screen.getByRole("button", { name: "商品主图" }));
 
-    expect(getAccountSnapshot().balance).toBe(10500);
+    expect(getAccountSnapshot().balance).toBe(950);
     expect(
       screen.getByRole("button", { name: "生成商品主图" }),
     ).toBeInTheDocument();
