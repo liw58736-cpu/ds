@@ -135,6 +135,7 @@ describe("accountApi", () => {
         method: "POST",
         body: JSON.stringify({
           email: "seller@example.com",
+          redirect_to: window.location.origin,
         }),
       }),
     );

@@ -117,6 +117,10 @@ function shouldUseKromaAuth(session: AccountSession): boolean {
 export async function requestLoginCode(identifier: string): Promise<KromaOtpResponse> {
   const baseUrl = getConfiguredKromaApiBaseUrl();
   const normalizedIdentifier = identifier.trim();
+  const redirectTo =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : undefined;
 
   if (!baseUrl) {
     return { sent: true };
@@ -129,6 +133,7 @@ export async function requestLoginCode(identifier: string): Promise<KromaOtpResp
     },
     body: JSON.stringify({
       email: normalizedIdentifier,
+      ...(redirectTo ? { redirect_to: redirectTo } : {}),
     }),
   });
 }
