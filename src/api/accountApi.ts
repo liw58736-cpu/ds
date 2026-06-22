@@ -91,6 +91,10 @@ interface KromaAuthResponse {
   user_id: string;
 }
 
+interface KromaOtpResponse {
+  sent: boolean;
+}
+
 interface KromaCreditsResponse {
   credits: number;
   is_paid?: boolean;
@@ -105,9 +109,28 @@ interface KromaDeductCreditsResponse {
 function shouldUseKromaAuth(session: AccountSession): boolean {
   return Boolean(
     getConfiguredKromaApiBaseUrl() &&
-      session.mode === "password" &&
+      (session.mode === "password" || session.mode === "code") &&
       session.credential,
   );
+}
+
+export async function requestLoginCode(identifier: string): Promise<KromaOtpResponse> {
+  const baseUrl = getConfiguredKromaApiBaseUrl();
+  const normalizedIdentifier = identifier.trim();
+
+  if (!baseUrl) {
+    return { sent: true };
+  }
+
+  return requestKromaJson<KromaOtpResponse>(`${baseUrl}/auth/otp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: normalizedIdentifier,
+    }),
+  });
 }
 
 async function loginOrRegisterWithKroma(
@@ -119,16 +142,28 @@ async function loginOrRegisterWithKroma(
     return initializeSession(session);
   }
 
-  const endpoint = session.authView === "register" ? "/auth/signup" : "/auth/login";
+  const endpoint =
+    session.authView === "register"
+      ? "/auth/signup"
+      : session.mode === "code"
+        ? "/auth/verify-code"
+        : "/auth/login";
+  const authBody =
+    session.mode === "code"
+      ? {
+          email: session.identifier,
+          token: session.credential,
+        }
+      : {
+          email: session.identifier,
+          password: session.credential,
+        };
   const auth = await requestKromaJson<KromaAuthResponse>(`${baseUrl}${endpoint}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      email: session.identifier,
-      password: session.credential,
-    }),
+    body: JSON.stringify(authBody),
   });
 
   if (

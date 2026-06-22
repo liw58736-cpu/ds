@@ -6,6 +6,7 @@ import {
   getCurrentAccountSnapshot,
   getCurrentAccount,
   loginOrRegister,
+  requestLoginCode,
 } from "./accountApi";
 import type { AccountSession, AccountSnapshot } from "../storage/accountStore";
 
@@ -111,6 +112,84 @@ describe("accountApi", () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: "Bearer access-token-1",
+        }),
+      }),
+    );
+  });
+
+  it("requests a real Kroma email verification code", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ sent: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(requestLoginCode("seller@example.com")).resolves.toEqual({
+      sent: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/v1/auth/otp",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          email: "seller@example.com",
+        }),
+      }),
+    );
+  });
+
+  it("verifies a Kroma email code and hydrates remote credits", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: "code-access-token",
+            refresh_token: "code-refresh-token",
+            user_id: "user-code",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            credits: 18,
+            plan: "free",
+            is_paid: false,
+          }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const account = await loginOrRegister({
+      identifier: "seller@example.com",
+      authView: "login",
+      mode: "code",
+      storeName: "",
+      inviteCode: "",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      credential: "123456",
+    });
+
+    expect(account.balance).toBe(18);
+    expect(account.session).toMatchObject({
+      identifier: "seller@example.com",
+      provider: "kroma",
+      userId: "user-code",
+      accessToken: "code-access-token",
+      refreshToken: "code-refresh-token",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://127.0.0.1:8000/api/v1/auth/verify-code",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          email: "seller@example.com",
+          token: "123456",
         }),
       }),
     );

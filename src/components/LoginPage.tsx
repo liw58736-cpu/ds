@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { AppPage } from "./AppShell";
-import { loginOrRegister } from "../api/accountApi";
+import { loginOrRegister, requestLoginCode } from "../api/accountApi";
 import type { AuthView, LoginMode } from "../storage/accountStore";
 import kromaLogo from "../assets/brand/kroma-logo.png";
 
@@ -75,7 +75,7 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
     setMessageType("status");
   };
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     if (isSubmitting) {
       return;
     }
@@ -87,7 +87,21 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
       return;
     }
 
-    showStatus(`验证码已发送至 ${normalizedIdentifier}，请查看短信或邮箱。`);
+    setIsSubmitting(true);
+    showStatus("正在发送验证码，请稍候...");
+
+    try {
+      await requestLoginCode(normalizedIdentifier);
+      showStatus(`验证码已发送至 ${normalizedIdentifier}，请查看短信或邮箱。`);
+    } catch (error) {
+      showError(
+        error instanceof Error
+          ? `验证码发送失败：${error.message}`
+          : "验证码发送失败，请稍后重试。",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -239,6 +253,7 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
                 type="button"
                 className="secondary-button"
                 onClick={handleSendCode}
+                disabled={isSubmitting}
               >
                 获取验证码
               </button>
