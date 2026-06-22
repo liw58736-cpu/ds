@@ -6,6 +6,8 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
     envVars:
+      - key: VITE_API_BASE_URL
+        value: https://kroma-api.onrender.com/api/v1
       - key: VITE_KROMA_API_BASE_URL
         value: https://kroma-api.onrender.com/api/v1
     routes:
