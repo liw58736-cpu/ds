@@ -527,8 +527,9 @@ describe("App", () => {
       { button: "积分说明", title: "积分消耗说明", text: "扣减规则" },
       { button: "联系支持", title: "联系支持", text: "liw58736@gmail.com" },
       { button: "关于我们", title: "关于我们", text: "产品原则" },
-      { button: "企业采购", title: "企业采购与发票", text: "发票说明" },
     ];
+
+    expect(screen.queryByRole("button", { name: "企业采购" })).not.toBeInTheDocument();
 
     for (const item of pages) {
       await user.click(screen.getByRole("button", { name: item.button }));

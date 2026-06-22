@@ -15,8 +15,7 @@ export type AppPage =
   | "refund"
   | "credits"
   | "support"
-  | "about"
-  | "business";
+  | "about";
 
 interface AppShellProps {
   page: AppPage;
@@ -43,7 +42,6 @@ const legalLinks = [
   { page: "credits", label: "积分说明" },
   { page: "support", label: "联系支持" },
   { page: "about", label: "关于我们" },
-  { page: "business", label: "企业采购" },
 ] satisfies Array<{ page: AppPage; label: string }>;
 
 const privatePages = new Set<AppPage>(["history", "account"]);

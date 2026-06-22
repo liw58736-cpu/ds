@@ -172,8 +172,9 @@ test("footer legal pages render", async ({ page }) => {
     { button: "积分说明", title: "积分消耗说明", text: "扣减规则" },
     { button: "联系支持", title: "联系支持", text: "liw58736@gmail.com" },
     { button: "关于我们", title: "关于我们", text: "产品原则" },
-    { button: "企业采购", title: "企业采购与发票", text: "发票说明" },
   ];
+
+  await expect(page.getByRole("button", { name: "企业采购" })).toHaveCount(0);
 
   for (const item of pages) {
     await page.getByRole("button", { name: item.button }).click();

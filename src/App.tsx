@@ -74,8 +74,6 @@ export default function App() {
       <LegalPage type="support" />
     ) : page === "about" ? (
       <LegalPage type="about" />
-    ) : page === "business" ? (
-      <LegalPage type="business" />
     ) : null;
 
   useEffect(() => {
