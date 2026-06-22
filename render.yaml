@@ -7,9 +7,9 @@ services:
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://kroma-api.onrender.com
+        value: https://api.kromaai.app
       - key: VITE_KROMA_API_BASE_URL
-        value: https://kroma-api.onrender.com/api/v1
+        value: https://api.kromaai.app/api/v1
       - key: VITE_PADDLE_ENVIRONMENT
         value: production
       - key: VITE_PADDLE_CLIENT_TOKEN
