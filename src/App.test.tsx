@@ -743,6 +743,9 @@ describe("App", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "验证码已发送至邮箱",
     );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "只输入 kroma 邮件里的 6 位数字验证码",
+    );
     expect(within(registerForm).getByLabelText("邮箱验证码")).toBeInTheDocument();
     expect(getAccountSnapshot().session).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
@@ -764,7 +767,7 @@ describe("App", () => {
       within(registerForm).getByRole("button", { name: "验证并完成注册" }),
     );
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "请输入 kroma 注册邮件里的 6 位数字验证码。",
+      "请输入 kroma 邮件里的 6 位数字验证码，不要输入 8 位验证码或点击邮件链接。",
     );
     await user.clear(within(registerForm).getByLabelText("邮箱验证码"));
 
@@ -780,8 +783,9 @@ describe("App", () => {
     );
     expect(within(loginForm).getByLabelText("密码")).toHaveValue("");
     expect(screen.getByRole("status")).toHaveTextContent(
-      "注册验证成功，邮箱已填好，请输入刚才设置的密码登录。",
+      "注册完成。邮箱已填好，请输入刚才设置的密码登录。",
     );
+    expect(screen.queryByText(/同步账户积分/)).not.toBeInTheDocument();
     expect(getAccountSnapshot().session).toBeNull();
   });
 
