@@ -21,6 +21,8 @@ services:
         value: kroma <no-reply@i18.pro>
       - key: WEB_RESEND_API_KEY
         sync: false
+      - key: WEB_AUTH_CODE_SECRET
+        sync: false
       - key: WEB_INTERNAL_BILLING_KEY
         sync: false
       - key: WEB_PADDLE_WEBHOOK_SECRET

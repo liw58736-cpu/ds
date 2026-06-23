@@ -301,11 +301,14 @@ test("auth signup creates an unconfirmed user and only sends the custom six digi
   });
   assert.equal(calls[3].url, "https://api.resend.com/emails");
   const storedCode = JSON.parse(calls[2].init.body).code;
-  assert.match(storedCode, /^\d{6}$/);
+  assert.match(storedCode, /^[a-f0-9]{64}$/);
   assert.equal(JSON.parse(calls[2].init.body).provider_token, "auth-user-1");
   const emailBody = JSON.parse(calls[3].init.body);
+  const publicCode = emailBody.text.match(/\b\d{6}\b/)?.[0];
+  assert.match(publicCode ?? "", /^\d{6}$/);
+  assert.notEqual(storedCode, publicCode);
   assert.equal(emailBody.subject, "kroma 注册验证码");
-  assert.match(emailBody.html, new RegExp(storedCode));
+  assert.match(emailBody.html, new RegExp(publicCode));
   assert.doesNotMatch(emailBody.html, /auth-user-1/);
   assert.doesNotMatch(emailBody.html, /ConfirmationURL|Confirm email address/);
 });
@@ -444,10 +447,13 @@ test("auth signup resends a custom code for a pending unconfirmed signup", async
 
   assert.equal(response.status, 200);
   const storedCodeBody = JSON.parse(calls[3].init.body);
-  assert.match(storedCodeBody.code, /^\d{6}$/);
+  assert.match(storedCodeBody.code, /^[a-f0-9]{64}$/);
   assert.equal(storedCodeBody.provider_token, "auth-user-1");
   const emailBody = JSON.parse(calls[4].init.body);
-  assert.match(emailBody.html, new RegExp(storedCodeBody.code));
+  const publicCode = emailBody.text.match(/\b\d{6}\b/)?.[0];
+  assert.match(publicCode ?? "", /^\d{6}$/);
+  assert.notEqual(storedCodeBody.code, publicCode);
+  assert.match(emailBody.html, new RegExp(publicCode));
   assert.doesNotMatch(emailBody.html, /auth-user-1/);
 });
 
@@ -496,11 +502,14 @@ test("auth otp sends a custom login code email", async () => {
     redirect_to: "https://kromaai.app",
   });
   const storedCode = JSON.parse(calls[1].init.body).code;
-  assert.match(storedCode, /^\d{6}$/);
+  assert.match(storedCode, /^[a-f0-9]{64}$/);
   assert.equal(JSON.parse(calls[1].init.body).provider_token, "87654321");
   const emailBody = JSON.parse(calls[2].init.body);
+  const publicCode = emailBody.text.match(/\b\d{6}\b/)?.[0];
+  assert.match(publicCode ?? "", /^\d{6}$/);
+  assert.notEqual(storedCode, publicCode);
   assert.equal(emailBody.subject, "kroma 登录验证码");
-  assert.match(emailBody.html, new RegExp(storedCode));
+  assert.match(emailBody.html, new RegExp(publicCode));
   assert.doesNotMatch(emailBody.html, /87654321/);
   assert.doesNotMatch(emailBody.html, /ConfirmationURL|Sign in/);
 });
@@ -515,7 +524,9 @@ test("auth verify confirms the signup user after the public six digit code", asy
     },
     fetch: async (url, init = {}) => {
       calls.push({ url, init });
-      if (url.includes("/rest/v1/web_auth_codes?")) {
+      if (url.includes("/rest/v1/web_auth_codes?email=")) {
+        assert.match(url, /code=eq\.[a-f0-9]{64}/);
+        assert.doesNotMatch(url, /code=eq\.123456/);
         return jsonResponse([
           {
             id: "code-1",
@@ -546,8 +557,9 @@ test("auth verify confirms the signup user after the public six digit code", asy
     }),
   );
 
-  assert.equal(response.status, 200);
-  assert.deepEqual(await readJson(response), {
+  const responseBody = await readJson(response);
+  assert.equal(response.status, 200, JSON.stringify(responseBody));
+  assert.deepEqual(responseBody, {
     access_token: "",
     refresh_token: "",
     user_id: "auth-user-1",
@@ -555,6 +567,61 @@ test("auth verify confirms the signup user after the public six digit code", asy
   assert.deepEqual(JSON.parse(calls[2].init.body), {
     email_confirm: true,
   });
+});
+
+test("auth verify still accepts a recent legacy plain code during rollout", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.includes("/rest/v1/web_auth_codes?email=")) {
+        if (url.includes("code=eq.123456")) {
+          return jsonResponse([
+            {
+              id: "legacy-code-1",
+              provider_token: "auth-user-legacy",
+            },
+          ]);
+        }
+
+        return jsonResponse([]);
+      }
+      if (url.includes("/rest/v1/web_auth_codes?id=eq.legacy-code-1")) {
+        return jsonResponse({});
+      }
+      if (url.endsWith("/auth/v1/admin/users/auth-user-legacy")) {
+        return jsonResponse({
+          id: "auth-user-legacy",
+          email: "seller@example.com",
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/auth/verify-signup", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "seller@example.com",
+        token: "123456",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    access_token: "",
+    refresh_token: "",
+    user_id: "auth-user-legacy",
+  });
+  assert.match(calls[0].url, /code=eq\.[a-f0-9]{64}/);
+  assert.match(calls[1].url, /code=eq\.123456/);
 });
 
 test("auth verify rejects raw Supabase eight digit codes", async () => {

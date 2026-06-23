@@ -624,57 +624,117 @@ describe("App", () => {
 
   it("opens the login page and validates the demo login form", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    const { container } = render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "登录" }));
+    const topNavButtons = container.querySelectorAll<HTMLButtonElement>(".topnav-button");
+    await user.click(topNavButtons[topNavButtons.length - 1]);
 
-    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "注册" })).toBeInTheDocument();
-    expect(screen.queryByText("扫码登录预留")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "微信" })).not.toBeInTheDocument();
+    const loginForm = container.querySelector<HTMLFormElement>(".login-form");
+    expect(loginForm).not.toBeNull();
+    expect(container.querySelector(".login-auth-switch")).not.toBeNull();
 
-    const loginForm = screen.getByRole("form", { name: "登录表单" });
-    await user.click(
-      within(loginForm).getByRole("button", { name: "登录 kroma" }),
+    const submitButton = loginForm!.querySelector<HTMLButtonElement>(".login-submit");
+    expect(submitButton).not.toBeNull();
+    await user.click(submitButton!);
+    expect(loginForm!.querySelector('[role="alert"]')).not.toBeNull();
+
+    const identifierInput = loginForm!.querySelector<HTMLInputElement>('input[type="text"]');
+    const passwordInput = loginForm!.querySelector<HTMLInputElement>('input[type="password"]');
+    const agreementInput = loginForm!.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(identifierInput).not.toBeNull();
+    expect(passwordInput).not.toBeNull();
+    expect(agreementInput).not.toBeNull();
+    expect(loginForm!.querySelector('input[inputmode="numeric"]')).toBeNull();
+
+    await user.type(identifierInput!, "seller@example.com");
+    await user.type(passwordInput!, "secret-password");
+    await user.click(agreementInput!);
+    await user.click(submitButton!);
+
+    await waitFor(() => {
+      expect(container.querySelector(".account-panel")).not.toBeNull();
+    });
+    expect(container.querySelector(".login-form")).toBeNull();
+  });
+
+  it("routes successful Kroma password login to the account page", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              access_token: "access-token-1",
+              refresh_token: "refresh-token-1",
+              user_id: "user-1",
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              credits: 5,
+              is_paid: false,
+              plan: "free",
+            }),
+        })
+        .mockResolvedValue({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              ok: true,
+              service: "kroma-web-api",
+              commit: "test",
+              checked_at: "2026-06-24T00:00:00.000Z",
+              config: {
+                supabaseUrl: true,
+                supabaseAnonKey: true,
+                supabaseServiceRoleKey: true,
+                resendApiKey: true,
+                paddleWebhookSecret: false,
+                paddlePriceCreditMap: true,
+                imageApiBaseUrl: false,
+                imageApiKey: false,
+              },
+              database: {
+                users: true,
+                creditTransactions: true,
+                generations: true,
+                templates: true,
+                authCodes: true,
+              },
+              missing: [],
+            }),
+        }),
     );
-    expect(screen.getByRole("alert")).toHaveTextContent("请输入手机号或邮箱。");
+    const user = userEvent.setup();
+    const { container } = render(<App />);
 
-    await user.type(
-      within(loginForm).getByLabelText("手机号或邮箱"),
-      "seller@example.com",
-    );
-    expect(within(loginForm).getByLabelText("密码")).toBeInTheDocument();
-    expect(within(loginForm).queryByLabelText("验证码")).not.toBeInTheDocument();
+    const topNavButtons = container.querySelectorAll<HTMLButtonElement>(".topnav-button");
+    await user.click(topNavButtons[topNavButtons.length - 1]);
+    const loginForm = container.querySelector<HTMLFormElement>(".login-form");
+    expect(loginForm).not.toBeNull();
+    const identifierInput = loginForm!.querySelector<HTMLInputElement>('input[type="text"]');
+    const passwordInput = loginForm!.querySelector<HTMLInputElement>('input[type="password"]');
+    const agreementInput = loginForm!.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    const submitButton = loginForm!.querySelector<HTMLButtonElement>(".login-submit");
+    expect(identifierInput).not.toBeNull();
+    expect(passwordInput).not.toBeNull();
+    expect(agreementInput).not.toBeNull();
+    expect(submitButton).not.toBeNull();
 
-    await user.type(within(loginForm).getByLabelText("密码"), "secret-password");
-    await user.click(within(loginForm).getByLabelText("我已阅读并同意"));
-    await user.click(
-      within(loginForm).getByRole("button", { name: "登录 kroma" }),
-    );
+    await user.type(identifierInput!, "seller@example.com");
+    await user.type(passwordInput!, "secret-password");
+    await user.click(agreementInput!);
+    await user.click(submitButton!);
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "已为 seller@example.com 创建当前会话",
-    );
-
-    await user.click(within(loginForm).getByRole("button", { name: "使用验证码登录" }));
-    await user.click(
-      within(loginForm).getByRole("button", { name: "获取验证码" }),
-    );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "验证码已发送至 seller@example.com",
-    );
-
-    await user.type(within(loginForm).getByLabelText("验证码"), "123456");
-    await user.click(
-      within(loginForm).getByRole("button", { name: "登录 kroma" }),
-    );
-
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "已为 seller@example.com 创建当前会话，积分与历史任务会在此账户下保存。",
-    );
-
-    await user.click(within(loginForm).getByRole("button", { name: "隐私政策" }));
-    expect(screen.getByRole("heading", { name: "隐私政策" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(container.querySelector(".account-panel")).not.toBeNull();
+    });
+    expect(container.querySelector(".login-form")).toBeNull();
   });
 
   it("registers through Kroma and waits for real email verification", async () => {

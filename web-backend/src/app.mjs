@@ -267,6 +267,18 @@ function createSixDigitCode() {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
+function hashAuthCode(env, email, type, code) {
+  const secret =
+    env.WEB_AUTH_CODE_SECRET ||
+    env.WEB_SUPABASE_SERVICE_ROLE_KEY ||
+    env.WEB_RESEND_API_KEY ||
+    "kroma-web-auth-code-development-secret";
+
+  return createHmac("sha256", secret)
+    .update(`${normalizeEmail(email)}:${String(type)}:${String(code)}`)
+    .digest("hex");
+}
+
 async function storeAuthCode(fetchImpl, env, input) {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
   await restFetch(fetchImpl, env, "/web_auth_codes", {
@@ -275,7 +287,7 @@ async function storeAuthCode(fetchImpl, env, input) {
     body: {
       email: input.email,
       type: input.type,
-      code: input.code,
+      code: hashAuthCode(env, input.email, input.type, input.code),
       provider_token: input.providerToken,
       expires_at: expiresAt,
     },
@@ -283,11 +295,17 @@ async function storeAuthCode(fetchImpl, env, input) {
 }
 
 async function resolveAuthToken(fetchImpl, env, input) {
-  const rows = await restFetch(
-    fetchImpl,
-    env,
-    `/web_auth_codes?email=eq.${encodeURIComponent(input.email)}&type=eq.${encodeURIComponent(input.type)}&code=eq.${encodeURIComponent(input.code)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=id,provider_token&order=created_at.desc&limit=1`,
-  );
+  let rows = await fetchAuthCodeRows(fetchImpl, env, {
+    ...input,
+    code: hashAuthCode(env, input.email, input.type, input.code),
+  });
+
+  if (
+    (!Array.isArray(rows) || rows.length === 0) &&
+    /^\d{6}$/.test(input.code)
+  ) {
+    rows = await fetchAuthCodeRows(fetchImpl, env, input);
+  }
 
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new HttpError(422, { detail: "Invalid or expired verification code" });
@@ -298,6 +316,14 @@ async function resolveAuthToken(fetchImpl, env, input) {
     method: "DELETE",
   });
   return String(row.provider_token);
+}
+
+async function fetchAuthCodeRows(fetchImpl, env, input) {
+  return restFetch(
+    fetchImpl,
+    env,
+    `/web_auth_codes?email=eq.${encodeURIComponent(input.email)}&type=eq.${encodeURIComponent(input.type)}&code=eq.${encodeURIComponent(input.code)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=id,provider_token&order=created_at.desc&limit=1`,
+  );
 }
 
 async function findPendingSignupUserId(fetchImpl, env, email) {

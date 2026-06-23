@@ -71,7 +71,10 @@ export default function App() {
     ) : page === "login" ? (
       <LoginPage
         onOpenLegal={handlePageChange}
-        onAuthenticated={() => setIsAuthenticated(true)}
+        onAuthenticated={() => {
+          setIsAuthenticated(true);
+          setPage("account");
+        }}
       />
     ) : page === "terms" ? (
       <LegalPage type="terms" />
