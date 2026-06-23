@@ -17,6 +17,10 @@ services:
         value: https://kromaai.app
       - key: WEB_ALLOWED_AUTH_REDIRECTS
         value: https://kromaai.app,https://www.kromaai.app,https://kroma-web.onrender.com
+      - key: WEB_AUTH_EMAIL_FROM
+        value: kroma <no-reply@i18.pro>
+      - key: WEB_RESEND_API_KEY
+        sync: false
       - key: WEB_INTERNAL_BILLING_KEY
         sync: false
       - key: WEB_PADDLE_WEBHOOK_SECRET

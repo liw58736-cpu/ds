@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "check:production": "node scripts/check-production.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.18.0",

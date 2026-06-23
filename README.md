@@ -36,3 +36,13 @@ Keep `VITE_KROMA_API_BASE_URL` empty until a separate web image generation
 service is ready. Production builds do not fall back to mock image generation.
 
 Backend setup details are in `web-backend/README.md`.
+
+After Render deploys both services, verify the live backend is on the current
+commit and has the required environment variables and Supabase tables:
+
+```bash
+npm run check:production
+```
+
+If this reports the old health format, redeploy `kroma-web-api` on Render before
+testing signup, payment, or credit balance behavior.
