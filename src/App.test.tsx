@@ -285,6 +285,27 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
   });
 
+  it("labels cloud credits separately from trial credits on sync failure", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve("Internal Server Error"),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    signInWithKromaForTest();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "账户" }));
+
+    expect(screen.getByText("云端积分余额")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("已登录，云端余额暂时同步失败，请刷新后重试。")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("试用积分余额")).not.toBeInTheDocument();
+  });
+
   it("opens the login page and validates the demo login form", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -368,17 +389,72 @@ describe("App", () => {
       "new-seller@example.com",
     );
     await user.type(within(registerForm).getByLabelText("密码"), "new-password");
+    await user.type(
+      within(registerForm).getByLabelText("确认密码"),
+      "different-password",
+    );
     await user.click(within(registerForm).getByLabelText("我已阅读并同意"));
+    await user.click(within(registerForm).getByRole("button", { name: "注册 kroma" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("两次输入的密码不一致");
+
+    await user.clear(within(registerForm).getByLabelText("确认密码"));
+    await user.type(
+      within(registerForm).getByLabelText("确认密码"),
+      "new-password",
+    );
     await user.click(within(registerForm).getByRole("button", { name: "注册 kroma" }));
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "请查看邮箱完成账户验证",
+      "验证码已发送至邮箱",
     );
+    expect(within(registerForm).getByLabelText("邮箱验证码")).toBeInTheDocument();
     expect(getAccountSnapshot().session).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://127.0.0.1:8000/api/v1/auth/signup",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("moves registered Kroma emails back to password login", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            detail: {
+              code: "email_already_registered",
+              message: "该邮箱已注册，请直接登录。",
+            },
+          }),
+        ),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "登录" }));
+    await user.click(screen.getByRole("button", { name: "注册" }));
+    const registerForm = screen.getByRole("form", { name: "注册表单" });
+
+    await user.type(
+      within(registerForm).getByLabelText("手机号或邮箱"),
+      "seller@example.com",
+    );
+    await user.type(within(registerForm).getByLabelText("密码"), "new-password");
+    await user.type(
+      within(registerForm).getByLabelText("确认密码"),
+      "new-password",
+    );
+    await user.click(within(registerForm).getByLabelText("我已阅读并同意"));
+    await user.click(within(registerForm).getByRole("button", { name: "注册 kroma" }));
+
+    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "该邮箱已注册，请直接输入密码登录。",
+    );
+    expect(screen.queryByLabelText("邮箱验证码")).not.toBeInTheDocument();
   });
 
   it("shows immediate feedback while a Kroma registration is being submitted", async () => {
@@ -416,9 +492,14 @@ describe("App", () => {
     expect(agreementInput).not.toBeNull();
     expect(submitButton).not.toBeNull();
     const initialButtonText = submitButton!.textContent;
+    const confirmPasswordInput = Array.from(
+      registerForm!.querySelectorAll<HTMLInputElement>('input[type="password"]'),
+    )[1];
+    expect(confirmPasswordInput).not.toBeNull();
 
     await user.type(emailInput!, "new-seller@example.com");
     await user.type(passwordInput!, "new-password");
+    await user.type(confirmPasswordInput!, "new-password");
     await user.click(agreementInput!);
     await user.click(submitButton!);
 

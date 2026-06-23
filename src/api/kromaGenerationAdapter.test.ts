@@ -170,6 +170,7 @@ describe("kromaGenerationAdapter", () => {
         method: "POST",
         headers: expect.objectContaining({
           Authorization: "Bearer access-token-1",
+          "X-Kroma-Client": "web",
         }),
       }),
     );

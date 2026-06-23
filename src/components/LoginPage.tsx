@@ -13,26 +13,38 @@ interface LoginPageProps {
 }
 
 const INITIAL_STATUS = "使用手机号或邮箱登录，保存积分、订单和历史任务。";
-const EMAIL_VERIFICATION_MESSAGE = "请查看邮箱完成账户验证，验证后再返回登录。";
+const EMAIL_VERIFICATION_MESSAGE =
+  "验证码已发送至邮箱，请输入邮件里的 6 位验证码完成注册。";
 
 export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
   const [authView, setAuthView] = useState<AuthView>("login");
   const [loginMode, setLoginMode] = useState<LoginMode>("password");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [code, setCode] = useState("");
+  const [registerStep, setRegisterStep] = useState<"form" | "verify">("form");
   const [agreed, setAgreed] = useState(false);
   const [message, setMessage] = useState(INITIAL_STATUS);
   const [messageType, setMessageType] = useState<"status" | "alert">("status");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isRegister = authView === "register";
-  const activeMode: LoginMode = isRegister ? "password" : loginMode;
+  const isRegisterVerification = isRegister && registerStep === "verify";
+  const activeMode: LoginMode = isRegister
+    ? isRegisterVerification
+      ? "code"
+      : "password"
+    : loginMode;
   const title = isRegister ? "注册" : "登录";
   const submitLabel = isSubmitting
     ? isRegister
-      ? "\u6b63\u5728\u6ce8\u518c..."
+      ? isRegisterVerification
+        ? "正在验证..."
+        : "\u6b63\u5728\u6ce8\u518c..."
       : "\u6b63\u5728\u767b\u5f55..."
+    : isRegisterVerification
+      ? "验证并完成注册"
     : `${title} kroma`;
 
   const showStatus = (nextMessage: string) => {
@@ -52,6 +64,10 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
 
     setAuthView(nextView);
     setLoginMode("password");
+    setRegisterStep("form");
+    setPassword("");
+    setConfirmPassword("");
+    setCode("");
     setMessage(
       nextView === "register"
         ? "注册后即可同步积分、订单和历史任务。"
@@ -113,6 +129,7 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
 
     const normalizedIdentifier = identifier.trim();
     const normalizedPassword = password.trim();
+    const normalizedConfirmPassword = confirmPassword.trim();
     const normalizedCode = code.trim();
     const credential =
       activeMode === "password" ? normalizedPassword : normalizedCode;
@@ -127,6 +144,18 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
       return;
     }
 
+    if (isRegister && !isRegisterVerification) {
+      if (!normalizedConfirmPassword) {
+        showError("请再次输入密码。");
+        return;
+      }
+
+      if (normalizedPassword !== normalizedConfirmPassword) {
+        showError("两次输入的密码不一致。");
+        return;
+      }
+    }
+
     if (!agreed) {
       showError("请先同意服务条款和隐私政策。");
       return;
@@ -134,7 +163,9 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
 
     setIsSubmitting(true);
     showStatus(
-      isRegister
+      isRegisterVerification
+        ? "正在验证邮箱验证码，请稍候..."
+        : isRegister
         ? "\u6b63\u5728\u521b\u5efa\u8d26\u6237\uff0c\u8bf7\u7a0d\u5019..."
         : "\u6b63\u5728\u767b\u5f55\uff0c\u8bf7\u7a0d\u5019...",
     );
@@ -169,7 +200,20 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
         error instanceof Error ? error.message : `${title}失败，请检查账户后重试。`;
 
       if (isRegister && errorMessage.includes("请查看邮箱完成账户验证")) {
+        setRegisterStep("verify");
+        setCode("");
         showStatus(EMAIL_VERIFICATION_MESSAGE);
+        return;
+      }
+
+      if (isRegister && errorMessage.includes("已注册")) {
+        setAuthView("login");
+        setLoginMode("password");
+        setRegisterStep("form");
+        setPassword("");
+        setConfirmPassword("");
+        setCode("");
+        showError("该邮箱已注册，请直接输入密码登录。");
         return;
       }
 
@@ -222,24 +266,39 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
               onChange={(event) => setIdentifier(event.target.value)}
               autoComplete="username"
               placeholder="seller@example.com"
+              readOnly={isRegisterVerification}
             />
           </label>
 
           {activeMode === "password" ? (
-            <label className="field login-field">
-              <span>密码</span>
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete={isRegister ? "new-password" : "current-password"}
-                placeholder="请输入密码"
-              />
-            </label>
+            <>
+              <label className="field login-field">
+                <span>密码</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={isRegister ? "new-password" : "current-password"}
+                  placeholder="请输入密码"
+                />
+              </label>
+              {isRegister ? (
+                <label className="field login-field">
+                  <span>确认密码</span>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    autoComplete="new-password"
+                    placeholder="请再次输入密码"
+                  />
+                </label>
+              ) : null}
+            </>
           ) : (
             <div className="login-code-row">
               <label className="field login-field">
-                <span>验证码</span>
+                <span>{isRegisterVerification ? "邮箱验证码" : "验证码"}</span>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -249,14 +308,29 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
                   placeholder="6 位验证码"
                 />
               </label>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={handleSendCode}
-                disabled={isSubmitting}
-              >
-                获取验证码
-              </button>
+              {isRegisterVerification ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setRegisterStep("form");
+                    setCode("");
+                    showStatus("请确认邮箱和密码后重新提交注册。");
+                  }}
+                  disabled={isSubmitting}
+                >
+                  返回修改
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleSendCode}
+                  disabled={isSubmitting}
+                >
+                  获取验证码
+                </button>
+              )}
             </div>
           )}
 

@@ -15,7 +15,6 @@ import {
   buildConsumeCreditsRequest,
   buildCurrentAccountRequest,
 } from "./apiContracts";
-import { getConfiguredKromaApiBaseUrl } from "./kromaGenerationAdapter";
 import { requestRemoteJson, shouldUseRemoteBackend } from "./remoteBackendClient";
 
 export interface ConsumeCreditsInput {
@@ -23,18 +22,39 @@ export interface ConsumeCreditsInput {
   label: string;
 }
 
+export type AccountCreditSyncStatus =
+  | "trial"
+  | "cloud"
+  | "cloud_sync_failed";
+
+export interface AccountWithCreditSync {
+  account: AccountSnapshot;
+  creditSyncStatus: AccountCreditSyncStatus;
+}
+
 export async function getCurrentAccount(): Promise<AccountSnapshot> {
-  const kromaAccount = await getCurrentKromaAccount();
+  const syncedAccount = await getCurrentAccountWithCreditSync();
+  return syncedAccount.account;
+}
+
+export async function getCurrentAccountWithCreditSync(): Promise<AccountWithCreditSync> {
+  const kromaAccount = await getCurrentKromaAccountWithCreditSync();
 
   if (kromaAccount) {
     return kromaAccount;
   }
 
   if (shouldUseRemoteBackend()) {
-    return requestRemoteJson<AccountSnapshot>(buildCurrentAccountRequest());
+    return {
+      account: await requestRemoteJson<AccountSnapshot>(buildCurrentAccountRequest()),
+      creditSyncStatus: "cloud",
+    };
   }
 
-  return getAccountSnapshot();
+  return {
+    account: getAccountSnapshot(),
+    creditSyncStatus: "trial",
+  };
 }
 
 export function getCurrentAccountSnapshot(): AccountSnapshot {
@@ -108,14 +128,24 @@ interface KromaDeductCreditsResponse {
 
 function shouldUseKromaAuth(session: AccountSession): boolean {
   return Boolean(
-    getConfiguredKromaApiBaseUrl() &&
+    getConfiguredWebAccountApiBaseUrl() &&
       (session.mode === "password" || session.mode === "code") &&
       session.credential,
   );
 }
 
+function getConfiguredWebAccountApiBaseUrl(): string | null {
+  const value = import.meta.env.VITE_WEB_API_BASE_URL?.trim();
+
+  if (!value) {
+    return null;
+  }
+
+  return value.replace(/\/+$/, "");
+}
+
 export async function requestLoginCode(identifier: string): Promise<KromaOtpResponse> {
-  const baseUrl = getConfiguredKromaApiBaseUrl();
+  const baseUrl = getConfiguredWebAccountApiBaseUrl();
   const normalizedIdentifier = identifier.trim();
   const redirectTo =
     typeof window !== "undefined" && window.location?.origin
@@ -141,15 +171,17 @@ export async function requestLoginCode(identifier: string): Promise<KromaOtpResp
 async function loginOrRegisterWithKroma(
   session: AccountSession,
 ): Promise<AccountSnapshot> {
-  const baseUrl = getConfiguredKromaApiBaseUrl();
+  const baseUrl = getConfiguredWebAccountApiBaseUrl();
 
   if (!baseUrl || !session.credential) {
     return initializeSession(session);
   }
 
   const endpoint =
-    session.authView === "register"
-      ? "/auth/signup"
+    session.authView === "register" && session.mode === "code"
+      ? "/auth/verify-signup"
+      : session.authView === "register"
+        ? "/auth/signup"
       : session.mode === "code"
         ? "/auth/verify-code"
         : "/auth/login";
@@ -162,8 +194,13 @@ async function loginOrRegisterWithKroma(
       : {
           email: session.identifier,
           password: session.credential,
+          ...(session.authView === "register" &&
+          typeof window !== "undefined" &&
+          window.location?.origin
+            ? { redirect_to: window.location.origin }
+            : {}),
         };
-  const auth = await requestKromaJson<KromaAuthResponse>(`${baseUrl}${endpoint}`, {
+const auth = await requestKromaJson<KromaAuthResponse>(`${baseUrl}${endpoint}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -200,8 +237,8 @@ async function loginOrRegisterWithKroma(
   return initializeSessionSnapshot(snapshot);
 }
 
-async function getCurrentKromaAccount(): Promise<AccountSnapshot | null> {
-  const baseUrl = getConfiguredKromaApiBaseUrl();
+async function getCurrentKromaAccountWithCreditSync(): Promise<AccountWithCreditSync | null> {
+  const baseUrl = getConfiguredWebAccountApiBaseUrl();
   const current = getAccountSnapshot();
   const accessToken = current.session?.accessToken;
 
@@ -212,32 +249,43 @@ async function getCurrentKromaAccount(): Promise<AccountSnapshot | null> {
   const credits = await fetchKromaCredits(baseUrl, accessToken);
 
   if (!credits) {
-    return current;
+    return {
+      account: current,
+      creditSyncStatus: "cloud_sync_failed",
+    };
   }
 
-  return initializeSessionSnapshot({
-    ...current,
-    balance: credits.credits,
-  });
+  return {
+    account: initializeSessionSnapshot({
+      ...current,
+      balance: credits.credits,
+    }),
+    creditSyncStatus: "cloud",
+  };
 }
 
 async function fetchKromaCredits(
   baseUrl: string,
   accessToken: string,
 ): Promise<KromaCreditsResponse | null> {
-  return requestKromaJson<KromaCreditsResponse>(`${baseUrl}/user/credits`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  try {
+    return await requestKromaJson<KromaCreditsResponse>(`${baseUrl}/user/credits`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Kroma-Client": "web",
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+  } catch {
+    return null;
+  }
 }
 
 async function consumeKromaCredits(
   input: ConsumeCreditsInput,
 ): Promise<AccountSnapshot | null> {
-  const baseUrl = getConfiguredKromaApiBaseUrl();
+  const baseUrl = getConfiguredWebAccountApiBaseUrl();
   const accessToken = getAccountSnapshot().session?.accessToken;
   const amount = Math.max(0, Math.floor(input.amount));
 
@@ -251,6 +299,7 @@ async function consumeKromaCredits(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Kroma-Client": "web",
         Authorization: `Bearer ${accessToken}`,
       },
     },
@@ -277,8 +326,30 @@ async function requestKromaJson<Payload>(
 
   if (!response.ok) {
     const text = await response.text();
+    let detail = text;
 
-    throw new Error(`Kroma API request failed: ${response.status} ${text}`);
+    try {
+      const payload = JSON.parse(text) as {
+        detail?: string | { code?: string; message?: string };
+        message?: string;
+      };
+      if (
+        typeof payload.detail === "object" &&
+        payload.detail?.code === "email_already_registered"
+      ) {
+        throw new Error(payload.detail.message ?? "该邮箱已注册，请直接登录。");
+      }
+      detail =
+        typeof payload.detail === "string"
+          ? payload.detail
+          : payload.message ?? text;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("已注册")) {
+        throw error;
+      }
+    }
+
+    throw new Error(`Kroma API request failed: ${response.status} ${detail}`);
   }
 
   return response.json() as Promise<Payload>;

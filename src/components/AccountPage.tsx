@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import {
-  getCurrentAccount,
   getCurrentAccountSnapshot,
+  getCurrentAccountWithCreditSync,
 } from "../api/accountApi";
+import type { AccountCreditSyncStatus } from "../api/accountApi";
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("zh-CN").format(value);
@@ -10,21 +11,41 @@ function formatNumber(value: number): string {
 
 export function AccountPage() {
   const [account, setAccount] = useState(() => getCurrentAccountSnapshot());
+  const [creditSyncStatus, setCreditSyncStatus] =
+    useState<AccountCreditSyncStatus>(() =>
+      getCurrentAccountSnapshot().session ? "cloud_sync_failed" : "trial",
+    );
 
   useEffect(() => {
-    void getCurrentAccount().then(setAccount);
+    void getCurrentAccountWithCreditSync().then((result) => {
+      setAccount(result.account);
+      setCreditSyncStatus(result.creditSyncStatus);
+    });
   }, []);
+
+  const isCloudAccount = Boolean(account.session?.provider === "kroma");
+  const balanceLabel = isCloudAccount ? "云端积分余额" : "试用积分余额";
+  const balanceNote =
+    creditSyncStatus === "cloud"
+      ? "App 和网页共用同一份云端积分。"
+      : creditSyncStatus === "cloud_sync_failed"
+        ? "已登录，云端余额暂时同步失败，请刷新后重试。"
+        : "未登录时仅显示本机试用积分，登录后同步云端余额。";
 
   const usageItems = [
     {
       label: "账户状态",
       value: account.session ? "已登录" : "试用中",
-      note: account.session ? "当前会话已生效" : "登录后保存积分与任务记录",
+      note: account.session
+        ? isCloudAccount
+          ? "当前使用 kroma 云端账号。"
+          : "当前会话已生效。"
+        : "登录后保存积分与任务记录。",
     },
     {
-      label: "积分余额",
+      label: balanceLabel,
       value: `${formatNumber(account.balance)} credits`,
-      note: "价格页购买后自动到账",
+      note: balanceNote,
     },
     {
       label: "历史保存",

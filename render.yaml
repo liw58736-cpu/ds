@@ -1,5 +1,24 @@
 services:
   - type: web
+    name: kroma-web-api
+    runtime: node
+    branch: main
+    rootDir: web-backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: WEB_SUPABASE_URL
+        sync: false
+      - key: WEB_SUPABASE_ANON_KEY
+        sync: false
+      - key: WEB_SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: WEB_AUTH_REDIRECT_URL
+        value: https://kromaai.app
+      - key: WEB_ALLOWED_AUTH_REDIRECTS
+        value: https://kromaai.app,https://www.kromaai.app,https://kroma-web.onrender.com
+
+  - type: web
     name: kroma-web
     runtime: static
     branch: main
@@ -7,9 +26,11 @@ services:
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://api.kromaai.app
+        value: ""
+      - key: VITE_WEB_API_BASE_URL
+        value: https://kroma-web-api.onrender.com/api/v1
       - key: VITE_KROMA_API_BASE_URL
-        value: https://api.kromaai.app/api/v1
+        value: ""
       - key: VITE_PADDLE_ENVIRONMENT
         value: production
       - key: VITE_PADDLE_CLIENT_TOKEN

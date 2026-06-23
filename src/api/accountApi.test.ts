@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   consumeCredits,
   getCreditBalance,
   getCreditTransactions,
   getCurrentAccountSnapshot,
   getCurrentAccount,
+  getCurrentAccountWithCreditSync,
   loginOrRegister,
   requestLoginCode,
 } from "./accountApi";
@@ -36,6 +37,16 @@ describe("accountApi", () => {
     });
   });
 
+  it("reports trial credit status before login", async () => {
+    await expect(getCurrentAccountWithCreditSync()).resolves.toMatchObject({
+      account: {
+        balance: 5,
+        session: null,
+      },
+      creditSyncStatus: "trial",
+    });
+  });
+
   it("stores login session details and keeps the current balance", async () => {
     const account = await loginOrRegister({
       identifier: "seller@example.com",
@@ -54,7 +65,7 @@ describe("accountApi", () => {
   });
 
   it("logs in through the Kroma auth backend and hydrates remote credits", async () => {
-    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -112,13 +123,135 @@ describe("accountApi", () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: "Bearer access-token-1",
+          "X-Kroma-Client": "web",
         }),
       }),
     );
   });
 
+  it("prefers the dedicated web account backend over the legacy app backend", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1");
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "https://app-api.example.com/api/v1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: "web-access-token",
+            refresh_token: "web-refresh-token",
+            user_id: "web-user-1",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            credits: 5,
+            plan: "free",
+            is_paid: false,
+          }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await loginOrRegister({
+      identifier: "seller@example.com",
+      authView: "login",
+      mode: "password",
+      storeName: "",
+      inviteCode: "",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      credential: "secret-password",
+    });
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "https://web-api.example.com/api/v1/auth/login",
+      "https://web-api.example.com/api/v1/user/credits",
+    ]);
+  });
+
+  it("keeps the Kroma login session when remote credits cannot be loaded", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: "access-token-1",
+            refresh_token: "refresh-token-1",
+            user_id: "user-1",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve("Internal Server Error"),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const account = await loginOrRegister({
+      identifier: "seller@example.com",
+      authView: "login",
+      mode: "password",
+      storeName: "",
+      inviteCode: "",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      credential: "secret-password",
+    });
+
+    expect(account.balance).toBe(5);
+    expect(account.session).toMatchObject({
+      identifier: "seller@example.com",
+      provider: "kroma",
+      userId: "user-1",
+      accessToken: "access-token-1",
+      refreshToken: "refresh-token-1",
+    });
+  });
+
+  it("reports a cloud sync failure separately from the saved session", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    localStorage.setItem(
+      "commerce-studio-account-v1",
+      JSON.stringify({
+        balance: 5,
+        session: {
+          identifier: "seller@example.com",
+          authView: "login",
+          mode: "password",
+          storeName: "",
+          inviteCode: "",
+          createdAt: "2026-06-17T00:00:00.000Z",
+          provider: "kroma",
+          userId: "user-1",
+          accessToken: "access-token-1",
+          refreshToken: "refresh-token-1",
+        },
+        transactions: [],
+      }),
+    );
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve("Internal Server Error"),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getCurrentAccountWithCreditSync()).resolves.toMatchObject({
+      account: {
+        balance: 5,
+        session: {
+          provider: "kroma",
+          userId: "user-1",
+        },
+      },
+      creditSyncStatus: "cloud_sync_failed",
+    });
+  });
+
   it("requests a real Kroma email verification code", async () => {
-    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ sent: true }),
@@ -142,7 +275,7 @@ describe("accountApi", () => {
   });
 
   it("verifies a Kroma email code and hydrates remote credits", async () => {
-    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -196,6 +329,61 @@ describe("accountApi", () => {
     );
   });
 
+  it("verifies a Kroma signup email code through the signup endpoint", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: "signup-access-token",
+            refresh_token: "signup-refresh-token",
+            user_id: "user-signup",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            credits: 5,
+            plan: "free",
+            is_paid: false,
+          }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const account = await loginOrRegister({
+      identifier: "new-seller@example.com",
+      authView: "register",
+      mode: "code",
+      storeName: "",
+      inviteCode: "",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      credential: "123456",
+    });
+
+    expect(account.balance).toBe(5);
+    expect(account.session).toMatchObject({
+      identifier: "new-seller@example.com",
+      provider: "kroma",
+      userId: "user-signup",
+      accessToken: "signup-access-token",
+      refreshToken: "signup-refresh-token",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://127.0.0.1:8000/api/v1/auth/verify-signup",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          email: "new-seller@example.com",
+          token: "123456",
+        }),
+      }),
+    );
+  });
+
   it("requires a real backend for new account registration", async () => {
     await expect(
       loginOrRegister({
@@ -212,8 +400,29 @@ describe("accountApi", () => {
     expect(getCurrentAccountSnapshot().session).toBeNull();
   });
 
+  it("does not use the legacy image backend variable for account registration", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "https://app-api.example.com/api/v1");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loginOrRegister({
+        identifier: "new-seller@example.com",
+        authView: "register",
+        mode: "password",
+        storeName: "",
+        inviteCode: "",
+        createdAt: "2026-06-17T00:00:00.000Z",
+        credential: "new-password",
+      }),
+    ).rejects.toThrow("注册需要连接真实账号服务");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getCurrentAccountSnapshot().session).toBeNull();
+  });
+
   it("treats Kroma signup without tokens as pending email verification", async () => {
-    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,
       json: () =>
@@ -246,13 +455,46 @@ describe("accountApi", () => {
         body: JSON.stringify({
           email: "new-seller@example.com",
           password: "new-password",
+          redirect_to: window.location.origin,
         }),
       }),
     );
   });
 
+  it("reports an already registered email during Kroma signup", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            detail: {
+              code: "email_already_registered",
+              message: "该邮箱已注册，请直接登录。",
+            },
+          }),
+        ),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loginOrRegister({
+        identifier: "seller@example.com",
+        authView: "register",
+        mode: "password",
+        storeName: "",
+        inviteCode: "",
+        createdAt: "2026-06-17T00:00:00.000Z",
+        credential: "new-password",
+      }),
+    ).rejects.toThrow("邮箱已注册");
+
+    expect(getCurrentAccountSnapshot().session).toBeNull();
+  });
+
   it("reports unavailable Kroma auth service with a clear message", async () => {
-    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -316,7 +558,7 @@ describe("accountApi", () => {
 
     await expect(getCurrentAccount()).resolves.toEqual(remoteAccount);
     await expect(
-      consumeCredits({ amount: 1, label: "生成商品素材" }),
+      consumeCredits({ amount: 1, label: "鐢熸垚鍟嗗搧绱犳潗" }),
     ).resolves.toEqual(remoteAccount);
 
     expect(fetchMock.mock.calls[0][0]).toBe(
@@ -328,7 +570,7 @@ describe("accountApi", () => {
   });
 
   it("deducts Kroma credits on the authenticated backend and stores the returned balance", async () => {
-    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const session: AccountSession = {
       identifier: "seller@example.com",
       authView: "login",
@@ -361,14 +603,14 @@ describe("accountApi", () => {
 
     const account = await consumeCredits({
       amount: 2,
-      label: "生成商品素材",
+      label: "鐢熸垚鍟嗗搧绱犳潗",
     });
 
     expect(account.balance).toBe(10);
     expect(account.transactions[0]).toMatchObject({
       amount: -2,
       balanceAfter: 10,
-      label: "生成商品素材",
+      label: "鐢熸垚鍟嗗搧绱犳潗",
       type: "generation",
     });
     expect(fetchMock).toHaveBeenCalledWith(
@@ -377,6 +619,7 @@ describe("accountApi", () => {
         method: "POST",
         headers: expect.objectContaining({
           Authorization: "Bearer access-token-1",
+          "X-Kroma-Client": "web",
         }),
       }),
     );
@@ -385,14 +628,15 @@ describe("accountApi", () => {
   it("consumes credits only through the success-only account API", async () => {
     const account = await consumeCredits({
       amount: 1,
-      label: "生成商品素材",
+      label: "鐢熸垚鍟嗗搧绱犳潗",
     });
 
     expect(account.balance).toBe(4);
     expect(account.transactions[0]).toMatchObject({
       amount: -1,
       type: "generation",
-      label: "生成商品素材",
+      label: "鐢熸垚鍟嗗搧绱犳潗",
     });
   });
 });
+

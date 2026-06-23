@@ -401,6 +401,7 @@ function createKromaTaskId(): string {
 function buildKromaHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "X-Kroma-Client": "web",
   };
   const accessToken = getAccountAccessToken();
 
