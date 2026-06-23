@@ -259,6 +259,10 @@ const auth = await requestKromaJson<KromaAuthResponse>(`${baseUrl}${endpoint}`, 
     body: JSON.stringify(authBody),
   });
 
+  if (session.authView === "register" && session.mode === "password") {
+    throw new Error("请查看邮箱完成账户验证，验证后再返回登录。");
+  }
+
   if (
     session.authView === "register" &&
     (!auth.access_token || !auth.refresh_token || !auth.user_id)

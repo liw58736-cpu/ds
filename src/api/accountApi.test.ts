@@ -531,6 +531,35 @@ describe("accountApi", () => {
     );
   });
 
+  it("treats Kroma signup with tokens as pending email verification instead of logging in", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          access_token: "unexpected-signup-token",
+          refresh_token: "unexpected-refresh-token",
+          user_id: "user-1",
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loginOrRegister({
+        identifier: "new-seller@example.com",
+        authView: "register",
+        mode: "password",
+        storeName: "",
+        inviteCode: "",
+        createdAt: "2026-06-17T00:00:00.000Z",
+        credential: "new-password",
+      }),
+    ).rejects.toThrow("请查看邮箱完成账户验证");
+
+    expect(getCurrentAccountSnapshot().session).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("reports an already registered email during Kroma signup", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const fetchMock = vi.fn().mockResolvedValueOnce({

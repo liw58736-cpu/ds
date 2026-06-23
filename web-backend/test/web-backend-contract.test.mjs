@@ -357,6 +357,42 @@ test("auth verify resolves the public six digit signup code before Supabase veri
   });
 });
 
+test("auth verify rejects raw Supabase eight digit codes", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+    },
+    fetch: async (url) => {
+      if (url.includes("/rest/v1/web_auth_codes?")) {
+        return jsonResponse([]);
+      }
+
+      if (url.endsWith("/auth/v1/verify")) {
+        throw new Error("Raw Supabase OTP should not be verified directly");
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/auth/verify-signup", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "seller@example.com",
+        token: "12345678",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 422);
+  assert.deepEqual(await readJson(response), {
+    detail: "Invalid or expired verification code",
+  });
+});
+
 test("credits endpoint creates an isolated web user with five free credits", async () => {
   const calls = [];
   const app = createWebBackend({
@@ -507,6 +543,9 @@ test("paddle webhook credits a web user once after signature verification", asyn
         return jsonResponse([body]);
       }
       if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_1")) {
+        if (init.method !== "PATCH") {
+          return jsonResponse(billingEvents.map((event) => ({ status: event.status })));
+        }
         const body = JSON.parse(init.body);
         Object.assign(billingEvents[0], body);
         return jsonResponse([billingEvents[0]]);
@@ -576,6 +615,7 @@ test("paddle webhook credits a web user once after signature verification", asyn
   assert.deepEqual(await readJson(duplicate), {
     received: true,
     duplicate: true,
+    status: "processed",
   });
   assert.equal(users[0].credits, 955);
   assert.equal(transactions.length, 1);
@@ -622,9 +662,12 @@ test("paddle webhook duplicate reservation skips crediting", async () => {
       WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
       WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
     },
-    fetch: async (url) => {
+    fetch: async (url, init = {}) => {
       if (url.endsWith("/rest/v1/web_billing_events")) {
         return jsonResponse({ message: "duplicate key value violates unique constraint" }, 409);
+      }
+      if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_duplicate")) {
+        return jsonResponse([{ status: "processed" }]);
       }
 
       throw new Error(`Duplicate webhook should not touch another table: ${url}`);
@@ -655,5 +698,96 @@ test("paddle webhook duplicate reservation skips crediting", async () => {
   assert.deepEqual(await readJson(response), {
     received: true,
     duplicate: true,
+    status: "processed",
   });
+});
+
+test("paddle webhook retries events that failed before credit mutation", async () => {
+  const users = [{ id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" }];
+  const billingEvents = [];
+  const transactions = [];
+  let failFirstUserLookup = true;
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+    },
+    fetch: async (url, init = {}) => {
+      if (url.endsWith("/rest/v1/web_billing_events")) {
+        const body = JSON.parse(init.body);
+        if (billingEvents.some((event) => event.event_id === body.event_id)) {
+          return jsonResponse({ message: "duplicate key value violates unique constraint" }, 409);
+        }
+        billingEvents.push(body);
+        return jsonResponse([body]);
+      }
+      if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_retry")) {
+        if (init.method !== "PATCH") {
+          return jsonResponse(billingEvents.map((event) => ({ status: event.status })));
+        }
+        Object.assign(billingEvents[0], JSON.parse(init.body));
+        return jsonResponse([billingEvents[0]]);
+      }
+      if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
+        if (failFirstUserLookup) {
+          failFirstUserLookup = false;
+          return jsonResponse({ message: "temporary database error" }, 500);
+        }
+        if (init.method === "PATCH") {
+          users[0].credits = JSON.parse(init.body).credits;
+          return jsonResponse([users[0]]);
+        }
+        return jsonResponse(users);
+      }
+      if (url.endsWith("/rest/v1/web_credit_transactions")) {
+        transactions.push(JSON.parse(init.body));
+        return jsonResponse([transactions.at(-1)]);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const payload = {
+    event_id: "evt_retry",
+    event_type: "transaction.completed",
+    data: {
+      id: "txn_retry",
+      custom_data: {
+        user_id: "web-user-1",
+        credits: 950,
+      },
+    },
+  };
+  const rawBody = JSON.stringify(payload);
+
+  const first = await app.handle(
+    new Request("http://local.test/api/v1/billing/paddle/webhook", {
+      method: "POST",
+      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      body: rawBody,
+    }),
+  );
+
+  assert.equal(first.status, 500);
+  assert.equal(billingEvents[0].status, "failed_retryable");
+  assert.equal(users[0].credits, 5);
+
+  const second = await app.handle(
+    new Request("http://local.test/api/v1/billing/paddle/webhook", {
+      method: "POST",
+      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      body: rawBody,
+    }),
+  );
+
+  assert.equal(second.status, 200);
+  assert.deepEqual(await readJson(second), {
+    received: true,
+    credited: 950,
+    credits_remaining: 955,
+  });
+  assert.equal(users[0].credits, 955);
+  assert.equal(transactions.length, 1);
+  assert.equal(billingEvents[0].status, "processed");
 });

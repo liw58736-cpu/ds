@@ -238,7 +238,7 @@ async function resolveAuthToken(fetchImpl, env, input) {
   );
 
   if (!Array.isArray(rows) || rows.length === 0) {
-    return input.code;
+    throw new HttpError(422, { detail: "Invalid or expired verification code" });
   }
 
   const row = rows[0];
@@ -370,7 +370,19 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
   });
 
   if (!reserved) {
-    return jsonResponse({ received: true, duplicate: true });
+    const existingEvent = await getBillingEvent(fetchImpl, env, eventId);
+
+    if (existingEvent?.status === "failed_retryable" || existingEvent?.status === "received") {
+      await updateBillingEvent(fetchImpl, env, eventId, { status: "processing" });
+    } else {
+      return jsonResponse({
+        received: true,
+        duplicate: true,
+        status: existingEvent?.status ?? "unknown",
+      });
+    }
+  } else {
+    await updateBillingEvent(fetchImpl, env, eventId, { status: "processing" });
   }
 
   if (eventType !== "transaction.completed") {
@@ -387,49 +399,64 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
   const planId = String(customData.plan_id ?? customData.planId ?? "");
   const planName = String(customData.plan_name ?? customData.planName ?? planId);
   const transactionId = String(data.id ?? eventId);
+  let creditMutationStarted = false;
 
-  if (!userId || credits <= 0) {
-    await updateBillingEvent(fetchImpl, env, eventId, {
-      status: "rejected",
+  try {
+    if (!userId || credits <= 0) {
+      await updateBillingEvent(fetchImpl, env, eventId, {
+        status: "rejected",
+        reference_id: transactionId,
+        user_id: userId || null,
+        credits,
+      });
+      throw new HttpError(422, { detail: "Paddle webhook is missing user_id or credits" });
+    }
+
+    const user = await getWebUserById(fetchImpl, env, userId);
+    if (!user) {
+      await updateBillingEvent(fetchImpl, env, eventId, {
+        status: "rejected",
+        reference_id: transactionId,
+        user_id: userId,
+        credits,
+      });
+      throw new HttpError(422, { detail: "Paddle webhook user was not found" });
+    }
+
+    const nextCredits = user.credits + credits;
+    creditMutationStarted = true;
+    await updateWebUserCredits(fetchImpl, env, user.id, nextCredits);
+    await createCreditTransaction(fetchImpl, env, {
+      user_id: user.id,
+      amount: credits,
+      type: "purchase",
+      description: planName ? `Paddle purchase: ${planName}` : "Paddle purchase",
       reference_id: transactionId,
-      user_id: userId || null,
+    });
+    await updateBillingEvent(fetchImpl, env, eventId, {
+      status: "processed",
+      reference_id: transactionId,
+      user_id: user.id,
       credits,
     });
-    throw new HttpError(422, { detail: "Paddle webhook is missing user_id or credits" });
-  }
 
-  const user = await getWebUserById(fetchImpl, env, userId);
-  if (!user) {
-    await updateBillingEvent(fetchImpl, env, eventId, {
-      status: "rejected",
-      reference_id: transactionId,
-      user_id: userId,
-      credits,
+    return jsonResponse({
+      received: true,
+      credited: credits,
+      credits_remaining: nextCredits,
     });
-    throw new HttpError(422, { detail: "Paddle webhook user was not found" });
+  } catch (error) {
+    if (!(error instanceof HttpError && error.status >= 400 && error.status < 500)) {
+      await updateBillingEvent(fetchImpl, env, eventId, {
+        status: creditMutationStarted ? "needs_review" : "failed_retryable",
+        reference_id: transactionId,
+        user_id: userId || null,
+        credits,
+      });
+    }
+
+    throw error;
   }
-
-  const nextCredits = user.credits + credits;
-  await updateWebUserCredits(fetchImpl, env, user.id, nextCredits);
-  await createCreditTransaction(fetchImpl, env, {
-    user_id: user.id,
-    amount: credits,
-    type: "purchase",
-    description: planName ? `Paddle purchase: ${planName}` : "Paddle purchase",
-    reference_id: transactionId,
-  });
-  await updateBillingEvent(fetchImpl, env, eventId, {
-    status: "processed",
-    reference_id: transactionId,
-    user_id: user.id,
-    credits,
-  });
-
-  return jsonResponse({
-    received: true,
-    credited: credits,
-    credits_remaining: nextCredits,
-  });
 }
 
 function requireInternalBillingAccess(request, env) {
@@ -515,6 +542,22 @@ async function reserveBillingEvent(fetchImpl, env, body) {
 
     throw error;
   }
+}
+
+async function getBillingEvent(fetchImpl, env, eventId) {
+  const rows = await restFetch(
+    fetchImpl,
+    env,
+    `/web_billing_events?provider=eq.paddle&event_id=eq.${encodeURIComponent(eventId)}&select=status&limit=1`,
+  );
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+
+  return {
+    status: String(rows[0].status ?? ""),
+  };
 }
 
 async function updateBillingEvent(fetchImpl, env, eventId, body) {
