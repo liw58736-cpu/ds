@@ -1,4 +1,5 @@
 const defaultFreeCredits = 5;
+const defaultSender = "kroma <no-reply@i18.pro>";
 
 export function createWebBackend({
   env = process.env,
@@ -52,7 +53,7 @@ async function handleRequest(request, env, fetchImpl) {
     }
 
     if (url.pathname === "/api/v1/auth/verify-code" && request.method === "POST") {
-      return await handleVerify(request, env, fetchImpl, "email");
+      return await handleVerify(request, env, fetchImpl, "magiclink");
     }
 
     if (url.pathname === "/api/v1/auth/verify-signup" && request.method === "POST") {
@@ -94,20 +95,41 @@ async function handleRequest(request, env, fetchImpl) {
 async function handleSignup(request, env, fetchImpl) {
   const body = await readJsonBody(request);
   const redirectTo = body.redirect_to || env.WEB_AUTH_REDIRECT_URL;
+  const email = normalizeEmail(body.email);
+  const password = String(body.password ?? "");
 
   if (redirectTo && !isAllowedAuthRedirect(redirectTo, env)) {
     throw new HttpError(400, { detail: "Invalid auth redirect URL" });
   }
 
-  const endpoint = redirectTo
-    ? `signup?redirect_to=${encodeURIComponent(redirectTo)}`
-    : "signup";
-  const data = await supabaseAuth(fetchImpl, env, endpoint, {
-    email: normalizeEmail(body.email),
-    password: String(body.password ?? ""),
+  if (!password) {
+    throw new HttpError(422, { detail: "Password is required" });
+  }
+
+  await ensureEmailIsNotRegistered(fetchImpl, env, email);
+
+  const data = await supabaseAdmin(fetchImpl, env, "generate_link", {
+    type: "signup",
+    email,
+    password,
+    ...(redirectTo ? { redirect_to: redirectTo } : {}),
   });
 
-  return tokenResponse(data);
+  const token = data?.properties?.email_otp;
+  if (!token) {
+    throw new HttpError(500, { detail: "Signup code was not generated" });
+  }
+
+  await sendAuthCodeEmail(fetchImpl, env, {
+    email,
+    code: token,
+    subject: "kroma 注册验证码",
+    title: "kroma 注册验证码",
+    intro: "你正在注册 kroma 网页端账号。",
+    action: "请在注册页面输入下面的 6 位验证码完成注册：",
+  });
+
+  return tokenResponse({});
 }
 
 async function handleLogin(request, env, fetchImpl) {
@@ -123,17 +145,30 @@ async function handleLogin(request, env, fetchImpl) {
 async function handleOtp(request, env, fetchImpl) {
   const body = await readJsonBody(request);
   const redirectTo = body.redirect_to;
+  const email = normalizeEmail(body.email);
 
   if (redirectTo && !isAllowedAuthRedirect(redirectTo, env)) {
     throw new HttpError(400, { detail: "Invalid auth redirect URL" });
   }
 
-  const endpoint = redirectTo
-    ? `otp?redirect_to=${encodeURIComponent(redirectTo)}`
-    : "otp";
-  await supabaseAuth(fetchImpl, env, endpoint, {
-    email: normalizeEmail(body.email),
-    create_user: false,
+  const data = await supabaseAdmin(fetchImpl, env, "generate_link", {
+    type: "magiclink",
+    email,
+    ...(redirectTo ? { redirect_to: redirectTo } : {}),
+  });
+
+  const token = data?.properties?.email_otp;
+  if (!token) {
+    throw new HttpError(500, { detail: "Login code was not generated" });
+  }
+
+  await sendAuthCodeEmail(fetchImpl, env, {
+    email,
+    code: token,
+    subject: "kroma 登录验证码",
+    title: "kroma 登录验证码",
+    intro: "你正在登录 kroma 网页端账号。",
+    action: "请在登录页面输入下面的 6 位验证码：",
   });
 
   return jsonResponse({ sent: true });
@@ -148,6 +183,23 @@ async function handleVerify(request, env, fetchImpl, type) {
   });
 
   return tokenResponse(data);
+}
+
+async function ensureEmailIsNotRegistered(fetchImpl, env, email) {
+  const rows = await restFetch(
+    fetchImpl,
+    env,
+    `/web_users?email=eq.${encodeURIComponent(email)}&select=id&limit=1`,
+  );
+
+  if (Array.isArray(rows) && rows.length > 0) {
+    throw new HttpError(409, {
+      detail: {
+        code: "email_already_registered",
+        message: "该邮箱已注册，请直接登录。",
+      },
+    });
+  }
 }
 
 async function handleRefresh(request, env, fetchImpl) {
@@ -294,6 +346,64 @@ async function supabaseAuth(fetchImpl, env, endpoint, body) {
   });
 
   return parseSupabaseResponse(response);
+}
+
+async function supabaseAdmin(fetchImpl, env, endpoint, body) {
+  const response = await fetchImpl(`${supabaseUrl(env)}/auth/v1/admin/${endpoint}`, {
+    method: "POST",
+    headers: {
+      apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  return parseSupabaseResponse(response);
+}
+
+async function sendAuthCodeEmail(fetchImpl, env, input) {
+  if (!env.WEB_RESEND_API_KEY) {
+    throw new HttpError(500, { detail: "WEB_RESEND_API_KEY is not configured" });
+  }
+
+  const response = await fetchImpl("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.WEB_RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: env.WEB_AUTH_EMAIL_FROM || defaultSender,
+      to: [input.email],
+      subject: input.subject,
+      html: renderCodeEmail(input),
+      text: `${input.title}\n\n${input.intro}\n${input.action}\n\n${input.code}\n\n验证码有效期有限，请勿转发给他人。如果不是你本人操作，可以忽略这封邮件。`,
+    }),
+  });
+
+  await parseSupabaseResponse(response);
+}
+
+function renderCodeEmail(input) {
+  return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111827; line-height: 1.7;">
+      <h2 style="margin: 0 0 16px;">${escapeHtml(input.title)}</h2>
+      <p>${escapeHtml(input.intro)}</p>
+      <p>${escapeHtml(input.action)}</p>
+      <p style="font-size: 32px; line-height: 1.2; font-weight: 700; letter-spacing: 6px; margin: 24px 0;">${escapeHtml(input.code)}</p>
+      <p style="color: #6b7280;">验证码有效期有限，请勿转发给他人。如果不是你本人操作，可以忽略这封邮件。</p>
+    </div>
+  `;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 async function restFetch(fetchImpl, env, path, options = {}) {

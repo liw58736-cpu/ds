@@ -17,23 +17,31 @@ async function readJson(response) {
   return response.json();
 }
 
-test("auth signup forwards only web-safe redirects to Supabase", async () => {
+test("auth signup generates an OTP and sends a custom verification email", async () => {
   const calls = [];
   const app = createWebBackend({
     env: {
       WEB_SUPABASE_URL: "https://web-project.supabase.co",
       WEB_SUPABASE_ANON_KEY: "anon-key",
       WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_RESEND_API_KEY: "resend-key",
       WEB_AUTH_REDIRECT_URL: "https://kromaai.app",
       WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app,https://www.kromaai.app",
     },
     fetch: async (url, init) => {
       calls.push({ url, init });
-      return jsonResponse({
-        access_token: "",
-        refresh_token: "",
-        user: { id: "pending-user" },
-      });
+      if (url.includes("/rest/v1/web_users?email=eq.seller%40example.com")) {
+        return jsonResponse([]);
+      }
+      if (url.endsWith("/auth/v1/admin/generate_link")) {
+        return jsonResponse({
+          properties: { email_otp: "123456" },
+        });
+      }
+      if (url === "https://api.resend.com/emails") {
+        return jsonResponse({ id: "email-1" });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
     },
   });
 
@@ -50,13 +58,20 @@ test("auth signup forwards only web-safe redirects to Supabase", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(
-    calls[0].url,
-    "https://web-project.supabase.co/auth/v1/signup?redirect_to=https%3A%2F%2Fkromaai.app",
+    calls[1].url,
+    "https://web-project.supabase.co/auth/v1/admin/generate_link",
   );
-  assert.deepEqual(JSON.parse(calls[0].init.body), {
+  assert.deepEqual(JSON.parse(calls[1].init.body), {
+    type: "signup",
     email: "seller@example.com",
     password: "secret-password",
+    redirect_to: "https://kromaai.app",
   });
+  assert.equal(calls[2].url, "https://api.resend.com/emails");
+  const emailBody = JSON.parse(calls[2].init.body);
+  assert.equal(emailBody.subject, "kroma 注册验证码");
+  assert.match(emailBody.html, /123456/);
+  assert.doesNotMatch(emailBody.html, /ConfirmationURL|Confirm email address/);
 });
 
 test("auth signup rejects app deep-link redirects for the web backend", async () => {
@@ -94,6 +109,53 @@ test("auth signup rejects app deep-link redirects for the web backend", async ()
   assert.deepEqual(await readJson(response), {
     detail: "Invalid auth redirect URL",
   });
+});
+
+test("auth otp sends a custom login code email", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_RESEND_API_KEY: "resend-key",
+      WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
+    },
+    fetch: async (url, init) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/admin/generate_link")) {
+        return jsonResponse({
+          properties: { email_otp: "654321" },
+        });
+      }
+      if (url === "https://api.resend.com/emails") {
+        return jsonResponse({ id: "email-2" });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/auth/otp", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "seller@example.com",
+        redirect_to: "https://kromaai.app",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), { sent: true });
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    type: "magiclink",
+    email: "seller@example.com",
+    redirect_to: "https://kromaai.app",
+  });
+  const emailBody = JSON.parse(calls[1].init.body);
+  assert.equal(emailBody.subject, "kroma 登录验证码");
+  assert.match(emailBody.html, /654321/);
+  assert.doesNotMatch(emailBody.html, /ConfirmationURL|Sign in/);
 });
 
 test("credits endpoint creates an isolated web user with five free credits", async () => {
