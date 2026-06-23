@@ -39,7 +39,7 @@ async function handleRequest(request, env, fetchImpl) {
 
   try {
     if (url.pathname === "/api/v1/health") {
-      return jsonResponse(buildHealthResponse(env));
+      return jsonResponse(await buildHealthResponse(env, fetchImpl));
     }
 
     if (url.pathname === "/api/v1/auth/signup" && request.method === "POST") {
@@ -750,7 +750,7 @@ function parseAllowedRedirects(env) {
   );
 }
 
-function buildHealthResponse(env) {
+async function buildHealthResponse(env, fetchImpl) {
   const config = {
     supabaseUrl: Boolean(env.WEB_SUPABASE_URL),
     supabaseAnonKey: Boolean(env.WEB_SUPABASE_ANON_KEY),
@@ -765,15 +765,48 @@ function buildHealthResponse(env) {
   const missing = Object.entries(config)
     .filter(([, configured]) => !configured)
     .map(([key]) => key);
+  const database = await checkDatabaseHealth(fetchImpl, env, config);
+  const databaseOk = Object.values(database).every(Boolean);
 
   return {
-    ok: missing.length === 0,
+    ok: missing.length === 0 && databaseOk,
     service: "kroma-web-backend",
     commit: env.RENDER_GIT_COMMIT ?? env.GIT_COMMIT ?? "unknown",
     checked_at: new Date().toISOString(),
     config,
+    database,
     missing,
   };
+}
+
+async function checkDatabaseHealth(fetchImpl, env, config) {
+  const tables = {
+    webUsers: "/web_users?select=id&limit=1",
+    webCreditTransactions: "/web_credit_transactions?select=id&limit=1",
+    webGenerations: "/web_generations?select=id&limit=1",
+    webAuthCodes: "/web_auth_codes?select=id&limit=1",
+    webBillingEvents: "/web_billing_events?select=id&limit=1",
+  };
+  const database = Object.fromEntries(
+    Object.keys(tables).map((table) => [table, false]),
+  );
+
+  if (!config.supabaseUrl || !config.supabaseServiceRoleKey) {
+    return database;
+  }
+
+  await Promise.all(
+    Object.entries(tables).map(async ([table, path]) => {
+      try {
+        await restFetch(fetchImpl, env, path);
+        database[table] = true;
+      } catch {
+        database[table] = false;
+      }
+    }),
+  );
+
+  return database;
 }
 
 function jsonResponse(body, status = 200) {

@@ -73,7 +73,9 @@ export function AccountPage({ paymentStatus }: AccountPageProps) {
         ? backendHealth.config.supabaseUrl &&
           backendHealth.config.supabaseAnonKey &&
           backendHealth.config.supabaseServiceRoleKey &&
-          backendHealth.config.resendApiKey
+          backendHealth.config.resendApiKey &&
+          backendHealth.database?.webUsers !== false &&
+          backendHealth.database?.webAuthCodes !== false
           ? "正常"
           : "待配置"
         : "未连接",
@@ -85,7 +87,8 @@ export function AccountPage({ paymentStatus }: AccountPageProps) {
       label: "支付入账",
       value: backendHealth
         ? backendHealth.config.paddleWebhookSecret &&
-          backendHealth.config.internalBillingKey
+          backendHealth.config.internalBillingKey &&
+          backendHealth.database?.webBillingEvents !== false
           ? "正常"
           : "待配置"
         : "未连接",

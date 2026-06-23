@@ -38,6 +38,7 @@ export interface WebBackendHealth {
   commit: string;
   checked_at: string;
   config: Record<string, boolean>;
+  database?: Record<string, boolean>;
   missing: string[];
 }
 

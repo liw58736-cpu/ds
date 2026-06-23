@@ -400,6 +400,11 @@ describe("accountApi", () => {
             supabaseUrl: true,
             paddleWebhookSecret: false,
           },
+          database: {
+            webUsers: true,
+            webAuthCodes: true,
+            webBillingEvents: false,
+          },
           missing: ["paddleWebhookSecret"],
         }),
     });

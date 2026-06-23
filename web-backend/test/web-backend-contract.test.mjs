@@ -24,6 +24,13 @@ function paddleSignature(rawBody, secret, timestamp = Math.floor(Date.now() / 10
 }
 
 test("health endpoint reports deployment commit and missing configuration", async () => {
+  const tablePaths = [
+    "/rest/v1/web_users?select=id&limit=1",
+    "/rest/v1/web_credit_transactions?select=id&limit=1",
+    "/rest/v1/web_generations?select=id&limit=1",
+    "/rest/v1/web_auth_codes?select=id&limit=1",
+    "/rest/v1/web_billing_events?select=id&limit=1",
+  ];
   const app = createWebBackend({
     env: {
       WEB_SUPABASE_URL: "https://web-project.supabase.co",
@@ -36,6 +43,13 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       WEB_INTERNAL_BILLING_KEY: "billing-secret",
       WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
       RENDER_GIT_COMMIT: "commit-1",
+    },
+    fetch: async (url) => {
+      if (tablePaths.some((path) => url.endsWith(path))) {
+        return jsonResponse([]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
     },
   });
 
@@ -62,6 +76,13 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       internalBillingKey: true,
       paddleWebhookSecret: true,
     },
+    database: {
+      webUsers: true,
+      webCreditTransactions: true,
+      webGenerations: true,
+      webAuthCodes: true,
+      webBillingEvents: true,
+    },
     missing: [],
   });
 });
@@ -83,8 +104,47 @@ test("health endpoint identifies missing production configuration", async () => 
   assert.equal(body.ok, false);
   assert.equal(body.config.supabaseUrl, true);
   assert.equal(body.config.supabaseServiceRoleKey, false);
+  assert.equal(body.database.webUsers, false);
   assert.ok(body.missing.includes("supabaseServiceRoleKey"));
   assert.ok(body.missing.includes("paddleWebhookSecret"));
+});
+
+test("health endpoint flags missing Supabase schema tables", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_RESEND_API_KEY: "resend-key",
+      WEB_AUTH_EMAIL_FROM: "kroma <no-reply@example.com>",
+      WEB_AUTH_REDIRECT_URL: "https://kromaai.app",
+      WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
+      WEB_INTERNAL_BILLING_KEY: "billing-secret",
+      WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+    },
+    fetch: async (url) => {
+      if (url.includes("/rest/v1/web_billing_events?")) {
+        return jsonResponse({ message: "relation does not exist" }, 404);
+      }
+
+      if (url.includes("/rest/v1/web_")) {
+        return jsonResponse([]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/health"),
+  );
+  const body = await readJson(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, false);
+  assert.equal(body.missing.length, 0);
+  assert.equal(body.database.webUsers, true);
+  assert.equal(body.database.webBillingEvents, false);
 });
 
 test("auth signup generates an OTP and sends a custom verification email", async () => {

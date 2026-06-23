@@ -358,6 +358,11 @@ describe("App", () => {
               internalBillingKey: true,
               paddleWebhookSecret: false,
             },
+            database: {
+              webUsers: true,
+              webAuthCodes: true,
+              webBillingEvents: false,
+            },
             missing: ["paddleWebhookSecret"],
           }),
       });

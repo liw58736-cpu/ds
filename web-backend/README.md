@@ -45,8 +45,9 @@ After deploying, open:
 https://kroma-web-api.onrender.com/api/v1/health
 ```
 
-The response includes the deployed commit and a `missing` list for required
-configuration. It only returns boolean configuration status, never secret values.
+The response includes the deployed commit, a `missing` list for required
+configuration, and a `database` object that confirms whether required Supabase
+tables are reachable. It only returns boolean status, never secret values.
 
 ## Paddle Webhook
 
