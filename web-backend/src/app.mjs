@@ -115,7 +115,7 @@ async function handleSignup(request, env, fetchImpl) {
     ...(redirectTo ? { redirect_to: redirectTo } : {}),
   });
 
-  const token = data?.properties?.email_otp;
+  const token = data?.email_otp ?? data?.properties?.email_otp;
   if (!token) {
     throw new HttpError(500, { detail: "Signup code was not generated" });
   }
@@ -157,7 +157,7 @@ async function handleOtp(request, env, fetchImpl) {
     ...(redirectTo ? { redirect_to: redirectTo } : {}),
   });
 
-  const token = data?.properties?.email_otp;
+  const token = data?.email_otp ?? data?.properties?.email_otp;
   if (!token) {
     throw new HttpError(500, { detail: "Login code was not generated" });
   }

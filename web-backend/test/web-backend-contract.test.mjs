@@ -35,7 +35,7 @@ test("auth signup generates an OTP and sends a custom verification email", async
       }
       if (url.endsWith("/auth/v1/admin/generate_link")) {
         return jsonResponse({
-          properties: { email_otp: "123456" },
+          email_otp: "123456",
         });
       }
       if (url === "https://api.resend.com/emails") {
@@ -125,7 +125,7 @@ test("auth otp sends a custom login code email", async () => {
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/admin/generate_link")) {
         return jsonResponse({
-          properties: { email_otp: "654321" },
+          email_otp: "654321",
         });
       }
       if (url === "https://api.resend.com/emails") {
