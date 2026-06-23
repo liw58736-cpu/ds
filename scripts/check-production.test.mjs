@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getMissingEnvironmentGuidance,
   getExpectedBackendCommit,
   isLiveCommitCompatible,
 } from "./check-production.mjs";
@@ -43,4 +44,19 @@ test("production check accepts a live commit that includes the latest backend co
   assert.deepEqual(calls, [
     ["git", ["merge-base", "--is-ancestor", "backend-commit", "frontend-commit"]],
   ]);
+});
+
+test("production check explains how to fill remaining production secrets", () => {
+  assert.match(
+    getMissingEnvironmentGuidance("internalBillingKey"),
+    /secret:internal-billing/,
+  );
+  assert.match(
+    getMissingEnvironmentGuidance("paddleWebhookSecret"),
+    /Paddle webhook/,
+  );
+  assert.match(
+    getMissingEnvironmentGuidance("imageApiBaseUrl"),
+    /WEB_IMAGE_API_BASE_URL/,
+  );
 });

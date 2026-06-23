@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "lint": "tsc --noEmit",
-    "check:production": "node scripts/check-production.mjs"
+    "check:production": "node scripts/check-production.mjs",
+    "secret:internal-billing": "node scripts/generate-production-secret.mjs internal-billing-key"
   },
   "dependencies": {
     "lucide-react": "^1.18.0",

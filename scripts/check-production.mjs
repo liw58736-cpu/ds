@@ -69,6 +69,29 @@ function printStatus(label, ok, detail = "") {
   console.log(`${marker} ${label}${detail ? `: ${detail}` : ""}`);
 }
 
+export function getMissingEnvironmentGuidance(key) {
+  const guidanceByKey = {
+    internalBillingKey:
+      "run npm run secret:internal-billing, then set WEB_INTERNAL_BILLING_KEY on kroma-web-api",
+    paddleWebhookSecret:
+      "create the Paddle webhook and set WEB_PADDLE_WEBHOOK_SECRET on kroma-web-api",
+    imageApiBaseUrl:
+      "set WEB_IMAGE_API_BASE_URL to the dedicated web image-generation upstream",
+    imageApiKey:
+      "set WEB_IMAGE_API_KEY for the dedicated web image-generation upstream",
+    paddlePriceCredits:
+      "set WEB_PADDLE_PRICE_CREDITS_JSON from render.yaml on kroma-web-api",
+  };
+
+  return guidanceByKey[key] ?? "configure this value on kroma-web-api";
+}
+
+function printMissingGuidance(missing) {
+  missing.forEach((key) => {
+    console.log(`NEXT ${key}: ${getMissingEnvironmentGuidance(key)}`);
+  });
+}
+
 async function main() {
   const localCommit = getLocalCommit();
   const expectedBackendCommit = getExpectedBackendCommit();
@@ -104,6 +127,9 @@ async function main() {
 
   const missing = Array.isArray(payload.missing) ? payload.missing : [];
   printStatus("required environment", missing.length === 0, missing.join(", ") || "complete");
+  if (missing.length > 0) {
+    printMissingGuidance(missing);
+  }
 
   const database = payload.database && typeof payload.database === "object" ? payload.database : {};
   const failedTables = Object.entries(database)
