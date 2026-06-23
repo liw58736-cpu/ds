@@ -357,6 +357,8 @@ describe("App", () => {
               resendApiKey: true,
               internalBillingKey: true,
               paddleWebhookSecret: false,
+              imageApiBaseUrl: false,
+              imageApiKey: false,
             },
             database: {
               webUsers: true,
@@ -377,6 +379,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(within(systemStatus).getByText("账号服务")).toBeInTheDocument();
       expect(within(systemStatus).getByText("支付入账")).toBeInTheDocument();
+      expect(within(systemStatus).getByText("真实生图")).toBeInTheDocument();
     });
     expect(within(systemStatus).getAllByText("正常")).toHaveLength(1);
     expect(within(systemStatus).getAllByText("待配置")).toHaveLength(2);

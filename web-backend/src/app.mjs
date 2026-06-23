@@ -82,10 +82,35 @@ async function handleRequest(request, env, fetchImpl) {
       return await handlePaddleWebhook(request, env, fetchImpl);
     }
 
-    if (url.pathname.startsWith("/api/v1/image/")) {
-      return jsonResponse(
-        { detail: "Web image generation backend is not configured yet." },
-        501,
+    if (url.pathname === "/api/v1/image/generate" && request.method === "POST") {
+      return await handleImageProxy(request, env, fetchImpl, "/image/generate", "POST");
+    }
+
+    if (
+      url.pathname.startsWith("/api/v1/image/task/") &&
+      url.pathname.endsWith("/cancel") &&
+      request.method === "POST"
+    ) {
+      const taskId = url.pathname
+        .replace("/api/v1/image/task/", "")
+        .replace(/\/cancel$/, "");
+      return await handleImageProxy(
+        request,
+        env,
+        fetchImpl,
+        `/image/task/${encodeURIComponent(taskId)}/cancel`,
+        "POST",
+      );
+    }
+
+    if (url.pathname.startsWith("/api/v1/image/task/") && request.method === "GET") {
+      const taskId = url.pathname.replace("/api/v1/image/task/", "");
+      return await handleImageProxy(
+        request,
+        env,
+        fetchImpl,
+        `/image/task/${encodeURIComponent(taskId)}`,
+        "GET",
       );
     }
 
@@ -341,6 +366,46 @@ async function handleAddCredits(request, url, env, fetchImpl) {
     success: true,
     credits_remaining: credits,
   });
+}
+
+async function handleImageProxy(request, env, fetchImpl, upstreamPath, method) {
+  await requireAuthUser(request, env, fetchImpl);
+  const baseUrl = env.WEB_IMAGE_API_BASE_URL?.replace(/\/+$/, "");
+
+  if (!baseUrl) {
+    throw new HttpError(501, {
+      detail: "Web image generation upstream is not configured.",
+    });
+  }
+
+  const body =
+    method === "GET"
+      ? undefined
+      : JSON.stringify(await readJsonBody(request));
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Kroma-Client": "web-backend",
+  };
+  const imageApiKey = env.WEB_IMAGE_API_KEY?.trim();
+
+  if (imageApiKey) {
+    headers.Authorization = `Bearer ${imageApiKey}`;
+  }
+
+  const response = await fetchImpl(`${baseUrl}${upstreamPath}`, {
+    method,
+    headers,
+    body,
+  });
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = { detail: response.ok ? "Empty image backend response" : "Image backend request failed" };
+  }
+
+  return jsonResponse(payload, response.status);
 }
 
 async function handlePaddleWebhook(request, env, fetchImpl) {
@@ -808,6 +873,8 @@ async function buildHealthResponse(env, fetchImpl) {
     allowedAuthRedirects: Boolean(env.WEB_ALLOWED_AUTH_REDIRECTS),
     internalBillingKey: Boolean(env.WEB_INTERNAL_BILLING_KEY),
     paddleWebhookSecret: Boolean(env.WEB_PADDLE_WEBHOOK_SECRET),
+    imageApiBaseUrl: Boolean(env.WEB_IMAGE_API_BASE_URL),
+    imageApiKey: Boolean(env.WEB_IMAGE_API_KEY),
   };
   const missing = Object.entries(config)
     .filter(([, configured]) => !configured)

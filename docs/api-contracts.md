@@ -11,13 +11,13 @@ deduction:
 VITE_WEB_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
 ```
 
-`VITE_KROMA_API_BASE_URL` must stay empty unless a separate web image generation
-backend is configured. Do not point the web product at the mobile app backend.
-When this value is empty in production, generation fails with a clear
-configuration message instead of creating mock images.
+`VITE_KROMA_API_BASE_URL` must point at the standalone web backend. Do not point
+the web product at the mobile app backend. The web backend proxies `/image/*`
+requests to `WEB_IMAGE_API_BASE_URL`, which must be a dedicated web image
+generation upstream.
 
 ```env
-VITE_KROMA_API_BASE_URL=
+VITE_KROMA_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
 VITE_API_BASE_URL=
 ```
 

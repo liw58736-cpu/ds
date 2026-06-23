@@ -25,6 +25,10 @@ services:
         sync: false
       - key: WEB_PADDLE_WEBHOOK_SECRET
         sync: false
+      - key: WEB_IMAGE_API_BASE_URL
+        sync: false
+      - key: WEB_IMAGE_API_KEY
+        sync: false
 
   - type: web
     name: kroma-web
@@ -38,7 +42,7 @@ services:
       - key: VITE_WEB_API_BASE_URL
         value: https://kroma-web-api.onrender.com/api/v1
       - key: VITE_KROMA_API_BASE_URL
-        value: ""
+        value: https://kroma-web-api.onrender.com/api/v1
       - key: VITE_PADDLE_ENVIRONMENT
         value: production
       - key: VITE_PADDLE_CLIENT_TOKEN

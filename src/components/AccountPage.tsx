@@ -96,10 +96,12 @@ export function AccountPage({ paymentStatus }: AccountPageProps) {
     },
     {
       label: "真实生图",
-      value: import.meta.env.VITE_KROMA_API_BASE_URL?.trim()
-        ? "已连接"
-        : "待配置",
-      note: "未配置时生产环境不会使用模拟出图",
+      value: backendHealth
+        ? backendHealth.config.imageApiBaseUrl
+          ? "已连接"
+          : "待配置"
+        : "未连接",
+      note: "生产生图经网页后端独立转发，不连接 app 后端",
     },
   ];
 

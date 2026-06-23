@@ -11,7 +11,7 @@ For local account API testing, point the frontend at the standalone web backend:
 
 ```env
 VITE_WEB_API_BASE_URL=http://127.0.0.1:8000/api/v1
-VITE_KROMA_API_BASE_URL=
+VITE_KROMA_API_BASE_URL=http://127.0.0.1:8000/api/v1
 VITE_API_BASE_URL=
 ```
 
@@ -28,12 +28,14 @@ Frontend production variables:
 
 ```env
 VITE_WEB_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
-VITE_KROMA_API_BASE_URL=
+VITE_KROMA_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
 VITE_API_BASE_URL=
 ```
 
-Keep `VITE_KROMA_API_BASE_URL` empty until a separate web image generation
-service is ready. Production builds do not fall back to mock image generation.
+Keep `VITE_KROMA_API_BASE_URL` pointed at the standalone web backend, not the
+mobile app backend. The web backend forwards image generation to its own
+`WEB_IMAGE_API_BASE_URL`. Production builds do not fall back to mock image
+generation.
 
 Backend setup details are in `web-backend/README.md`.
 

@@ -42,6 +42,8 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
       WEB_INTERNAL_BILLING_KEY: "billing-secret",
       WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+      WEB_IMAGE_API_BASE_URL: "https://image-web.example.com/api/v1",
+      WEB_IMAGE_API_KEY: "image-secret",
       RENDER_GIT_COMMIT: "commit-1",
     },
     fetch: async (url) => {
@@ -75,6 +77,8 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       allowedAuthRedirects: true,
       internalBillingKey: true,
       paddleWebhookSecret: true,
+      imageApiBaseUrl: true,
+      imageApiKey: true,
     },
     database: {
       webUsers: true,
@@ -121,6 +125,8 @@ test("health endpoint flags missing Supabase schema tables", async () => {
       WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
       WEB_INTERNAL_BILLING_KEY: "billing-secret",
       WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+      WEB_IMAGE_API_BASE_URL: "https://image-web.example.com/api/v1",
+      WEB_IMAGE_API_KEY: "image-secret",
     },
     fetch: async (url) => {
       if (url.includes("/rest/v1/web_billing_events?")) {
@@ -494,6 +500,87 @@ test("deduct endpoint charges only completed success-only tasks", async () => {
   assert.equal(rows[0].credits, 3);
   assert.equal(transactions.length, 1);
   assert.equal(transactions[0].amount, -2);
+});
+
+test("image generation proxy requires auth and a dedicated web image upstream", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+    },
+    fetch: async () => {
+      return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+    },
+  });
+
+  const missingAuth = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      body: JSON.stringify({ prompt: "product hero" }),
+    }),
+  );
+
+  assert.equal(missingAuth.status, 401);
+
+  const missingUpstream = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer access-token" },
+      body: JSON.stringify({ prompt: "product hero" }),
+    }),
+  );
+
+  assert.equal(missingUpstream.status, 501);
+  assert.deepEqual(await readJson(missingUpstream), {
+    detail: "Web image generation upstream is not configured.",
+  });
+});
+
+test("image generation proxy forwards to the dedicated web image upstream", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_IMAGE_API_BASE_URL: "https://image-web.example.com/api/v1",
+      WEB_IMAGE_API_KEY: "image-secret",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://image-web.example.com/api/v1/image/generate") {
+        assert.equal(init.method, "POST");
+        assert.equal(init.headers.Authorization, "Bearer image-secret");
+        assert.equal(init.headers["X-Kroma-Client"], "web-backend");
+        assert.deepEqual(JSON.parse(init.body), { prompt: "product hero" });
+        return jsonResponse({
+          task_id: "image-task-1",
+          status: "processing",
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer access-token" },
+      body: JSON.stringify({ prompt: "product hero" }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    task_id: "image-task-1",
+    status: "processing",
+  });
+  assert.equal(calls[0].url, "https://web-project.supabase.co/auth/v1/user");
+  assert.equal(calls[1].url, "https://image-web.example.com/api/v1/image/generate");
 });
 
 test("credit top-up endpoint requires an internal billing key", async () => {

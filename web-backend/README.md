@@ -34,6 +34,8 @@ WEB_AUTH_EMAIL_FROM=kroma <no-reply@i18.pro>
 WEB_RESEND_API_KEY=<resend-api-key>
 WEB_INTERNAL_BILLING_KEY=<server-to-server-billing-secret>
 WEB_PADDLE_WEBHOOK_SECRET=<paddle-webhook-secret>
+WEB_IMAGE_API_BASE_URL=<dedicated-web-image-generation-api-base-url>
+WEB_IMAGE_API_KEY=<dedicated-web-image-generation-api-key>
 ```
 
 `WEB_INTERNAL_BILLING_KEY` protects manual or webhook-driven credit top-ups. Do
@@ -66,9 +68,10 @@ The frontend static service should use:
 
 ```text
 VITE_WEB_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
-VITE_KROMA_API_BASE_URL=
+VITE_KROMA_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
 VITE_API_BASE_URL=
 ```
 
-`VITE_KROMA_API_BASE_URL` is intentionally empty so the web frontend does not
-call the mobile app backend for account or generation behavior.
+`VITE_KROMA_API_BASE_URL` should point at the standalone web backend. The web
+backend proxies `/image/*` calls to `WEB_IMAGE_API_BASE_URL`, so the browser
+never calls the mobile app backend directly.
