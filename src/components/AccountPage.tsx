@@ -10,6 +10,38 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat("zh-CN").format(value);
 }
 
+function formatMissing(items: string[], fallback: string): string {
+  return items.length > 0 ? `缺少${items.join("、")}` : fallback;
+}
+
+function getPaymentStatusNote(backendHealth: WebBackendHealth | null): string {
+  if (!backendHealth) {
+    return "未检测到网页账号后端";
+  }
+
+  const missing = [
+    !backendHealth.config.paddleWebhookSecret ? "Paddle webhook" : "",
+    !backendHealth.config.internalBillingKey ? "内部入账密钥" : "",
+    !backendHealth.config.paddlePriceCredits ? "价格积分映射" : "",
+    backendHealth.database?.webBillingEvents === false ? "账单事件表" : "",
+  ].filter(Boolean);
+
+  return formatMissing(missing, "Paddle 付款后自动入账");
+}
+
+function getImageStatusNote(backendHealth: WebBackendHealth | null): string {
+  if (!backendHealth) {
+    return "未检测到网页账号后端";
+  }
+
+  const missing = [
+    !backendHealth.config.imageApiBaseUrl ? "生图上游地址" : "",
+    !backendHealth.config.imageApiKey ? "生图上游密钥" : "",
+  ].filter(Boolean);
+
+  return formatMissing(missing, "生产生图经网页后端独立转发，不连接 app 后端");
+}
+
 interface AccountPageProps {
   paymentStatus?: string | null;
 }
@@ -93,16 +125,16 @@ export function AccountPage({ paymentStatus }: AccountPageProps) {
           ? "正常"
           : "待配置"
         : "未连接",
-      note: "Paddle 付款后自动入账",
+      note: getPaymentStatusNote(backendHealth),
     },
     {
       label: "真实生图",
       value: backendHealth
-        ? backendHealth.config.imageApiBaseUrl
+        ? backendHealth.config.imageApiBaseUrl && backendHealth.config.imageApiKey
           ? "已连接"
           : "待配置"
         : "未连接",
-      note: "生产生图经网页后端独立转发，不连接 app 后端",
+      note: getImageStatusNote(backendHealth),
     },
   ];
 

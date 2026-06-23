@@ -199,7 +199,7 @@ test("health endpoint flags missing Supabase schema tables", async () => {
   assert.equal(body.database.webBillingEvents, false);
 });
 
-test("auth signup generates an OTP and sends a custom verification email", async () => {
+test("auth signup creates an unconfirmed user and only sends the custom six digit code", async () => {
   const calls = [];
   const app = createWebBackend({
     env: {
@@ -215,9 +215,10 @@ test("auth signup generates an OTP and sends a custom verification email", async
       if (url.includes("/rest/v1/web_users?email=eq.seller%40example.com")) {
         return jsonResponse([]);
       }
-      if (url.endsWith("/auth/v1/admin/generate_link")) {
+      if (url.endsWith("/auth/v1/admin/users")) {
         return jsonResponse({
-          email_otp: "12345678",
+          id: "auth-user-1",
+          email: "seller@example.com",
         });
       }
       if (url.endsWith("/rest/v1/web_auth_codes")) {
@@ -244,22 +245,24 @@ test("auth signup generates an OTP and sends a custom verification email", async
   assert.equal(response.status, 200);
   assert.equal(
     calls[1].url,
-    "https://web-project.supabase.co/auth/v1/admin/generate_link",
+    "https://web-project.supabase.co/auth/v1/admin/users",
   );
   assert.deepEqual(JSON.parse(calls[1].init.body), {
-    type: "signup",
     email: "seller@example.com",
     password: "secret-password",
-    redirect_to: "https://kromaai.app",
+    email_confirm: false,
+    user_metadata: {
+      source: "kroma-web",
+    },
   });
   assert.equal(calls[3].url, "https://api.resend.com/emails");
   const storedCode = JSON.parse(calls[2].init.body).code;
   assert.match(storedCode, /^\d{6}$/);
-  assert.equal(JSON.parse(calls[2].init.body).provider_token, "12345678");
+  assert.equal(JSON.parse(calls[2].init.body).provider_token, "auth-user-1");
   const emailBody = JSON.parse(calls[3].init.body);
   assert.equal(emailBody.subject, "kroma 注册验证码");
   assert.match(emailBody.html, new RegExp(storedCode));
-  assert.doesNotMatch(emailBody.html, /12345678/);
+  assert.doesNotMatch(emailBody.html, /auth-user-1/);
   assert.doesNotMatch(emailBody.html, /ConfirmationURL|Confirm email address/);
 });
 
@@ -312,7 +315,7 @@ test("auth signup maps existing Supabase auth users to the registered email resp
       if (url.includes("/rest/v1/web_users?email=eq.seller%40example.com")) {
         return jsonResponse([]);
       }
-      if (url.endsWith("/auth/v1/admin/generate_link")) {
+      if (url.endsWith("/auth/v1/admin/users")) {
         return jsonResponse({ message: "A user with this email address has already been registered" }, 422);
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -393,7 +396,7 @@ test("auth otp sends a custom login code email", async () => {
   assert.doesNotMatch(emailBody.html, /ConfirmationURL|Sign in/);
 });
 
-test("auth verify resolves the public six digit signup code before Supabase verify", async () => {
+test("auth verify confirms the signup user after the public six digit code", async () => {
   const calls = [];
   const app = createWebBackend({
     env: {
@@ -407,18 +410,17 @@ test("auth verify resolves the public six digit signup code before Supabase veri
         return jsonResponse([
           {
             id: "code-1",
-            provider_token: "12345678",
+            provider_token: "auth-user-1",
           },
         ]);
       }
       if (url.includes("/rest/v1/web_auth_codes?id=eq.code-1")) {
         return jsonResponse({});
       }
-      if (url.endsWith("/auth/v1/verify")) {
+      if (url.endsWith("/auth/v1/admin/users/auth-user-1")) {
         return jsonResponse({
-          access_token: "access-token",
-          refresh_token: "refresh-token",
-          user: { id: "user-1" },
+          id: "auth-user-1",
+          email: "seller@example.com",
         });
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -437,14 +439,12 @@ test("auth verify resolves the public six digit signup code before Supabase veri
 
   assert.equal(response.status, 200);
   assert.deepEqual(await readJson(response), {
-    access_token: "access-token",
-    refresh_token: "refresh-token",
-    user_id: "user-1",
+    access_token: "",
+    refresh_token: "",
+    user_id: "auth-user-1",
   });
   assert.deepEqual(JSON.parse(calls[2].init.body), {
-    email: "seller@example.com",
-    token: "12345678",
-    type: "signup",
+    email_confirm: true,
   });
 });
 

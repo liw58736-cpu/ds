@@ -481,6 +481,8 @@ describe("App", () => {
     });
     expect(within(systemStatus).getAllByText("正常")).toHaveLength(1);
     expect(within(systemStatus).getAllByText("待配置")).toHaveLength(2);
+    expect(within(systemStatus).getByText(/缺少Paddle webhook/)).toBeInTheDocument();
+    expect(within(systemStatus).getByText(/缺少生图上游地址/)).toBeInTheDocument();
   });
 
   it("labels cloud credits separately from trial credits on sync failure", async () => {

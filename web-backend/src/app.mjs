@@ -141,11 +141,13 @@ async function handleSignup(request, env, fetchImpl) {
 
   let data;
   try {
-    data = await supabaseAdmin(fetchImpl, env, "generate_link", {
-      type: "signup",
+    data = await supabaseAdmin(fetchImpl, env, "users", {
       email,
       password,
-      ...(redirectTo ? { redirect_to: redirectTo } : {}),
+      email_confirm: false,
+      user_metadata: {
+        source: "kroma-web",
+      },
     });
   } catch (error) {
     if (isRegisteredEmailError(error)) {
@@ -154,17 +156,16 @@ async function handleSignup(request, env, fetchImpl) {
 
     throw error;
   }
-
-  const providerToken = data?.email_otp ?? data?.properties?.email_otp;
-  if (!providerToken) {
-    throw new HttpError(500, { detail: "Signup code was not generated" });
+  const userId = data?.id ?? data?.user?.id;
+  if (!userId) {
+    throw new HttpError(500, { detail: "Signup user was not created" });
   }
   const code = createSixDigitCode();
   await storeAuthCode(fetchImpl, env, {
     email,
     type: "signup",
     code,
-    providerToken,
+    providerToken: userId,
   });
 
   await sendAuthCodeEmail(fetchImpl, env, {
@@ -236,6 +237,10 @@ async function handleVerify(request, env, fetchImpl, type) {
     type,
     code: String(body.token ?? ""),
   });
+  if (type === "signup") {
+    const data = await confirmSignupUser(fetchImpl, env, token);
+    return tokenResponse({ user: { id: data?.id ?? token } });
+  }
   const data = await supabaseAuth(fetchImpl, env, "verify", {
     email,
     token,
@@ -815,9 +820,9 @@ async function supabaseAuth(fetchImpl, env, endpoint, body) {
   return parseSupabaseResponse(response);
 }
 
-async function supabaseAdmin(fetchImpl, env, endpoint, body) {
+async function supabaseAdmin(fetchImpl, env, endpoint, body, options = {}) {
   const response = await fetchImpl(`${supabaseUrl(env)}/auth/v1/admin/${endpoint}`, {
-    method: "POST",
+    method: options.method ?? "POST",
     headers: {
       apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
@@ -827,6 +832,16 @@ async function supabaseAdmin(fetchImpl, env, endpoint, body) {
   });
 
   return parseSupabaseResponse(response);
+}
+
+async function confirmSignupUser(fetchImpl, env, userId) {
+  return supabaseAdmin(
+    fetchImpl,
+    env,
+    `users/${encodeURIComponent(userId)}`,
+    { email_confirm: true },
+    { method: "PUT" },
+  );
 }
 
 async function sendAuthCodeEmail(fetchImpl, env, input) {
