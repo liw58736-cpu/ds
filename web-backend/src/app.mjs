@@ -361,17 +361,21 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
     throw new HttpError(422, { detail: "Missing Paddle event id" });
   }
 
-  if (await hasProcessedBillingEvent(fetchImpl, env, eventId)) {
+  const reserved = await reserveBillingEvent(fetchImpl, env, {
+    event_id: eventId,
+    provider: "paddle",
+    event_type: eventType,
+    status: "received",
+    payload,
+  });
+
+  if (!reserved) {
     return jsonResponse({ received: true, duplicate: true });
   }
 
   if (eventType !== "transaction.completed") {
-    await createBillingEvent(fetchImpl, env, {
-      event_id: eventId,
-      provider: "paddle",
-      event_type: eventType,
+    await updateBillingEvent(fetchImpl, env, eventId, {
       status: "ignored",
-      payload,
     });
     return jsonResponse({ received: true, ignored: true });
   }
@@ -385,30 +389,22 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
   const transactionId = String(data.id ?? eventId);
 
   if (!userId || credits <= 0) {
-    await createBillingEvent(fetchImpl, env, {
-      event_id: eventId,
-      provider: "paddle",
-      event_type: eventType,
+    await updateBillingEvent(fetchImpl, env, eventId, {
       status: "rejected",
       reference_id: transactionId,
       user_id: userId || null,
       credits,
-      payload,
     });
     throw new HttpError(422, { detail: "Paddle webhook is missing user_id or credits" });
   }
 
   const user = await getWebUserById(fetchImpl, env, userId);
   if (!user) {
-    await createBillingEvent(fetchImpl, env, {
-      event_id: eventId,
-      provider: "paddle",
-      event_type: eventType,
+    await updateBillingEvent(fetchImpl, env, eventId, {
       status: "rejected",
       reference_id: transactionId,
       user_id: userId,
       credits,
-      payload,
     });
     throw new HttpError(422, { detail: "Paddle webhook user was not found" });
   }
@@ -422,15 +418,11 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
     description: planName ? `Paddle purchase: ${planName}` : "Paddle purchase",
     reference_id: transactionId,
   });
-  await createBillingEvent(fetchImpl, env, {
-    event_id: eventId,
-    provider: "paddle",
-    event_type: eventType,
+  await updateBillingEvent(fetchImpl, env, eventId, {
     status: "processed",
     reference_id: transactionId,
     user_id: user.id,
     credits,
-    payload,
   });
 
   return jsonResponse({
@@ -508,22 +500,34 @@ function timingSafeHexEqual(left, right) {
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-async function hasProcessedBillingEvent(fetchImpl, env, eventId) {
-  const rows = await restFetch(
-    fetchImpl,
-    env,
-    `/web_billing_events?provider=eq.paddle&event_id=eq.${encodeURIComponent(eventId)}&select=id&limit=1`,
-  );
+async function reserveBillingEvent(fetchImpl, env, body) {
+  try {
+    await restFetch(fetchImpl, env, "/web_billing_events", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body,
+    });
+    return true;
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 409) {
+      return false;
+    }
 
-  return Array.isArray(rows) && rows.length > 0;
+    throw error;
+  }
 }
 
-async function createBillingEvent(fetchImpl, env, body) {
-  await restFetch(fetchImpl, env, "/web_billing_events", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body,
-  });
+async function updateBillingEvent(fetchImpl, env, eventId, body) {
+  await restFetch(
+    fetchImpl,
+    env,
+    `/web_billing_events?provider=eq.paddle&event_id=eq.${encodeURIComponent(eventId)}`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body,
+    },
+  );
 }
 
 async function requireAuthUser(request, env, fetchImpl) {

@@ -498,8 +498,18 @@ test("paddle webhook credits a web user once after signature verification", asyn
       WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
     },
     fetch: async (url, init = {}) => {
+      if (url.endsWith("/rest/v1/web_billing_events")) {
+        const body = JSON.parse(init.body);
+        if (billingEvents.some((event) => event.event_id === body.event_id)) {
+          return jsonResponse({ message: "duplicate key value violates unique constraint" }, 409);
+        }
+        billingEvents.push(body);
+        return jsonResponse([body]);
+      }
       if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_1")) {
-        return jsonResponse(billingEvents);
+        const body = JSON.parse(init.body);
+        Object.assign(billingEvents[0], body);
+        return jsonResponse([billingEvents[0]]);
       }
       if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
         if (init.method === "PATCH") {
@@ -511,10 +521,6 @@ test("paddle webhook credits a web user once after signature verification", asyn
       if (url.endsWith("/rest/v1/web_credit_transactions")) {
         transactions.push(JSON.parse(init.body));
         return jsonResponse([transactions.at(-1)]);
-      }
-      if (url.endsWith("/rest/v1/web_billing_events")) {
-        billingEvents.push(JSON.parse(init.body));
-        return jsonResponse([billingEvents.at(-1)]);
       }
       throw new Error(`Unexpected URL: ${url}`);
     },
@@ -557,6 +563,7 @@ test("paddle webhook credits a web user once after signature verification", asyn
     reference_id: "txn_1",
   });
   assert.equal(billingEvents[0].status, "processed");
+  assert.equal(billingEvents[0].event_id, "evt_1");
 
   const duplicate = await app.handle(
     new Request("http://local.test/api/v1/billing/paddle/webhook", {
@@ -604,5 +611,49 @@ test("paddle webhook rejects invalid signatures before crediting", async () => {
   assert.equal(response.status, 401);
   assert.deepEqual(await readJson(response), {
     detail: "Invalid Paddle webhook signature",
+  });
+});
+
+test("paddle webhook duplicate reservation skips crediting", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+    },
+    fetch: async (url) => {
+      if (url.endsWith("/rest/v1/web_billing_events")) {
+        return jsonResponse({ message: "duplicate key value violates unique constraint" }, 409);
+      }
+
+      throw new Error(`Duplicate webhook should not touch another table: ${url}`);
+    },
+  });
+  const payload = {
+    event_id: "evt_duplicate",
+    event_type: "transaction.completed",
+    data: {
+      id: "txn_duplicate",
+      custom_data: {
+        user_id: "web-user-1",
+        credits: 950,
+      },
+    },
+  };
+  const rawBody = JSON.stringify(payload);
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/billing/paddle/webhook", {
+      method: "POST",
+      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      body: rawBody,
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    received: true,
+    duplicate: true,
   });
 });
