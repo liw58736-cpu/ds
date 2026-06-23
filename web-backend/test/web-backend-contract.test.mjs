@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import test from "node:test";
 
 import {
@@ -15,6 +16,11 @@ function jsonResponse(body, status = 200) {
 
 async function readJson(response) {
   return response.json();
+}
+
+function paddleSignature(rawBody, secret, timestamp = Math.floor(Date.now() / 1000)) {
+  const h1 = createHmac("sha256", secret).update(`${timestamp}:${rawBody}`).digest("hex");
+  return `ts=${timestamp};h1=${h1}`;
 }
 
 test("auth signup generates an OTP and sends a custom verification email", async () => {
@@ -353,5 +359,126 @@ test("credit top-up endpoint requires an internal billing key", async () => {
   assert.equal(response.status, 403);
   assert.deepEqual(await readJson(response), {
     detail: "Credit top-up requires internal billing access",
+  });
+});
+
+test("paddle webhook credits a web user once after signature verification", async () => {
+  const users = [{ id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" }];
+  const transactions = [];
+  const billingEvents = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+    },
+    fetch: async (url, init = {}) => {
+      if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_1")) {
+        return jsonResponse(billingEvents);
+      }
+      if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
+        if (init.method === "PATCH") {
+          users[0].credits = JSON.parse(init.body).credits;
+          return jsonResponse([users[0]]);
+        }
+        return jsonResponse(users);
+      }
+      if (url.endsWith("/rest/v1/web_credit_transactions")) {
+        transactions.push(JSON.parse(init.body));
+        return jsonResponse([transactions.at(-1)]);
+      }
+      if (url.endsWith("/rest/v1/web_billing_events")) {
+        billingEvents.push(JSON.parse(init.body));
+        return jsonResponse([billingEvents.at(-1)]);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const payload = {
+    event_id: "evt_1",
+    event_type: "transaction.completed",
+    data: {
+      id: "txn_1",
+      custom_data: {
+        user_id: "web-user-1",
+        plan_id: "pro-top-up",
+        plan_name: "专业包",
+        credits: 950,
+      },
+    },
+  };
+  const rawBody = JSON.stringify(payload);
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/billing/paddle/webhook", {
+      method: "POST",
+      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      body: rawBody,
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    received: true,
+    credited: 950,
+    credits_remaining: 955,
+  });
+  assert.equal(users[0].credits, 955);
+  assert.deepEqual(transactions[0], {
+    user_id: "web-user-1",
+    amount: 950,
+    type: "purchase",
+    description: "Paddle purchase: 专业包",
+    reference_id: "txn_1",
+  });
+  assert.equal(billingEvents[0].status, "processed");
+
+  const duplicate = await app.handle(
+    new Request("http://local.test/api/v1/billing/paddle/webhook", {
+      method: "POST",
+      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      body: rawBody,
+    }),
+  );
+
+  assert.deepEqual(await readJson(duplicate), {
+    received: true,
+    duplicate: true,
+  });
+  assert.equal(users[0].credits, 955);
+  assert.equal(transactions.length, 1);
+});
+
+test("paddle webhook rejects invalid signatures before crediting", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+    },
+    fetch: async () => {
+      throw new Error("Database should not be touched for invalid Paddle signatures");
+    },
+  });
+  const rawBody = JSON.stringify({
+    event_id: "evt_invalid",
+    event_type: "transaction.completed",
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/billing/paddle/webhook", {
+      method: "POST",
+      headers: {
+        "Paddle-Signature": `ts=${Math.floor(Date.now() / 1000)};h1=bad`,
+      },
+      body: rawBody,
+    }),
+  );
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(await readJson(response), {
+    detail: "Invalid Paddle webhook signature",
   });
 });

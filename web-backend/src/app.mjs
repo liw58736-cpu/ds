@@ -1,4 +1,4 @@
-import { randomInt } from "node:crypto";
+import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 
 const defaultFreeCredits = 5;
 const defaultSender = "kroma <no-reply@i18.pro>";
@@ -76,6 +76,10 @@ async function handleRequest(request, env, fetchImpl) {
 
     if (url.pathname === "/api/v1/user/credits/add" && request.method === "POST") {
       return await handleAddCredits(request, url, env, fetchImpl);
+    }
+
+    if (url.pathname === "/api/v1/billing/paddle/webhook" && request.method === "POST") {
+      return await handlePaddleWebhook(request, env, fetchImpl);
     }
 
     if (url.pathname.startsWith("/api/v1/image/")) {
@@ -339,6 +343,103 @@ async function handleAddCredits(request, url, env, fetchImpl) {
   });
 }
 
+async function handlePaddleWebhook(request, env, fetchImpl) {
+  const rawBody = await request.text();
+  verifyPaddleWebhookSignature(rawBody, request.headers.get("paddle-signature"), env);
+
+  let payload;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    throw new HttpError(422, { detail: "Invalid Paddle webhook JSON" });
+  }
+
+  const eventId = String(payload.event_id ?? payload.eventId ?? "");
+  const eventType = String(payload.event_type ?? payload.eventType ?? "");
+
+  if (!eventId) {
+    throw new HttpError(422, { detail: "Missing Paddle event id" });
+  }
+
+  if (await hasProcessedBillingEvent(fetchImpl, env, eventId)) {
+    return jsonResponse({ received: true, duplicate: true });
+  }
+
+  if (eventType !== "transaction.completed") {
+    await createBillingEvent(fetchImpl, env, {
+      event_id: eventId,
+      provider: "paddle",
+      event_type: eventType,
+      status: "ignored",
+      payload,
+    });
+    return jsonResponse({ received: true, ignored: true });
+  }
+
+  const data = payload.data ?? {};
+  const customData = data.custom_data ?? data.customData ?? {};
+  const userId = String(customData.user_id ?? customData.userId ?? "");
+  const credits = Math.max(0, Number.parseInt(String(customData.credits ?? "0"), 10));
+  const planId = String(customData.plan_id ?? customData.planId ?? "");
+  const planName = String(customData.plan_name ?? customData.planName ?? planId);
+  const transactionId = String(data.id ?? eventId);
+
+  if (!userId || credits <= 0) {
+    await createBillingEvent(fetchImpl, env, {
+      event_id: eventId,
+      provider: "paddle",
+      event_type: eventType,
+      status: "rejected",
+      reference_id: transactionId,
+      user_id: userId || null,
+      credits,
+      payload,
+    });
+    throw new HttpError(422, { detail: "Paddle webhook is missing user_id or credits" });
+  }
+
+  const user = await getWebUserById(fetchImpl, env, userId);
+  if (!user) {
+    await createBillingEvent(fetchImpl, env, {
+      event_id: eventId,
+      provider: "paddle",
+      event_type: eventType,
+      status: "rejected",
+      reference_id: transactionId,
+      user_id: userId,
+      credits,
+      payload,
+    });
+    throw new HttpError(422, { detail: "Paddle webhook user was not found" });
+  }
+
+  const nextCredits = user.credits + credits;
+  await updateWebUserCredits(fetchImpl, env, user.id, nextCredits);
+  await createCreditTransaction(fetchImpl, env, {
+    user_id: user.id,
+    amount: credits,
+    type: "purchase",
+    description: planName ? `Paddle purchase: ${planName}` : "Paddle purchase",
+    reference_id: transactionId,
+  });
+  await createBillingEvent(fetchImpl, env, {
+    event_id: eventId,
+    provider: "paddle",
+    event_type: eventType,
+    status: "processed",
+    reference_id: transactionId,
+    user_id: user.id,
+    credits,
+    payload,
+  });
+
+  return jsonResponse({
+    received: true,
+    credited: credits,
+    credits_remaining: nextCredits,
+  });
+}
+
 function requireInternalBillingAccess(request, env) {
   const configuredKey = env.WEB_INTERNAL_BILLING_KEY?.trim();
   const providedKey = request.headers.get("x-kroma-billing-key")?.trim();
@@ -346,6 +447,83 @@ function requireInternalBillingAccess(request, env) {
   if (!configuredKey || providedKey !== configuredKey) {
     throw new HttpError(403, { detail: "Credit top-up requires internal billing access" });
   }
+}
+
+function verifyPaddleWebhookSignature(rawBody, signatureHeader, env) {
+  const secret = env.WEB_PADDLE_WEBHOOK_SECRET?.trim();
+  if (!secret) {
+    throw new HttpError(500, { detail: "WEB_PADDLE_WEBHOOK_SECRET is not configured" });
+  }
+
+  const signature = parsePaddleSignature(signatureHeader);
+  if (!signature.ts || !signature.h1) {
+    throw new HttpError(401, { detail: "Invalid Paddle webhook signature" });
+  }
+
+  const toleranceSeconds = Number.parseInt(
+    env.WEB_PADDLE_SIGNATURE_TOLERANCE_SECONDS ?? "300",
+    10,
+  );
+  const timestamp = Number.parseInt(signature.ts, 10);
+  if (
+    Number.isFinite(timestamp) &&
+    Number.isFinite(toleranceSeconds) &&
+    toleranceSeconds > 0 &&
+    Math.abs(Math.floor(Date.now() / 1000) - timestamp) > toleranceSeconds
+  ) {
+    throw new HttpError(401, { detail: "Expired Paddle webhook signature" });
+  }
+
+  const expected = createHmac("sha256", secret)
+    .update(`${signature.ts}:${rawBody}`)
+    .digest("hex");
+
+  if (!timingSafeHexEqual(expected, signature.h1)) {
+    throw new HttpError(401, { detail: "Invalid Paddle webhook signature" });
+  }
+}
+
+function parsePaddleSignature(value) {
+  return String(value ?? "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((parsed, part) => {
+      const [key, ...rest] = part.split("=");
+      return {
+        ...parsed,
+        [key]: rest.join("="),
+      };
+    }, {});
+}
+
+function timingSafeHexEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left), "hex");
+  const rightBuffer = Buffer.from(String(right), "hex");
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+async function hasProcessedBillingEvent(fetchImpl, env, eventId) {
+  const rows = await restFetch(
+    fetchImpl,
+    env,
+    `/web_billing_events?provider=eq.paddle&event_id=eq.${encodeURIComponent(eventId)}&select=id&limit=1`,
+  );
+
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+async function createBillingEvent(fetchImpl, env, body) {
+  await restFetch(fetchImpl, env, "/web_billing_events", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body,
+  });
 }
 
 async function requireAuthUser(request, env, fetchImpl) {
@@ -369,9 +547,9 @@ async function requireAuthUser(request, env, fetchImpl) {
 }
 
 async function getOrCreateWebUser(fetchImpl, env, authUser) {
-  const rows = await restFetch(fetchImpl, env, `/web_users?id=eq.${encodeURIComponent(authUser.id)}&select=*`);
-  if (Array.isArray(rows) && rows.length > 0) {
-    return normalizeWebUser(rows[0]);
+  const existing = await getWebUserById(fetchImpl, env, authUser.id);
+  if (existing) {
+    return existing;
   }
 
   const created = await restFetch(fetchImpl, env, "/web_users", {
@@ -386,6 +564,15 @@ async function getOrCreateWebUser(fetchImpl, env, authUser) {
   });
 
   return normalizeWebUser(Array.isArray(created) ? created[0] : created);
+}
+
+async function getWebUserById(fetchImpl, env, userId) {
+  const rows = await restFetch(fetchImpl, env, `/web_users?id=eq.${encodeURIComponent(userId)}&select=*`);
+  if (Array.isArray(rows) && rows.length > 0) {
+    return normalizeWebUser(rows[0]);
+  }
+
+  return null;
 }
 
 async function updateWebUserCredits(fetchImpl, env, userId, credits) {
@@ -577,7 +764,7 @@ function emptyResponse(status = 204) {
 function corsHeaders(extra = {}) {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Kroma-Client",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Kroma-Client, X-Kroma-Billing-Key, Paddle-Signature",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
     ...extra,
   };

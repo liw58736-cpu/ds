@@ -37,6 +37,18 @@ export async function createGenerationTask(
     return requestRemoteJson<GenerationTaskResponse>(request);
   }
 
+  if (import.meta.env.PROD) {
+    return {
+      taskId: `generation-backend-unconfigured-${Date.now()}`,
+      status: "failed",
+      resultUrls: [],
+      creditCost: 0,
+      routeMode: request.body.routeMode,
+      errorCode: "generation_backend_unconfigured",
+      errorMessage: "真实生图后端未配置，请联系支持。",
+    };
+  }
+
   return submitGenerationTask(request);
 }
 

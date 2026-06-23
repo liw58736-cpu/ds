@@ -33,10 +33,24 @@ WEB_ALLOWED_AUTH_REDIRECTS=https://kromaai.app,https://www.kromaai.app,https://k
 WEB_AUTH_EMAIL_FROM=kroma <no-reply@i18.pro>
 WEB_RESEND_API_KEY=<resend-api-key>
 WEB_INTERNAL_BILLING_KEY=<server-to-server-billing-secret>
+WEB_PADDLE_WEBHOOK_SECRET=<paddle-webhook-secret>
 ```
 
 `WEB_INTERNAL_BILLING_KEY` protects manual or webhook-driven credit top-ups. Do
 not expose it to the frontend.
+
+## Paddle Webhook
+
+Create a Paddle webhook endpoint:
+
+```text
+https://kroma-web-api.onrender.com/api/v1/billing/paddle/webhook
+```
+
+Subscribe at least to `transaction.completed`. The checkout frontend sends
+`customData.user_id`, `customData.plan_id`, `customData.plan_name`, and
+`customData.credits`; the webhook verifies the `Paddle-Signature`, applies the
+credit top-up once, and stores the event in `web_billing_events` for idempotency.
 
 The frontend static service should use:
 

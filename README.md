@@ -32,4 +32,7 @@ VITE_KROMA_API_BASE_URL=
 VITE_API_BASE_URL=
 ```
 
+Keep `VITE_KROMA_API_BASE_URL` empty until a separate web image generation
+service is ready. Production builds do not fall back to mock image generation.
+
 Backend setup details are in `web-backend/README.md`.

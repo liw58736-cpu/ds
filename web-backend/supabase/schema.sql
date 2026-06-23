@@ -44,6 +44,24 @@ create table if not exists public.web_auth_codes (
 create index if not exists web_auth_codes_lookup_idx
 on public.web_auth_codes (email, type, code, expires_at);
 
+create table if not exists public.web_billing_events (
+  id uuid primary key default gen_random_uuid(),
+  provider text not null,
+  event_id text not null,
+  event_type text not null,
+  status text not null,
+  reference_id text,
+  user_id uuid,
+  credits integer not null default 0,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  processed_at timestamptz not null default now(),
+  unique (provider, event_id)
+);
+
+create index if not exists web_billing_events_user_idx
+on public.web_billing_events (user_id, created_at desc);
+
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
@@ -68,6 +86,7 @@ alter table public.web_users enable row level security;
 alter table public.web_credit_transactions enable row level security;
 alter table public.web_generations enable row level security;
 alter table public.web_auth_codes enable row level security;
+alter table public.web_billing_events enable row level security;
 
 grant usage on schema public to service_role;
 grant all privileges on all tables in schema public to service_role;

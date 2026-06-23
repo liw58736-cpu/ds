@@ -121,6 +121,22 @@ describe("generationApi", () => {
     );
   });
 
+  it("does not use mock generation in production without a real backend", async () => {
+    vi.stubEnv("PROD", true);
+
+    await expect(createGenerationTask(input)).resolves.toMatchObject({
+      status: "failed",
+      creditCost: 0,
+      errorCode: "generation_backend_unconfigured",
+      errorMessage: "真实生图后端未配置，请联系支持。",
+    });
+
+    await expect(generateAsset(input)).rejects.toMatchObject({
+      code: "generation_backend_unconfigured",
+      message: "真实生图后端未配置，请联系支持。",
+    });
+  });
+
   it("lists generation tasks from the remote backend when VITE_API_BASE_URL is configured", async () => {
     vi.stubEnv("VITE_API_BASE_URL", "https://api.example.com");
     const remoteTasks: GenerationTask[] = [

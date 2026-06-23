@@ -13,6 +13,8 @@ VITE_WEB_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
 
 `VITE_KROMA_API_BASE_URL` must stay empty unless a separate web image generation
 backend is configured. Do not point the web product at the mobile app backend.
+When this value is empty in production, generation fails with a clear
+configuration message instead of creating mock images.
 
 ```env
 VITE_KROMA_API_BASE_URL=
@@ -73,6 +75,16 @@ must not be called from the browser.
 
 The frontend opens Paddle Checkout when `VITE_PADDLE_CLIENT_TOKEN` and the plan
 price IDs are configured.
+
+Paddle sends completed transactions to:
+
+```text
+POST /api/v1/billing/paddle/webhook
+```
+
+The webhook verifies `Paddle-Signature`, handles `transaction.completed`, reads
+`custom_data.user_id` and `custom_data.credits`, credits the web account, and
+records the event for idempotency.
 
 If Paddle is not configured in production, the price page shows a payment
 configuration error and does not create mock credits. Mock crediting is limited
