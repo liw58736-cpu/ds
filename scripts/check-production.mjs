@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 const apiBaseUrl =
   process.env.KROMA_WEB_API_BASE_URL || "https://kroma-web-api.onrender.com/api/v1";
 const healthUrl = `${apiBaseUrl.replace(/\/+$/, "")}/health`;
+const optionalEnvironmentKeys = new Set(["internalBillingKey"]);
 
 export function getExpectedBackendCommit(execFile = execFileSync) {
   try {
@@ -86,6 +87,13 @@ export function getMissingEnvironmentGuidance(key) {
   return guidanceByKey[key] ?? "configure this value on kroma-web-api";
 }
 
+export function partitionMissingEnvironment(missing) {
+  return {
+    required: missing.filter((key) => !optionalEnvironmentKeys.has(key)),
+    optional: missing.filter((key) => optionalEnvironmentKeys.has(key)),
+  };
+}
+
 function printMissingGuidance(missing) {
   missing.forEach((key) => {
     console.log(`NEXT ${key}: ${getMissingEnvironmentGuidance(key)}`);
@@ -125,10 +133,26 @@ async function main() {
   printStatus("live commit", Boolean(liveCommit), liveCommit || "missing");
   printStatus("deployed backend commit", commitMatches);
 
-  const missing = Array.isArray(payload.missing) ? payload.missing : [];
+  const payloadMissing = Array.isArray(payload.missing) ? payload.missing : [];
+  const payloadOptionalMissing = Array.isArray(payload.optionalMissing)
+    ? payload.optionalMissing
+    : [];
+  const { required: missing, optional: optionalMissingFromLegacyHealth } =
+    partitionMissingEnvironment(payloadMissing);
+  const optionalMissing = [
+    ...new Set([...optionalMissingFromLegacyHealth, ...payloadOptionalMissing]),
+  ];
   printStatus("required environment", missing.length === 0, missing.join(", ") || "complete");
   if (missing.length > 0) {
     printMissingGuidance(missing);
+  }
+  printStatus(
+    "optional environment",
+    true,
+    optionalMissing.length > 0 ? optionalMissing.join(", ") : "complete",
+  );
+  if (optionalMissing.length > 0) {
+    printMissingGuidance(optionalMissing);
   }
 
   const database = payload.database && typeof payload.database === "object" ? payload.database : {};
@@ -137,7 +161,11 @@ async function main() {
     .map(([name]) => name);
   printStatus("required Supabase tables", failedTables.length === 0, failedTables.join(", ") || "complete");
 
-  if (!payload.ok || !commitMatches || missing.length > 0 || failedTables.length > 0) {
+  const healthOk =
+    payload.ok ||
+    (missing.length === 0 && failedTables.length === 0);
+
+  if (!healthOk || !commitMatches || missing.length > 0 || failedTables.length > 0) {
     process.exitCode = 1;
   }
 }

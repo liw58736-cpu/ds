@@ -35,15 +35,21 @@ WEB_AUTH_REDIRECT_URL=https://kromaai.app
 WEB_ALLOWED_AUTH_REDIRECTS=https://kromaai.app,https://www.kromaai.app,https://kroma-web.onrender.com
 WEB_AUTH_EMAIL_FROM=kroma <no-reply@i18.pro>
 WEB_RESEND_API_KEY=<resend-api-key>
-WEB_INTERNAL_BILLING_KEY=<server-to-server-billing-secret>
 WEB_PADDLE_WEBHOOK_SECRET=<paddle-webhook-secret>
 WEB_PADDLE_PRICE_CREDITS_JSON=<price-id-to-credit-json>
 WEB_IMAGE_API_BASE_URL=<dedicated-web-image-generation-api-base-url>
 WEB_IMAGE_API_KEY=<dedicated-web-image-generation-api-key>
 ```
 
-`WEB_INTERNAL_BILLING_KEY` protects manual or webhook-driven credit top-ups. Do
-not expose it to the frontend.
+Optional:
+
+```text
+WEB_INTERNAL_BILLING_KEY=<server-to-server-billing-secret>
+```
+
+`WEB_INTERNAL_BILLING_KEY` protects internal manual credit top-ups. Paddle
+checkout and webhook crediting do not require it. Do not expose it to the
+frontend.
 
 After deploying, open:
 
@@ -52,8 +58,10 @@ https://kroma-web-api.onrender.com/api/v1/health
 ```
 
 The response includes the deployed commit, a `missing` list for required
-configuration, and a `database` object that confirms whether required Supabase
-tables are reachable. It only returns boolean status, never secret values.
+configuration, an `optionalMissing` list for non-blocking settings such as the
+manual top-up key, and a `database` object that confirms whether required
+Supabase tables are reachable. It only returns boolean status, never secret
+values.
 
 ## Paddle Webhook
 

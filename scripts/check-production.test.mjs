@@ -4,6 +4,7 @@ import {
   getMissingEnvironmentGuidance,
   getExpectedBackendCommit,
   isLiveCommitCompatible,
+  partitionMissingEnvironment,
 } from "./check-production.mjs";
 
 test("production check compares the live backend to the latest backend-affecting commit", () => {
@@ -58,5 +59,19 @@ test("production check explains how to fill remaining production secrets", () =>
   assert.match(
     getMissingEnvironmentGuidance("imageApiBaseUrl"),
     /WEB_IMAGE_API_BASE_URL/,
+  );
+});
+
+test("production check treats manual top-up key as optional", () => {
+  assert.deepEqual(
+    partitionMissingEnvironment([
+      "internalBillingKey",
+      "paddleWebhookSecret",
+      "imageApiBaseUrl",
+    ]),
+    {
+      required: ["paddleWebhookSecret", "imageApiBaseUrl"],
+      optional: ["internalBillingKey"],
+    },
   );
 });

@@ -1018,6 +1018,7 @@ function parseAllowedRedirects(env) {
 }
 
 async function buildHealthResponse(env, fetchImpl) {
+  const optionalConfigKeys = new Set(["internalBillingKey"]);
   const config = {
     supabaseUrl: Boolean(env.WEB_SUPABASE_URL),
     supabaseAnonKey: Boolean(env.WEB_SUPABASE_ANON_KEY),
@@ -1033,7 +1034,10 @@ async function buildHealthResponse(env, fetchImpl) {
     imageApiKey: Boolean(env.WEB_IMAGE_API_KEY),
   };
   const missing = Object.entries(config)
-    .filter(([, configured]) => !configured)
+    .filter(([key, configured]) => !configured && !optionalConfigKeys.has(key))
+    .map(([key]) => key);
+  const optionalMissing = Object.entries(config)
+    .filter(([key, configured]) => !configured && optionalConfigKeys.has(key))
     .map(([key]) => key);
   const database = await checkDatabaseHealth(fetchImpl, env, config);
   const databaseOk = Object.values(database).every(Boolean);
@@ -1046,6 +1050,7 @@ async function buildHealthResponse(env, fetchImpl) {
     config,
     database,
     missing,
+    optionalMissing,
   };
 }
 

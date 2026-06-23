@@ -90,6 +90,7 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       webBillingEvents: true,
     },
     missing: [],
+    optionalMissing: [],
   });
 });
 
@@ -113,6 +114,49 @@ test("health endpoint identifies missing production configuration", async () => 
   assert.equal(body.database.webUsers, false);
   assert.ok(body.missing.includes("supabaseServiceRoleKey"));
   assert.ok(body.missing.includes("paddleWebhookSecret"));
+});
+
+test("health endpoint treats the internal billing key as optional manual top-up configuration", async () => {
+  const tablePaths = [
+    "/rest/v1/web_users?select=id&limit=1",
+    "/rest/v1/web_credit_transactions?select=id&limit=1",
+    "/rest/v1/web_generations?select=id&limit=1",
+    "/rest/v1/web_auth_codes?select=id&limit=1",
+    "/rest/v1/web_billing_events?select=id&limit=1",
+  ];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_RESEND_API_KEY: "resend-key",
+      WEB_AUTH_EMAIL_FROM: "kroma <no-reply@example.com>",
+      WEB_AUTH_REDIRECT_URL: "https://kromaai.app",
+      WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
+      WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+      WEB_PADDLE_PRICE_CREDITS_JSON: '{"pri_test":{"credits":120}}',
+      WEB_IMAGE_API_BASE_URL: "https://image-web.example.com/api/v1",
+      WEB_IMAGE_API_KEY: "image-secret",
+    },
+    fetch: async (url) => {
+      if (tablePaths.some((path) => url.endsWith(path))) {
+        return jsonResponse([]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/health"),
+  );
+  const body = await readJson(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.config.internalBillingKey, false);
+  assert.deepEqual(body.optionalMissing, ["internalBillingKey"]);
+  assert.ok(!body.missing.includes("internalBillingKey"));
 });
 
 test("health endpoint rejects invalid Paddle price credit mapping", async () => {
