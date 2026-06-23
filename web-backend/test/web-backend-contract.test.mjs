@@ -257,6 +257,45 @@ test("auth signup rejects app deep-link redirects for the web backend", async ()
   });
 });
 
+test("auth signup maps existing Supabase auth users to the registered email response", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
+    },
+    fetch: async (url) => {
+      if (url.includes("/rest/v1/web_users?email=eq.seller%40example.com")) {
+        return jsonResponse([]);
+      }
+      if (url.endsWith("/auth/v1/admin/generate_link")) {
+        return jsonResponse({ message: "A user with this email address has already been registered" }, 422);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/auth/signup", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "seller@example.com",
+        password: "secret-password",
+        redirect_to: "https://kromaai.app",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await readJson(response), {
+    detail: {
+      code: "email_already_registered",
+      message: "该邮箱已注册，请直接登录。",
+    },
+  });
+});
+
 test("auth otp sends a custom login code email", async () => {
   const calls = [];
   const app = createWebBackend({

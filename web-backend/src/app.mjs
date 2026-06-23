@@ -139,12 +139,21 @@ async function handleSignup(request, env, fetchImpl) {
 
   await ensureEmailIsNotRegistered(fetchImpl, env, email);
 
-  const data = await supabaseAdmin(fetchImpl, env, "generate_link", {
-    type: "signup",
-    email,
-    password,
-    ...(redirectTo ? { redirect_to: redirectTo } : {}),
-  });
+  let data;
+  try {
+    data = await supabaseAdmin(fetchImpl, env, "generate_link", {
+      type: "signup",
+      email,
+      password,
+      ...(redirectTo ? { redirect_to: redirectTo } : {}),
+    });
+  } catch (error) {
+    if (isRegisteredEmailError(error)) {
+      throw registeredEmailError();
+    }
+
+    throw error;
+  }
 
   const providerToken = data?.email_otp ?? data?.properties?.email_otp;
   if (!providerToken) {
@@ -281,13 +290,31 @@ async function ensureEmailIsNotRegistered(fetchImpl, env, email) {
   );
 
   if (Array.isArray(rows) && rows.length > 0) {
-    throw new HttpError(409, {
-      detail: {
-        code: "email_already_registered",
-        message: "该邮箱已注册，请直接登录。",
-      },
-    });
+    throw registeredEmailError();
   }
+}
+
+function registeredEmailError() {
+  return new HttpError(409, {
+    detail: {
+      code: "email_already_registered",
+      message: "该邮箱已注册，请直接登录。",
+    },
+  });
+}
+
+function isRegisteredEmailError(error) {
+  if (!(error instanceof HttpError)) {
+    return false;
+  }
+
+  const detail = String(error.body?.detail ?? error.message ?? "").toLowerCase();
+  return (
+    error.status === 422 &&
+    (detail.includes("already") ||
+      detail.includes("registered") ||
+      detail.includes("exists"))
+  );
 }
 
 async function handleRefresh(request, env, fetchImpl) {
