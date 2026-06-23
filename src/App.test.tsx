@@ -286,7 +286,7 @@ describe("App", () => {
   });
 
   it("labels cloud credits separately from trial credits on sync failure", async () => {
-    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: false,
       status: 500,
@@ -362,16 +362,27 @@ describe("App", () => {
   });
 
   it("registers through Kroma and waits for real email verification", async () => {
-    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          access_token: "",
-          refresh_token: "",
-          user_id: "user-1",
-        }),
-    });
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: "",
+            refresh_token: "",
+            user_id: "",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: "signup-access",
+            refresh_token: "signup-refresh",
+            user_id: "user-1",
+          }),
+      });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     render(<App />);
@@ -413,10 +424,26 @@ describe("App", () => {
       "http://127.0.0.1:8000/api/v1/auth/signup",
       expect.objectContaining({ method: "POST" }),
     );
+
+    await user.type(within(registerForm).getByLabelText("邮箱验证码"), "123456");
+    await user.click(
+      within(registerForm).getByRole("button", { name: "验证并完成注册" }),
+    );
+
+    const loginForm = screen.getByRole("form", { name: "登录表单" });
+    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(within(loginForm).getByLabelText("手机号或邮箱")).toHaveValue(
+      "new-seller@example.com",
+    );
+    expect(within(loginForm).getByLabelText("密码")).toHaveValue("");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "注册验证成功，请输入密码登录。",
+    );
+    expect(getAccountSnapshot().session).toBeNull();
   });
 
   it("moves registered Kroma emails back to password login", async () => {
-    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: false,
       status: 409,
@@ -458,7 +485,7 @@ describe("App", () => {
   });
 
   it("shows immediate feedback while a Kroma registration is being submitted", async () => {
-    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     let resolveSignup: (response: Response) => void = () => {};
     const fetchMock = vi.fn(
       () =>

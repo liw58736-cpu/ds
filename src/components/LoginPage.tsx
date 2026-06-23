@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { AppPage } from "./AppShell";
-import { loginOrRegister, requestLoginCode } from "../api/accountApi";
+import { loginOrRegister, requestLoginCode, verifySignupCode } from "../api/accountApi";
 import type { AuthView, LoginMode } from "../storage/accountStore";
 import kromaLogo from "../assets/brand/kroma-logo.png";
 
@@ -12,7 +12,7 @@ interface LoginPageProps {
   onAuthenticated?: () => void;
 }
 
-const INITIAL_STATUS = "使用手机号或邮箱登录，保存积分、订单和历史任务。";
+const INITIAL_STATUS = "使用手机号或邮箱登录，查看积分、订单和历史任务。";
 const EMAIL_VERIFICATION_MESSAGE =
   "验证码已发送至邮箱，请输入邮件里的 6 位验证码完成注册。";
 
@@ -70,7 +70,7 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
     setCode("");
     setMessage(
       nextView === "register"
-        ? "注册后即可同步积分、订单和历史任务。"
+        ? "注册后即可登录并管理积分、订单和历史任务。"
         : INITIAL_STATUS,
     );
     setMessageType("status");
@@ -171,6 +171,18 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
     );
 
     try {
+      if (isRegisterVerification) {
+        await verifySignupCode(normalizedIdentifier, normalizedCode);
+        setAuthView("login");
+        setLoginMode("password");
+        setRegisterStep("form");
+        setPassword("");
+        setConfirmPassword("");
+        setCode("");
+        showStatus("注册验证成功，请输入密码登录。");
+        return;
+      }
+
       const account = await loginOrRegister({
         identifier: normalizedIdentifier,
         credential,
@@ -185,8 +197,8 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
         onAuthenticated?.();
         showStatus(
           isRegister
-            ? "注册成功，已同步账户积分。"
-            : "登录成功，已同步账户积分。",
+            ? "注册成功。"
+            : "登录成功。",
         );
         return;
       }
@@ -235,7 +247,7 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
             <img className="login-brand-mark" src={kromaLogo} alt="kroma logo" />
             <h1 id="login-title">{title}</h1>
           </div>
-          <p>{isRegister ? "创建账户后开始管理积分和订单。" : "登录后同步积分、订单和历史任务。"}</p>
+          <p>{isRegister ? "创建账户后开始管理积分和订单。" : "登录后查看积分、订单和历史任务。"}</p>
         </div>
 
         <div className="login-auth-switch" aria-label="账户操作">

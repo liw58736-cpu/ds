@@ -31,6 +31,19 @@ create table if not exists public.web_generations (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.web_auth_codes (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  type text not null,
+  code text not null,
+  provider_token text not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists web_auth_codes_lookup_idx
+on public.web_auth_codes (email, type, code, expires_at);
+
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
@@ -54,3 +67,8 @@ for each row execute function public.touch_updated_at();
 alter table public.web_users enable row level security;
 alter table public.web_credit_transactions enable row level security;
 alter table public.web_generations enable row level security;
+alter table public.web_auth_codes enable row level security;
+
+grant usage on schema public to service_role;
+grant all privileges on all tables in schema public to service_role;
+grant all privileges on all sequences in schema public to service_role;

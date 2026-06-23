@@ -8,6 +8,7 @@ import {
   getCurrentAccountWithCreditSync,
   loginOrRegister,
   requestLoginCode,
+  verifySignupCode,
 } from "./accountApi";
 import type { AccountSession, AccountSnapshot } from "../storage/accountStore";
 
@@ -382,6 +383,40 @@ describe("accountApi", () => {
         }),
       }),
     );
+  });
+
+  it("verifies a signup code without saving a local login session", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          access_token: "signup-access-token",
+          refresh_token: "signup-refresh-token",
+          user_id: "user-signup",
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      verifySignupCode("new-seller@example.com", "123456"),
+    ).resolves.toEqual({
+      access_token: "signup-access-token",
+      refresh_token: "signup-refresh-token",
+      user_id: "user-signup",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/v1/auth/verify-signup",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          email: "new-seller@example.com",
+          token: "123456",
+        }),
+      }),
+    );
+    expect(getCurrentAccountSnapshot().session).toBeNull();
   });
 
   it("requires a real backend for new account registration", async () => {

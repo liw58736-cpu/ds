@@ -35,8 +35,11 @@ test("auth signup generates an OTP and sends a custom verification email", async
       }
       if (url.endsWith("/auth/v1/admin/generate_link")) {
         return jsonResponse({
-          email_otp: "123456",
+          email_otp: "12345678",
         });
+      }
+      if (url.endsWith("/rest/v1/web_auth_codes")) {
+        return jsonResponse([{ id: "code-1", ...JSON.parse(init.body) }]);
       }
       if (url === "https://api.resend.com/emails") {
         return jsonResponse({ id: "email-1" });
@@ -67,10 +70,14 @@ test("auth signup generates an OTP and sends a custom verification email", async
     password: "secret-password",
     redirect_to: "https://kromaai.app",
   });
-  assert.equal(calls[2].url, "https://api.resend.com/emails");
-  const emailBody = JSON.parse(calls[2].init.body);
+  assert.equal(calls[3].url, "https://api.resend.com/emails");
+  const storedCode = JSON.parse(calls[2].init.body).code;
+  assert.match(storedCode, /^\d{6}$/);
+  assert.equal(JSON.parse(calls[2].init.body).provider_token, "12345678");
+  const emailBody = JSON.parse(calls[3].init.body);
   assert.equal(emailBody.subject, "kroma 注册验证码");
-  assert.match(emailBody.html, /123456/);
+  assert.match(emailBody.html, new RegExp(storedCode));
+  assert.doesNotMatch(emailBody.html, /12345678/);
   assert.doesNotMatch(emailBody.html, /ConfirmationURL|Confirm email address/);
 });
 
@@ -125,8 +132,11 @@ test("auth otp sends a custom login code email", async () => {
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/admin/generate_link")) {
         return jsonResponse({
-          email_otp: "654321",
+          email_otp: "87654321",
         });
+      }
+      if (url.endsWith("/rest/v1/web_auth_codes")) {
+        return jsonResponse([{ id: "code-2", ...JSON.parse(init.body) }]);
       }
       if (url === "https://api.resend.com/emails") {
         return jsonResponse({ id: "email-2" });
@@ -152,10 +162,69 @@ test("auth otp sends a custom login code email", async () => {
     email: "seller@example.com",
     redirect_to: "https://kromaai.app",
   });
-  const emailBody = JSON.parse(calls[1].init.body);
+  const storedCode = JSON.parse(calls[1].init.body).code;
+  assert.match(storedCode, /^\d{6}$/);
+  assert.equal(JSON.parse(calls[1].init.body).provider_token, "87654321");
+  const emailBody = JSON.parse(calls[2].init.body);
   assert.equal(emailBody.subject, "kroma 登录验证码");
-  assert.match(emailBody.html, /654321/);
+  assert.match(emailBody.html, new RegExp(storedCode));
+  assert.doesNotMatch(emailBody.html, /87654321/);
   assert.doesNotMatch(emailBody.html, /ConfirmationURL|Sign in/);
+});
+
+test("auth verify resolves the public six digit signup code before Supabase verify", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.includes("/rest/v1/web_auth_codes?")) {
+        return jsonResponse([
+          {
+            id: "code-1",
+            provider_token: "12345678",
+          },
+        ]);
+      }
+      if (url.includes("/rest/v1/web_auth_codes?id=eq.code-1")) {
+        return jsonResponse({});
+      }
+      if (url.endsWith("/auth/v1/verify")) {
+        return jsonResponse({
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          user: { id: "user-1" },
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/auth/verify-signup", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "seller@example.com",
+        token: "123456",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    access_token: "access-token",
+    refresh_token: "refresh-token",
+    user_id: "user-1",
+  });
+  assert.deepEqual(JSON.parse(calls[2].init.body), {
+    email: "seller@example.com",
+    token: "12345678",
+    type: "signup",
+  });
 });
 
 test("credits endpoint creates an isolated web user with five free credits", async () => {

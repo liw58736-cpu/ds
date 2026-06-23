@@ -1,3 +1,5 @@
+import { randomInt } from "node:crypto";
+
 const defaultFreeCredits = 5;
 const defaultSender = "kroma <no-reply@i18.pro>";
 
@@ -115,18 +117,25 @@ async function handleSignup(request, env, fetchImpl) {
     ...(redirectTo ? { redirect_to: redirectTo } : {}),
   });
 
-  const token = data?.email_otp ?? data?.properties?.email_otp;
-  if (!token) {
+  const providerToken = data?.email_otp ?? data?.properties?.email_otp;
+  if (!providerToken) {
     throw new HttpError(500, { detail: "Signup code was not generated" });
   }
+  const code = createSixDigitCode();
+  await storeAuthCode(fetchImpl, env, {
+    email,
+    type: "signup",
+    code,
+    providerToken,
+  });
 
   await sendAuthCodeEmail(fetchImpl, env, {
     email,
-    code: token,
+    code,
     subject: "kroma 注册验证码",
     title: "kroma 注册验证码",
     intro: "你正在注册 kroma 网页端账号。",
-    action: "请在注册页面输入下面的验证码完成注册：",
+    action: "请在注册页面输入下面的 6 位验证码完成注册：",
   });
 
   return tokenResponse({});
@@ -157,18 +166,25 @@ async function handleOtp(request, env, fetchImpl) {
     ...(redirectTo ? { redirect_to: redirectTo } : {}),
   });
 
-  const token = data?.email_otp ?? data?.properties?.email_otp;
-  if (!token) {
+  const providerToken = data?.email_otp ?? data?.properties?.email_otp;
+  if (!providerToken) {
     throw new HttpError(500, { detail: "Login code was not generated" });
   }
+  const code = createSixDigitCode();
+  await storeAuthCode(fetchImpl, env, {
+    email,
+    type: "magiclink",
+    code,
+    providerToken,
+  });
 
   await sendAuthCodeEmail(fetchImpl, env, {
     email,
-    code: token,
+    code,
     subject: "kroma 登录验证码",
     title: "kroma 登录验证码",
     intro: "你正在登录 kroma 网页端账号。",
-    action: "请在登录页面输入下面的验证码：",
+    action: "请在登录页面输入下面的 6 位验证码：",
   });
 
   return jsonResponse({ sent: true });
@@ -176,13 +192,56 @@ async function handleOtp(request, env, fetchImpl) {
 
 async function handleVerify(request, env, fetchImpl, type) {
   const body = await readJsonBody(request);
+  const email = normalizeEmail(body.email);
+  const token = await resolveAuthToken(fetchImpl, env, {
+    email,
+    type,
+    code: String(body.token ?? ""),
+  });
   const data = await supabaseAuth(fetchImpl, env, "verify", {
-    email: normalizeEmail(body.email),
-    token: String(body.token ?? ""),
+    email,
+    token,
     type,
   });
 
   return tokenResponse(data);
+}
+
+function createSixDigitCode() {
+  return String(randomInt(0, 1_000_000)).padStart(6, "0");
+}
+
+async function storeAuthCode(fetchImpl, env, input) {
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  await restFetch(fetchImpl, env, "/web_auth_codes", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: {
+      email: input.email,
+      type: input.type,
+      code: input.code,
+      provider_token: input.providerToken,
+      expires_at: expiresAt,
+    },
+  });
+}
+
+async function resolveAuthToken(fetchImpl, env, input) {
+  const rows = await restFetch(
+    fetchImpl,
+    env,
+    `/web_auth_codes?email=eq.${encodeURIComponent(input.email)}&type=eq.${encodeURIComponent(input.type)}&code=eq.${encodeURIComponent(input.code)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=id,provider_token&order=created_at.desc&limit=1`,
+  );
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return input.code;
+  }
+
+  const row = rows[0];
+  await restFetch(fetchImpl, env, `/web_auth_codes?id=eq.${encodeURIComponent(row.id)}`, {
+    method: "DELETE",
+  });
+  return String(row.provider_token);
 }
 
 async function ensureEmailIsNotRegistered(fetchImpl, env, email) {

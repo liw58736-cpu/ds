@@ -168,6 +168,28 @@ export async function requestLoginCode(identifier: string): Promise<KromaOtpResp
   });
 }
 
+export async function verifySignupCode(
+  identifier: string,
+  code: string,
+): Promise<KromaAuthResponse> {
+  const baseUrl = getConfiguredWebAccountApiBaseUrl();
+
+  if (!baseUrl) {
+    throw new Error("注册验证需要连接真实账号服务，请先配置后端账号接口。");
+  }
+
+  return requestKromaJson<KromaAuthResponse>(`${baseUrl}/auth/verify-signup`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: identifier.trim(),
+      token: code.trim(),
+    }),
+  });
+}
+
 async function loginOrRegisterWithKroma(
   session: AccountSession,
 ): Promise<AccountSnapshot> {
