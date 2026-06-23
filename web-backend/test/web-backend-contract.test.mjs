@@ -329,3 +329,29 @@ test("deduct endpoint charges only completed success-only tasks", async () => {
   assert.equal(transactions.length, 1);
   assert.equal(transactions[0].amount, -2);
 });
+
+test("credit top-up endpoint requires an internal billing key", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_INTERNAL_BILLING_KEY: "billing-secret",
+    },
+    fetch: async () => {
+      throw new Error("Auth should not be checked before billing key validation");
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/user/credits/add?amount=950", {
+      method: "POST",
+      headers: { Authorization: "Bearer access-token" },
+    }),
+  );
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await readJson(response), {
+    detail: "Credit top-up requires internal billing access",
+  });
+});

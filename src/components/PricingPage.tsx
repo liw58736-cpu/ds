@@ -116,7 +116,7 @@ const subscriptionPlans: CreditPlan[] = [
       "GPT Image 2 标准模型",
       "到期后可手动续购",
     ],
-    paymentNote: "支付宝 / 微信",
+    paymentNote: "Paddle Checkout",
   },
   {
     id: "quarterly-subscription",
@@ -136,7 +136,7 @@ const subscriptionPlans: CreditPlan[] = [
       "比月付更适合连续产出",
       "到期后可手动续购",
     ],
-    paymentNote: "支付宝 / 微信",
+    paymentNote: "Paddle Checkout",
   },
   {
     id: "yearly-subscription",
@@ -157,7 +157,7 @@ const subscriptionPlans: CreditPlan[] = [
       "最高性价比普通订阅",
       "到期后可手动续购",
     ],
-    paymentNote: "支付宝 / 微信",
+    paymentNote: "Paddle Checkout",
   },
 ];
 
@@ -247,31 +247,39 @@ export function PricingPage() {
       return;
     }
 
-    const result = await purchasePlan({
-      credits: creditAmount,
-      planId: plan.id,
-      planName: plan.name,
-      paymentChannel: usePaddle ? "paddle" : "mock",
-      note: usePaddle ? "Paddle checkout pending." : "订单已确认，积分已入账。",
-      userId: session?.userId,
-      email: session?.identifier,
-    });
-
-    const snapshot = result.account;
-
     setSelectedPlan(plan);
-    if (result.status === "pending") {
-      setPaymentStatus(
-        `已打开 ${plan.name} 支付窗口，付款成功后积分会自动入账。`,
-      );
-      return;
-    }
+    try {
+      const result = await purchasePlan({
+        credits: creditAmount,
+        planId: plan.id,
+        planName: plan.name,
+        paymentChannel: usePaddle ? "paddle" : "mock",
+        note: usePaddle ? "Paddle checkout pending." : "订单已确认，积分已入账。",
+        userId: session?.userId,
+        email: session?.identifier,
+      });
 
-    setPaymentStatus(
-      `已确认 ${plan.name}，${formatCredits(
-        result.creditedAmount,
-      )} 积分已入账，当前余额 ${formatCredits(snapshot.balance)} 积分。`,
-    );
+      const snapshot = result.account;
+
+      if (result.status === "pending") {
+        setPaymentStatus(
+          `已打开 ${plan.name} 支付窗口，付款成功后积分会自动入账。`,
+        );
+        return;
+      }
+
+      setPaymentStatus(
+        `已确认 ${plan.name}，${formatCredits(
+          result.creditedAmount,
+        )} 积分已入账，当前余额 ${formatCredits(snapshot.balance)} 积分。`,
+      );
+    } catch (error) {
+      setPaymentStatus(
+        error instanceof Error
+          ? error.message
+          : "支付通道暂时不可用，请稍后再试。",
+      );
+    }
   };
 
   return (

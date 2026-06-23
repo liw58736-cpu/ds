@@ -1,113 +1,86 @@
 # Commerce Studio API Contracts
 
-This document describes the frontend contract that the current mock backend adapter already follows.
+This document describes the current web product boundaries.
 
-## Runtime Switch
+## Runtime Switches
 
-Set `VITE_API_BASE_URL` to enable real backend mode:
-
-```env
-VITE_API_BASE_URL=https://api.example.com
-```
-
-When the value is empty, the frontend uses the local mock backend adapter.
-
-Set `VITE_KROMA_API_BASE_URL` in `.env.development` when only the image
-generation call should use the reference image backend from `F:\ai图像生成app`:
+Use the dedicated web account backend for auth, credits, and server-side credit
+deduction:
 
 ```env
-VITE_KROMA_API_BASE_URL=http://127.0.0.1:8000/api/v1
+VITE_WEB_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
 ```
 
-This sends generation requests to the async reference backend flow:
+`VITE_KROMA_API_BASE_URL` must stay empty unless a separate web image generation
+backend is configured. Do not point the web product at the mobile app backend.
 
-- `POST /image/generate`
-- `GET /image/task/{taskId}` until `done` or `error`
-
-Local task history, account, pricing, and legal-page behavior stay unchanged
-unless `VITE_API_BASE_URL` is also configured.
-
-Automated Playwright checks start Vite in `test` mode so they keep using the mock
-generation path and do not consume real provider credits.
-
-## Account
-
-`POST /api/account/session`
-
-Request body:
-
-```ts
-{
-  identifier: string;
-  authView: "login" | "register";
-  mode: "code" | "password";
-  storeName: string;
-  inviteCode: string;
-  createdAt: string;
-}
+```env
+VITE_KROMA_API_BASE_URL=
+VITE_API_BASE_URL=
 ```
 
-Response shape:
+Automated Playwright checks run in mock generation mode and do not consume real
+provider credits.
 
-```ts
-{
-  session: AccountSession | null;
-  balance: number;
-  transactions: CreditTransaction[];
-}
+## Auth
+
+`POST /api/v1/auth/signup`
+
+Creates a Supabase web user signup token and sends a kroma 6 digit email code
+through the configured email provider.
+
+`POST /api/v1/auth/verify-signup`
+
+Verifies the 6 digit public code. The frontend then returns the user to password
+login instead of auto-logging in.
+
+`POST /api/v1/auth/login`
+
+Password login.
+
+`POST /api/v1/auth/otp`
+
+Sends a 6 digit email login code.
+
+`POST /api/v1/auth/verify-code`
+
+Verifies the login code and returns an access token.
+
+## Credits
+
+`GET /api/v1/user/credits`
+
+Requires a bearer token. Creates an isolated web account record with 5 free
+credits when the user logs in for the first time.
+
+`POST /api/v1/user/credits/deduct`
+
+Requires a bearer token. Supports success-only charging:
+
+```text
+/api/v1/user/credits/deduct?amount=2&task_status=completed&charge_policy=success_only
 ```
 
-`GET /api/account/current?accountId=guest`
+Failed tasks do not consume credits when `charge_policy=success_only`.
 
-Returns the same `AccountSnapshot` shape.
+`POST /api/v1/user/credits/add`
 
-`POST /api/account/credits/consume`
-
-Request body:
-
-```ts
-{
-  amount: number;
-  label: string;
-  chargePolicy: "success_only";
-}
-```
-
-Returns the updated `AccountSnapshot`.
+Requires both a user bearer token and the server-only `X-Kroma-Billing-Key`
+header. This endpoint is for webhook or internal billing reconciliation only and
+must not be called from the browser.
 
 ## Billing
 
-`POST /api/billing/checkouts`
+The frontend opens Paddle Checkout when `VITE_PADDLE_CLIENT_TOKEN` and the plan
+price IDs are configured.
 
-Request body:
-
-```ts
-{
-  planId: string;
-  planName: string;
-  credits: number;
-  paymentChannel: "mock";
-  note: string;
-  currency: "CNY";
-}
-```
-
-Response shape:
-
-```ts
-{
-  orderId: string;
-  status: "paid";
-  creditedAmount: number;
-  account: AccountSnapshot;
-}
-```
+If Paddle is not configured in production, the price page shows a payment
+configuration error and does not create mock credits. Mock crediting is limited
+to development and tests.
 
 ## Generation
 
-`POST /api/generation/tasks`
-
-Request body:
+The frontend generation request shape remains:
 
 ```ts
 {
@@ -134,41 +107,4 @@ Route rules:
 - Edit tool mode: `PackyAPI`
 - HD / 2K / 4K: `Wuyinkeji HD -> RightCode HD -> GPTsAPI -> PackyAPI HD`
 
-Kroma-compatible generation adapter:
-
-- Frontend request stays in the `/api/generation/tasks` shape.
-- The adapter posts to `/image/generate`, then polls `/image/task/{taskId}`.
-- `main_image` and `detail_page` map to `task_type: "ecommerce"`.
-- `white_background` maps to `task_type: "image_edit"` so the reference router
-  uses its edit-tool path.
-- `1K`, `2K`, and `4K` map to the reference backend quality values
-  `standard`, `2k`, and `4k`.
-- Failed reference-backend responses return `creditCost: 0`.
-- The frontend remains in processing state while the reference task is still
-  `pending` or `processing`.
-
-Response shape:
-
-```ts
-{
-  taskId: string;
-  status: "completed" | "failed";
-  resultUrls: string[];
-  creditCost: number;
-  routeMode: "template" | "standard" | "edit_tool" | "hd";
-  errorCode?: string;
-  errorMessage?: string;
-}
-```
-
-## History
-
-`GET /api/generation/tasks?accountId=guest`
-
-Response shape:
-
-```ts
-GenerationTask[]
-```
-
-Charging remains success-only: failed generation tasks return `creditCost: 0` and should not deduct credits.
+Failed generation responses must return `creditCost: 0`.

@@ -220,6 +220,21 @@ describe("App", () => {
     expect(screen.queryByText("购买 专业包")).not.toBeInTheDocument();
   });
 
+  it("shows a payment configuration error instead of mock-crediting in production", async () => {
+    vi.stubEnv("PROD", true);
+    const user = userEvent.setup();
+    signInForTest();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "价格" }));
+    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "支付通道未配置，请稍后再试或联系支持。",
+    );
+    expect(getAccountSnapshot().balance).toBe(5);
+  });
+
   it("opens Paddle checkout from pricing without crediting before webhook", async () => {
     vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
     vi.stubEnv("VITE_PADDLE_PRICE_PRO_TOP_UP", "pri_pro");

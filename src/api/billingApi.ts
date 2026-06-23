@@ -76,6 +76,10 @@ export async function purchasePlan(
     return requestRemoteJson<PurchasePlanResult>(request);
   }
 
+  if (import.meta.env.PROD) {
+    throw new Error("支付通道未配置，请稍后再试或联系支持。");
+  }
+
   const creditedAmount = Math.max(0, Math.floor(request.body.credits));
   const account = addCredits({
     amount: creditedAmount,

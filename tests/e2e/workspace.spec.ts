@@ -120,7 +120,7 @@ test("navigation surfaces render and preserve generated history", async ({
   await expect(payButtons).toHaveCount(3);
   await payButtons.nth(2).click();
   await expect(page.getByRole("status")).toContainText(
-    "已确认 专业包，10,500 积分已入账，当前余额 10,501 积分。",
+    "已确认 专业包，950 积分已入账，当前余额 951 积分。",
   );
   await page.getByRole("button", { name: "订阅方案" }).click();
   await expect(page.getByRole("button", { name: "订阅方案" })).toHaveAttribute(
@@ -137,7 +137,7 @@ test("navigation surfaces render and preserve generated history", async ({
   await expect(
     page.getByRole("heading", { name: "账户与用量", level: 2 }),
   ).toBeVisible();
-  await expect(page.getByText("10,501 credits")).toBeVisible();
+  await expect(page.getByText("951 credits")).toBeVisible();
   await expect(page.getByText("购买 专业包")).toHaveCount(0);
 
   await page.getByRole("button", { name: "登录", exact: true }).click();

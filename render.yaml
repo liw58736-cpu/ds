@@ -17,6 +17,8 @@ services:
         value: https://kromaai.app
       - key: WEB_ALLOWED_AUTH_REDIRECTS
         value: https://kromaai.app,https://www.kromaai.app,https://kroma-web.onrender.com
+      - key: WEB_INTERNAL_BILLING_KEY
+        sync: false
 
   - type: web
     name: kroma-web

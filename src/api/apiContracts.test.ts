@@ -114,7 +114,7 @@ describe("apiContracts", () => {
         planName: "专业包",
         credits: 950,
         paymentChannel: "mock",
-        note: "支付通道待接入",
+        note: "开发环境 mock 支付",
       }),
     ).toMatchObject({
       endpoint: "/api/billing/checkouts",

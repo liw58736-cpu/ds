@@ -320,6 +320,7 @@ async function handleDeductCredits(request, url, env, fetchImpl) {
 }
 
 async function handleAddCredits(request, url, env, fetchImpl) {
+  requireInternalBillingAccess(request, env);
   const authUser = await requireAuthUser(request, env, fetchImpl);
   const user = await getOrCreateWebUser(fetchImpl, env, authUser);
   const amount = Math.max(0, Number.parseInt(url.searchParams.get("amount") ?? "0", 10));
@@ -336,6 +337,15 @@ async function handleAddCredits(request, url, env, fetchImpl) {
     success: true,
     credits_remaining: credits,
   });
+}
+
+function requireInternalBillingAccess(request, env) {
+  const configuredKey = env.WEB_INTERNAL_BILLING_KEY?.trim();
+  const providedKey = request.headers.get("x-kroma-billing-key")?.trim();
+
+  if (!configuredKey || providedKey !== configuredKey) {
+    throw new HttpError(403, { detail: "Credit top-up requires internal billing access" });
+  }
 }
 
 async function requireAuthUser(request, env, fetchImpl) {

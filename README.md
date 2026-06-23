@@ -7,30 +7,29 @@ npm install
 npm run dev -- --port 4290
 ```
 
-## Deploy with the Kroma backend
-
-The frontend is configured for same-origin backend deployment with:
+For local account API testing, point the frontend at the standalone web backend:
 
 ```env
-VITE_KROMA_API_BASE_URL=/api/v1
+VITE_WEB_API_BASE_URL=http://127.0.0.1:8000/api/v1
+VITE_KROMA_API_BASE_URL=
+VITE_API_BASE_URL=
 ```
 
-Build the frontend and copy it into the FastAPI backend static site directory:
+## Web deployment
 
-```bash
-npm run deploy:kroma-backend
+This website is deployed as two separate Render services:
+
+- `kroma-web`: static frontend for `https://kromaai.app`
+- `kroma-web-api`: standalone Node account and billing backend
+
+The web product must not be deployed into `F:\ai图像生成app` or the mobile app backend. The mobile app and web product use separate Supabase projects, separate credit balances, and separate Render services.
+
+Frontend production variables:
+
+```env
+VITE_WEB_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
+VITE_KROMA_API_BASE_URL=
+VITE_API_BASE_URL=
 ```
 
-By default this deploys to:
-
-```text
-F:\ai图像生成app\backend\static\site
-```
-
-Override the target when needed:
-
-```bash
-KROMA_BACKEND_SITE_DIR=/path/to/backend/static/site npm run deploy:kroma-backend
-```
-
-After that, start the backend from `F:\ai图像生成app\backend`; the FastAPI app serves both the website and `/api/v1` routes.
+Backend setup details are in `web-backend/README.md`.

@@ -68,7 +68,7 @@ describe("accountStore", () => {
       amount: 950,
       planId: "pro-top-up",
       planName: "专业包",
-      note: "支付通道待接入支付宝 / 微信",
+      note: "开发环境 mock 支付",
     });
 
     expect(snapshot.balance).toBe(955);

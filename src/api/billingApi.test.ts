@@ -19,7 +19,7 @@ describe("billingApi", () => {
       planName: "专业包",
       credits: 950,
       paymentChannel: "mock",
-      note: "支付通道待接入支付宝 / 微信。",
+      note: "开发环境 mock 支付。",
     });
 
     expect(result).toMatchObject({
@@ -61,7 +61,7 @@ describe("billingApi", () => {
       planName: "专业包",
       credits: 950,
       paymentChannel: "mock",
-      note: "支付通道待接入支付宝 / 微信。",
+      note: "开发环境 mock 支付。",
     });
 
     expect(result).toEqual(remoteResult);
@@ -69,6 +69,22 @@ describe("billingApi", () => {
       "https://api.example.com/api/billing/checkouts",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("does not create mock credits in production when payment is not configured", async () => {
+    vi.stubEnv("PROD", true);
+
+    await expect(
+      purchasePlan({
+        planId: "pro-top-up",
+        planName: "专业包",
+        credits: 950,
+        paymentChannel: "mock",
+        note: "订单已确认，积分已入账。",
+      }),
+    ).rejects.toThrow("支付通道未配置");
+
+    expect(getAccountSnapshot().balance).toBe(5);
   });
 
   it("opens Paddle checkout when Paddle is configured", async () => {
