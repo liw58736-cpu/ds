@@ -236,6 +236,7 @@ describe("App", () => {
   });
 
   it("opens Paddle checkout from pricing without crediting before webhook", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
     vi.stubEnv("VITE_PADDLE_PRICE_PRO_TOP_UP", "pri_pro");
     const checkoutOpen = vi.fn();
@@ -243,6 +244,41 @@ describe("App", () => {
       Initialize: vi.fn(),
       Checkout: { open: checkoutOpen },
     });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            service: "kroma-web-backend",
+            commit: "commit-1",
+            checked_at: "2026-06-24T00:00:00.000Z",
+            config: {
+              supabaseUrl: true,
+              supabaseAnonKey: true,
+              supabaseServiceRoleKey: true,
+              resendApiKey: true,
+              authEmailFrom: true,
+              authRedirectUrl: true,
+              allowedAuthRedirects: true,
+              internalBillingKey: true,
+              paddleWebhookSecret: true,
+              paddlePriceCredits: true,
+              imageApiBaseUrl: true,
+              imageApiKey: true,
+            },
+            database: {
+              webUsers: true,
+              webCreditTransactions: true,
+              webGenerations: true,
+              webAuthCodes: true,
+              webBillingEvents: true,
+            },
+            missing: [],
+          }),
+      }),
+    );
     const user = userEvent.setup();
     signInWithKromaForTest("seller@example.com");
     render(<App />);
@@ -263,6 +299,67 @@ describe("App", () => {
       }),
     );
     expect(getAccountSnapshot().balance).toBe(5);
+  });
+
+  it("blocks Paddle checkout when backend payment fulfillment is not ready", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
+    vi.stubEnv("VITE_PADDLE_PRICE_PRO_TOP_UP", "pri_pro");
+    const checkoutOpen = vi.fn();
+    vi.stubGlobal("Paddle", {
+      Initialize: vi.fn(),
+      Checkout: { open: checkoutOpen },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: false,
+            service: "kroma-web-backend",
+            commit: "commit-1",
+            checked_at: "2026-06-24T00:00:00.000Z",
+            config: {
+              supabaseUrl: true,
+              supabaseAnonKey: true,
+              supabaseServiceRoleKey: true,
+              resendApiKey: true,
+              authEmailFrom: true,
+              authRedirectUrl: true,
+              allowedAuthRedirects: true,
+              internalBillingKey: false,
+              paddleWebhookSecret: false,
+              paddlePriceCredits: false,
+              imageApiBaseUrl: true,
+              imageApiKey: true,
+            },
+            database: {
+              webUsers: true,
+              webCreditTransactions: true,
+              webGenerations: true,
+              webAuthCodes: true,
+              webBillingEvents: true,
+            },
+            missing: [
+              "internalBillingKey",
+              "paddleWebhookSecret",
+              "paddlePriceCredits",
+            ],
+          }),
+      }),
+    );
+    const user = userEvent.setup();
+    signInWithKromaForTest("seller@example.com");
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "价格" }));
+    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "支付入账暂未配置完成，请稍后再试或联系支持。",
+    );
+    expect(checkoutOpen).not.toHaveBeenCalled();
   });
 
   it("opens account page after Paddle success redirect and clears the URL flag", async () => {

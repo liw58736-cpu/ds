@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { getWebBackendHealth } from "../api/accountApi";
 import { isPaddleCheckoutConfigured, purchasePlan } from "../api/billingApi";
 import { getAccountSnapshot } from "../storage/accountStore";
+import type { WebBackendHealth } from "../api/accountApi";
 
 type BillingType = "top-up" | "subscription";
 
@@ -30,6 +32,15 @@ function parseCreditAmount(value: string): number {
 
 function formatCredits(value: number): string {
   return new Intl.NumberFormat("zh-CN").format(value);
+}
+
+function isPaymentFulfillmentReady(health: WebBackendHealth | null): boolean {
+  return Boolean(
+    health?.config.internalBillingKey &&
+      health.config.paddleWebhookSecret &&
+      health.config.paddlePriceCredits &&
+      health.database?.webBillingEvents !== false,
+  );
 }
 
 const topUpPlans: CreditPlan[] = [
@@ -249,6 +260,15 @@ export function PricingPage() {
 
     setSelectedPlan(plan);
     try {
+      if (usePaddle) {
+        const backendHealth = await getWebBackendHealth();
+
+        if (!isPaymentFulfillmentReady(backendHealth)) {
+          setPaymentStatus("支付入账暂未配置完成，请稍后再试或联系支持。");
+          return;
+        }
+      }
+
       const result = await purchasePlan({
         credits: creditAmount,
         planId: plan.id,
