@@ -151,6 +151,14 @@ async function handleSignup(request, env, fetchImpl) {
     });
   } catch (error) {
     if (isRegisteredEmailError(error)) {
+      const pendingSignupUserId = await findPendingSignupUserId(fetchImpl, env, email);
+      if (pendingSignupUserId) {
+        return await sendSignupVerificationCode(fetchImpl, env, {
+          email,
+          userId: pendingSignupUserId,
+        });
+      }
+
       throw registeredEmailError();
     }
 
@@ -160,16 +168,21 @@ async function handleSignup(request, env, fetchImpl) {
   if (!userId) {
     throw new HttpError(500, { detail: "Signup user was not created" });
   }
+
+  return await sendSignupVerificationCode(fetchImpl, env, { email, userId });
+}
+
+async function sendSignupVerificationCode(fetchImpl, env, input) {
   const code = createSixDigitCode();
   await storeAuthCode(fetchImpl, env, {
-    email,
+    email: input.email,
     type: "signup",
     code,
-    providerToken: userId,
+    providerToken: input.userId,
   });
 
   await sendAuthCodeEmail(fetchImpl, env, {
-    email,
+    email: input.email,
     code,
     subject: "kroma 注册验证码",
     title: "kroma 注册验证码",
@@ -285,6 +298,20 @@ async function resolveAuthToken(fetchImpl, env, input) {
     method: "DELETE",
   });
   return String(row.provider_token);
+}
+
+async function findPendingSignupUserId(fetchImpl, env, email) {
+  const rows = await restFetch(
+    fetchImpl,
+    env,
+    `/web_auth_codes?email=eq.${encodeURIComponent(email)}&type=eq.signup&select=provider_token&order=created_at.desc&limit=1`,
+  );
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+
+  return rows[0]?.provider_token ? String(rows[0].provider_token) : null;
 }
 
 async function ensureEmailIsNotRegistered(fetchImpl, env, email) {

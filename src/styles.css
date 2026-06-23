@@ -1805,6 +1805,11 @@ button {
   min-height: 42px;
 }
 
+.login-code-actions {
+  display: grid;
+  gap: 8px;
+}
+
 .login-mode-toggle {
   justify-self: end;
   padding: 0;

@@ -585,6 +585,15 @@ describe("App", () => {
         ok: true,
         json: () =>
           Promise.resolve({
+            access_token: "",
+            refresh_token: "",
+            user_id: "",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
             access_token: "signup-access",
             refresh_token: "signup-refresh",
             user_id: "user-1",
@@ -631,6 +640,15 @@ describe("App", () => {
       "http://127.0.0.1:8000/api/v1/auth/signup",
       expect.objectContaining({ method: "POST" }),
     );
+    await user.click(within(registerForm).getByRole("button", { name: "重新发送验证码" }));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "验证码已重新发送至邮箱，请查看最新邮件。",
+    );
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith("/api/v1/auth/signup"),
+      ),
+    ).toHaveLength(2);
 
     await user.type(within(registerForm).getByLabelText("邮箱验证码"), "12345678");
     await user.click(

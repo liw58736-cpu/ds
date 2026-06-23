@@ -318,6 +318,12 @@ test("auth signup maps existing Supabase auth users to the registered email resp
       if (url.endsWith("/auth/v1/admin/users")) {
         return jsonResponse({ message: "A user with this email address has already been registered" }, 422);
       }
+      if (
+        url.includes("/rest/v1/web_auth_codes?email=eq.seller%40example.com") &&
+        url.includes("type=eq.signup")
+      ) {
+        return jsonResponse([]);
+      }
       throw new Error(`Unexpected URL: ${url}`);
     },
   });
@@ -340,6 +346,65 @@ test("auth signup maps existing Supabase auth users to the registered email resp
       message: "该邮箱已注册，请直接登录。",
     },
   });
+});
+
+test("auth signup resends a custom code for a pending unconfirmed signup", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_RESEND_API_KEY: "resend-key",
+      WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.includes("/rest/v1/web_users?email=eq.seller%40example.com")) {
+        return jsonResponse([]);
+      }
+      if (url.endsWith("/auth/v1/admin/users")) {
+        return jsonResponse({ message: "A user with this email address has already been registered" }, 422);
+      }
+      if (
+        url.includes("/rest/v1/web_auth_codes?email=eq.seller%40example.com") &&
+        url.includes("type=eq.signup")
+      ) {
+        return jsonResponse([
+          {
+            id: "old-code",
+            provider_token: "auth-user-1",
+          },
+        ]);
+      }
+      if (url.endsWith("/rest/v1/web_auth_codes")) {
+        return jsonResponse([{ id: "code-2", ...JSON.parse(init.body) }]);
+      }
+      if (url === "https://api.resend.com/emails") {
+        return jsonResponse({ id: "email-2" });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/auth/signup", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "seller@example.com",
+        password: "secret-password",
+        redirect_to: "https://kromaai.app",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const storedCodeBody = JSON.parse(calls[3].init.body);
+  assert.match(storedCodeBody.code, /^\d{6}$/);
+  assert.equal(storedCodeBody.provider_token, "auth-user-1");
+  const emailBody = JSON.parse(calls[4].init.body);
+  assert.match(emailBody.html, new RegExp(storedCodeBody.code));
+  assert.doesNotMatch(emailBody.html, /auth-user-1/);
 });
 
 test("auth otp sends a custom login code email", async () => {

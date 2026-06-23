@@ -121,6 +121,51 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
     }
   };
 
+  const handleResendSignupCode = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    const normalizedIdentifier = identifier.trim();
+    const normalizedPassword = password.trim();
+
+    if (!normalizedIdentifier || !normalizedPassword) {
+      showError("请返回确认邮箱和密码后再重新发送验证码。");
+      return;
+    }
+
+    setIsSubmitting(true);
+    showStatus("正在重新发送验证码，请稍候...");
+
+    try {
+      await loginOrRegister({
+        identifier: normalizedIdentifier,
+        credential: normalizedPassword,
+        authView: "register",
+        mode: "password",
+        storeName: "",
+        inviteCode: "",
+        createdAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "";
+
+      if (!errorMessage.includes("请查看邮箱完成账户验证")) {
+        showError(
+          error instanceof Error
+            ? `验证码重新发送失败：${error.message}`
+            : "验证码重新发送失败，请稍后重试。",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    setCode("");
+    showStatus("验证码已重新发送至邮箱，请查看最新邮件。");
+    setIsSubmitting(false);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -334,18 +379,28 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
                 />
               </label>
               {isRegisterVerification ? (
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => {
-                    setRegisterStep("form");
-                    setCode("");
-                    showStatus("请确认邮箱和密码后重新提交注册。");
-                  }}
-                  disabled={isSubmitting}
-                >
-                  返回修改
-                </button>
+                <div className="login-code-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleResendSignupCode}
+                    disabled={isSubmitting}
+                  >
+                    重新发送验证码
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      setRegisterStep("form");
+                      setCode("");
+                      showStatus("请确认邮箱和密码后重新提交注册。");
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    返回修改
+                  </button>
+                </div>
               ) : (
                 <button
                   type="button"

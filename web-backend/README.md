@@ -17,8 +17,11 @@ Supabase project from the mobile app.
 7. Use a verified sender domain, for example `no-reply@i18.pro`.
 8. Keep this web project separate from the mobile app Supabase project.
 
-The backend sends its own 6 digit signup and login codes through Resend. Supabase
-still creates the underlying auth token, but users only see the kroma code.
+The backend sends its own 6 digit codes through Resend. Signup creates an
+unconfirmed Supabase auth user, stores only the internal user id with the public
+kroma code, and confirms the user after the 6 digit code is verified. Login code
+sign-in still resolves the public kroma code to Supabase's internal one-time
+token, but that internal token is never shown in the kroma email.
 
 ## Render Environment
 
