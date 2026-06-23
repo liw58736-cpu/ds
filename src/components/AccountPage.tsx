@@ -21,7 +21,6 @@ function getPaymentStatusNote(backendHealth: WebBackendHealth | null): string {
 
   const missing = [
     !backendHealth.config.paddleWebhookSecret ? "Paddle webhook" : "",
-    !backendHealth.config.internalBillingKey ? "内部入账密钥" : "",
     !backendHealth.config.paddlePriceCredits ? "价格积分映射" : "",
     backendHealth.database?.webBillingEvents === false ? "账单事件表" : "",
   ].filter(Boolean);
@@ -119,7 +118,6 @@ export function AccountPage({ paymentStatus }: AccountPageProps) {
       label: "支付入账",
       value: backendHealth
         ? backendHealth.config.paddleWebhookSecret &&
-          backendHealth.config.internalBillingKey &&
           backendHealth.config.paddlePriceCredits &&
           backendHealth.database?.webBillingEvents !== false
           ? "正常"

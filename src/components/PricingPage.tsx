@@ -36,8 +36,7 @@ function formatCredits(value: number): string {
 
 function isPaymentFulfillmentReady(health: WebBackendHealth | null): boolean {
   return Boolean(
-    health?.config.internalBillingKey &&
-      health.config.paddleWebhookSecret &&
+    health?.config.paddleWebhookSecret &&
       health.config.paddlePriceCredits &&
       health.database?.webBillingEvents !== false,
   );

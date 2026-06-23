@@ -301,6 +301,63 @@ describe("App", () => {
     expect(getAccountSnapshot().balance).toBe(5);
   });
 
+  it("does not block Paddle checkout when only the internal top-up key is missing", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
+    vi.stubEnv("VITE_PADDLE_PRICE_PRO_TOP_UP", "pri_pro");
+    const checkoutOpen = vi.fn();
+    vi.stubGlobal("Paddle", {
+      Initialize: vi.fn(),
+      Checkout: { open: checkoutOpen },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: false,
+            service: "kroma-web-backend",
+            commit: "commit-1",
+            checked_at: "2026-06-24T00:00:00.000Z",
+            config: {
+              supabaseUrl: true,
+              supabaseAnonKey: true,
+              supabaseServiceRoleKey: true,
+              resendApiKey: true,
+              authEmailFrom: true,
+              authRedirectUrl: true,
+              allowedAuthRedirects: true,
+              internalBillingKey: false,
+              paddleWebhookSecret: true,
+              paddlePriceCredits: true,
+              imageApiBaseUrl: true,
+              imageApiKey: true,
+            },
+            database: {
+              webUsers: true,
+              webCreditTransactions: true,
+              webGenerations: true,
+              webAuthCodes: true,
+              webBillingEvents: true,
+            },
+            missing: ["internalBillingKey"],
+          }),
+      }),
+    );
+    const user = userEvent.setup();
+    signInWithKromaForTest("seller@example.com");
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "价格" }));
+    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "已打开 专业包 支付窗口，付款成功后积分会自动入账。",
+    );
+    expect(checkoutOpen).toHaveBeenCalled();
+  });
+
   it("blocks Paddle checkout when backend payment fulfillment is not ready", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
@@ -483,6 +540,58 @@ describe("App", () => {
     expect(within(systemStatus).getAllByText("待配置")).toHaveLength(2);
     expect(within(systemStatus).getByText(/缺少Paddle webhook/)).toBeInTheDocument();
     expect(within(systemStatus).getByText(/缺少生图上游地址/)).toBeInTheDocument();
+  });
+
+  it("does not mark Paddle payment as incomplete when only manual top-up is missing", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: false,
+            service: "kroma-web-backend",
+            commit: "commit-1",
+            checked_at: "2026-06-24T00:00:00.000Z",
+            config: {
+              supabaseUrl: true,
+              supabaseAnonKey: true,
+              supabaseServiceRoleKey: true,
+              resendApiKey: true,
+              authEmailFrom: true,
+              authRedirectUrl: true,
+              allowedAuthRedirects: true,
+              internalBillingKey: false,
+              paddleWebhookSecret: true,
+              paddlePriceCredits: true,
+              imageApiBaseUrl: true,
+              imageApiKey: true,
+            },
+            database: {
+              webUsers: true,
+              webCreditTransactions: true,
+              webGenerations: true,
+              webAuthCodes: true,
+              webBillingEvents: true,
+            },
+            missing: ["internalBillingKey"],
+          }),
+      }),
+    );
+    signInWithKromaForTest("seller@example.com");
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "账户" }));
+
+    const systemStatus = await screen.findByLabelText("系统状态");
+    expect(within(systemStatus).getByText("支付入账")).toBeInTheDocument();
+    const paymentCard = within(systemStatus)
+      .getByText("支付入账")
+      .closest("article");
+    expect(paymentCard).not.toBeNull();
+    expect(within(paymentCard!).getByText("正常")).toBeInTheDocument();
+    expect(within(systemStatus).queryByText(/内部入账密钥/)).not.toBeInTheDocument();
   });
 
   it("labels cloud credits separately from trial credits on sync failure", async () => {
