@@ -9,7 +9,11 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat("zh-CN").format(value);
 }
 
-export function AccountPage() {
+interface AccountPageProps {
+  paymentStatus?: string | null;
+}
+
+export function AccountPage({ paymentStatus }: AccountPageProps) {
   const [account, setAccount] = useState(() => getCurrentAccountSnapshot());
   const [creditSyncStatus, setCreditSyncStatus] =
     useState<AccountCreditSyncStatus>(() =>
@@ -27,7 +31,7 @@ export function AccountPage() {
   const balanceLabel = isCloudAccount ? "云端积分余额" : "试用积分余额";
   const balanceNote =
     creditSyncStatus === "cloud"
-      ? "App 和网页共用同一份云端积分。"
+      ? "当前显示网页端云端积分余额。"
       : creditSyncStatus === "cloud_sync_failed"
         ? "已登录，云端余额暂时同步失败，请刷新后重试。"
         : "未登录时仅显示本机试用积分，登录后同步云端余额。";
@@ -67,6 +71,11 @@ export function AccountPage() {
           <h2>账户与用量</h2>
           <p>查看积分余额、套餐购买和最近扣点记录。</p>
         </div>
+        {paymentStatus === "paddle-success" ? (
+          <p className="account-payment-status" role="status">
+            支付已完成，积分到账可能需要几秒钟，请刷新账户余额确认。
+          </p>
+        ) : null}
         <div className="account-grid">
           {usageItems.map((item) => (
             <article className="usage-card" key={item.label}>

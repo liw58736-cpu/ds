@@ -23,9 +23,20 @@ function isStudioPage(page: AppPage): page is StudioPage {
 }
 
 export default function App() {
-  const [page, setPage] = useState<AppPage>("home");
+  const initialAccount = getCurrentAccountSnapshot();
+  const initialPaymentStatus =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("payment")
+      : null;
+  const [page, setPage] = useState<AppPage>(
+    initialPaymentStatus === "paddle-success"
+      ? initialAccount.session
+        ? "account"
+        : "login"
+      : "home",
+  );
   const [isAuthenticated, setIsAuthenticated] = useState(
-    () => Boolean(getCurrentAccountSnapshot().session),
+    () => Boolean(initialAccount.session),
   );
   const [activeStudioModule, setActiveStudioModule] =
     useState<StudioPage>("main_image");
@@ -56,7 +67,7 @@ export default function App() {
     ) : page === "pricing" ? (
       <PricingPage />
     ) : page === "account" ? (
-      <AccountPage />
+      <AccountPage paymentStatus={initialPaymentStatus} />
     ) : page === "login" ? (
       <LoginPage
         onOpenLegal={handlePageChange}
@@ -84,6 +95,15 @@ export default function App() {
       window.scrollTo({ top: 0, left: 0 });
     }
   }, [page]);
+
+  useEffect(() => {
+    if (initialPaymentStatus !== "paddle-success") {
+      return;
+    }
+
+    const cleanUrl = `${window.location.origin}${window.location.pathname}${window.location.hash}`;
+    window.history.replaceState({}, "", cleanUrl);
+  }, [initialPaymentStatus]);
 
   return (
     <AppShell

@@ -265,6 +265,35 @@ describe("App", () => {
     expect(getAccountSnapshot().balance).toBe(5);
   });
 
+  it("opens account page after Paddle success redirect and clears the URL flag", async () => {
+    window.history.pushState({}, "", "/?payment=paddle-success");
+    const user = userEvent.setup();
+    signInWithKromaForTest("seller@example.com");
+    render(<App />);
+
+    expect(
+      screen.getByRole("heading", { name: "账户与用量" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "支付已完成，积分到账可能需要几秒钟，请刷新账户余额确认。",
+    );
+    expect(window.location.search).toBe("");
+
+    await user.click(screen.getByRole("button", { name: "账户" }));
+    expect(screen.queryByText(/App 和网页共用/)).not.toBeInTheDocument();
+  });
+
+  it("requires login when Paddle success redirect has no saved session", () => {
+    window.history.pushState({}, "", "/?payment=paddle-success");
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "账户与用量" }),
+    ).not.toBeInTheDocument();
+    expect(window.location.search).toBe("");
+  });
+
   it("requires a Kroma account before opening Paddle checkout", async () => {
     vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
     vi.stubEnv("VITE_PADDLE_PRICE_PRO_TOP_UP", "pri_pro");

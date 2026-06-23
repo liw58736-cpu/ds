@@ -324,13 +324,15 @@ button {
   overflow: hidden;
 }
 
-.pricing-payment-status {
+.pricing-payment-status,
+.account-payment-status {
   margin: 0 16px 16px;
   color: var(--ink-muted);
   font-size: 0.88rem;
 }
 
-.pricing-payment-status {
+.pricing-payment-status,
+.account-payment-status {
   width: fit-content;
   border: 1px solid #bde8cd;
   border-radius: 8px;
@@ -3117,6 +3119,7 @@ body {
 }
 
 .pricing-payment-status,
+.account-payment-status,
 .account-disclosure,
 .login-message {
   color: #37207f;
@@ -3992,7 +3995,8 @@ body {
   border-bottom: 0;
 }
 
-.pricing-payment-status {
+.pricing-payment-status,
+.account-payment-status {
   margin: 0;
 }
 
