@@ -39,7 +39,7 @@ async function handleRequest(request, env, fetchImpl) {
 
   try {
     if (url.pathname === "/api/v1/health") {
-      return jsonResponse({ ok: true, service: "kroma-web-backend" });
+      return jsonResponse(buildHealthResponse(env));
     }
 
     if (url.pathname === "/api/v1/auth/signup" && request.method === "POST") {
@@ -748,6 +748,32 @@ function parseAllowedRedirects(env) {
       })
       .filter(Boolean),
   );
+}
+
+function buildHealthResponse(env) {
+  const config = {
+    supabaseUrl: Boolean(env.WEB_SUPABASE_URL),
+    supabaseAnonKey: Boolean(env.WEB_SUPABASE_ANON_KEY),
+    supabaseServiceRoleKey: Boolean(env.WEB_SUPABASE_SERVICE_ROLE_KEY),
+    resendApiKey: Boolean(env.WEB_RESEND_API_KEY),
+    authEmailFrom: Boolean(env.WEB_AUTH_EMAIL_FROM),
+    authRedirectUrl: Boolean(env.WEB_AUTH_REDIRECT_URL),
+    allowedAuthRedirects: Boolean(env.WEB_ALLOWED_AUTH_REDIRECTS),
+    internalBillingKey: Boolean(env.WEB_INTERNAL_BILLING_KEY),
+    paddleWebhookSecret: Boolean(env.WEB_PADDLE_WEBHOOK_SECRET),
+  };
+  const missing = Object.entries(config)
+    .filter(([, configured]) => !configured)
+    .map(([key]) => key);
+
+  return {
+    ok: missing.length === 0,
+    service: "kroma-web-backend",
+    commit: env.RENDER_GIT_COMMIT ?? env.GIT_COMMIT ?? "unknown",
+    checked_at: new Date().toISOString(),
+    config,
+    missing,
+  };
 }
 
 function jsonResponse(body, status = 200) {

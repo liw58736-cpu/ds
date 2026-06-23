@@ -39,6 +39,15 @@ WEB_PADDLE_WEBHOOK_SECRET=<paddle-webhook-secret>
 `WEB_INTERNAL_BILLING_KEY` protects manual or webhook-driven credit top-ups. Do
 not expose it to the frontend.
 
+After deploying, open:
+
+```text
+https://kroma-web-api.onrender.com/api/v1/health
+```
+
+The response includes the deployed commit and a `missing` list for required
+configuration. It only returns boolean configuration status, never secret values.
+
 ## Paddle Webhook
 
 Create a Paddle webhook endpoint:

@@ -23,6 +23,70 @@ function paddleSignature(rawBody, secret, timestamp = Math.floor(Date.now() / 10
   return `ts=${timestamp};h1=${h1}`;
 }
 
+test("health endpoint reports deployment commit and missing configuration", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_RESEND_API_KEY: "resend-key",
+      WEB_AUTH_EMAIL_FROM: "kroma <no-reply@example.com>",
+      WEB_AUTH_REDIRECT_URL: "https://kromaai.app",
+      WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
+      WEB_INTERNAL_BILLING_KEY: "billing-secret",
+      WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+      RENDER_GIT_COMMIT: "commit-1",
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/health"),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  assert.match(body.checked_at, /^\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(body, {
+    ok: true,
+    service: "kroma-web-backend",
+    commit: "commit-1",
+    checked_at: body.checked_at,
+    config: {
+      supabaseUrl: true,
+      supabaseAnonKey: true,
+      supabaseServiceRoleKey: true,
+      resendApiKey: true,
+      authEmailFrom: true,
+      authRedirectUrl: true,
+      allowedAuthRedirects: true,
+      internalBillingKey: true,
+      paddleWebhookSecret: true,
+    },
+    missing: [],
+  });
+});
+
+test("health endpoint identifies missing production configuration", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/health"),
+  );
+  const body = await readJson(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, false);
+  assert.equal(body.config.supabaseUrl, true);
+  assert.equal(body.config.supabaseServiceRoleKey, false);
+  assert.ok(body.missing.includes("supabaseServiceRoleKey"));
+  assert.ok(body.missing.includes("paddleWebhookSecret"));
+});
+
 test("auth signup generates an OTP and sends a custom verification email", async () => {
   const calls = [];
   const app = createWebBackend({
