@@ -624,6 +624,14 @@ function parsePaddlePriceCreditMap(env) {
   }
 }
 
+function hasValidPaddlePriceCreditMap(env) {
+  return Object.values(parsePaddlePriceCreditMap(env)).some((entry) => {
+    const credits = Number.parseInt(String(entry?.credits ?? "0"), 10);
+
+    return Number.isFinite(credits) && credits > 0;
+  });
+}
+
 function verifyPaddleWebhookSignature(rawBody, signatureHeader, env) {
   const secret = env.WEB_PADDLE_WEBHOOK_SECRET?.trim();
   if (!secret) {
@@ -978,7 +986,7 @@ async function buildHealthResponse(env, fetchImpl) {
     allowedAuthRedirects: Boolean(env.WEB_ALLOWED_AUTH_REDIRECTS),
     internalBillingKey: Boolean(env.WEB_INTERNAL_BILLING_KEY),
     paddleWebhookSecret: Boolean(env.WEB_PADDLE_WEBHOOK_SECRET),
-    paddlePriceCredits: Boolean(env.WEB_PADDLE_PRICE_CREDITS_JSON),
+    paddlePriceCredits: hasValidPaddlePriceCreditMap(env),
     imageApiBaseUrl: Boolean(env.WEB_IMAGE_API_BASE_URL),
     imageApiKey: Boolean(env.WEB_IMAGE_API_KEY),
   };

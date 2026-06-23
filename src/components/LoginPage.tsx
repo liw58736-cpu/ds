@@ -14,7 +14,8 @@ interface LoginPageProps {
 
 const INITIAL_STATUS = "使用手机号或邮箱登录，查看积分、订单和历史任务。";
 const EMAIL_VERIFICATION_MESSAGE =
-  "验证码已发送至邮箱，请输入邮件里的 6 位验证码完成注册。";
+  "验证码已发送至邮箱，请输入 kroma 邮件里的 6 位验证码完成注册。";
+const SIX_DIGIT_CODE_PATTERN = /^\d{6}$/;
 
 export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
   const [authView, setAuthView] = useState<AuthView>("login");
@@ -144,6 +145,15 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
       return;
     }
 
+    if (activeMode === "code" && !SIX_DIGIT_CODE_PATTERN.test(normalizedCode)) {
+      showError(
+        isRegisterVerification
+          ? "请输入 kroma 注册邮件里的 6 位数字验证码。"
+          : "请输入 6 位数字验证码。",
+      );
+      return;
+    }
+
     if (isRegister && !isRegisterVerification) {
       if (!normalizedConfirmPassword) {
         showError("请再次输入密码。");
@@ -179,7 +189,7 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
         setPassword("");
         setConfirmPassword("");
         setCode("");
-        showStatus("注册验证成功，请输入密码登录。");
+        showStatus("注册验证成功，邮箱已填好，请输入刚才设置的密码登录。");
         return;
       }
 
@@ -194,12 +204,15 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
       });
 
       if (account.session?.provider === "kroma") {
+        if (isRegister) {
+          setRegisterStep("verify");
+          setCode("");
+          showStatus(EMAIL_VERIFICATION_MESSAGE);
+          return;
+        }
+
         onAuthenticated?.();
-        showStatus(
-          isRegister
-            ? "注册成功。"
-            : "登录成功。",
-        );
+        showStatus("登录成功。");
         return;
       }
 

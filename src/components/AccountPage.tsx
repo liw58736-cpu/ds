@@ -88,6 +88,7 @@ export function AccountPage({ paymentStatus }: AccountPageProps) {
       value: backendHealth
         ? backendHealth.config.paddleWebhookSecret &&
           backendHealth.config.internalBillingKey &&
+          backendHealth.config.paddlePriceCredits &&
           backendHealth.database?.webBillingEvents !== false
           ? "正常"
           : "待配置"

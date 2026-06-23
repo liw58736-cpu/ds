@@ -357,6 +357,7 @@ describe("App", () => {
               resendApiKey: true,
               internalBillingKey: true,
               paddleWebhookSecret: false,
+              paddlePriceCredits: false,
               imageApiBaseUrl: false,
               imageApiKey: false,
             },
@@ -532,6 +533,15 @@ describe("App", () => {
       expect.objectContaining({ method: "POST" }),
     );
 
+    await user.type(within(registerForm).getByLabelText("邮箱验证码"), "12345678");
+    await user.click(
+      within(registerForm).getByRole("button", { name: "验证并完成注册" }),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "请输入 kroma 注册邮件里的 6 位数字验证码。",
+    );
+    await user.clear(within(registerForm).getByLabelText("邮箱验证码"));
+
     await user.type(within(registerForm).getByLabelText("邮箱验证码"), "123456");
     await user.click(
       within(registerForm).getByRole("button", { name: "验证并完成注册" }),
@@ -544,7 +554,7 @@ describe("App", () => {
     );
     expect(within(loginForm).getByLabelText("密码")).toHaveValue("");
     expect(screen.getByRole("status")).toHaveTextContent(
-      "注册验证成功，请输入密码登录。",
+      "注册验证成功，邮箱已填好，请输入刚才设置的密码登录。",
     );
     expect(getAccountSnapshot().session).toBeNull();
   });
