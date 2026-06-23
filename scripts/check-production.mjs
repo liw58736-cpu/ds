@@ -1,8 +1,31 @@
 import { execFileSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 const apiBaseUrl =
   process.env.KROMA_WEB_API_BASE_URL || "https://kroma-web-api.onrender.com/api/v1";
 const healthUrl = `${apiBaseUrl.replace(/\/+$/, "")}/health`;
+
+export function getExpectedBackendCommit(execFile = execFileSync) {
+  try {
+    return execFile(
+      "git",
+      [
+        "log",
+        "-1",
+        "--format=%H",
+        "--",
+        "web-backend",
+        "render.yaml",
+      ],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    ).trim();
+  } catch {
+    return null;
+  }
+}
 
 function getLocalCommit() {
   try {
@@ -22,6 +45,7 @@ function printStatus(label, ok, detail = "") {
 
 async function main() {
   const localCommit = getLocalCommit();
+  const expectedBackendCommit = getExpectedBackendCommit();
   const response = await fetch(healthUrl);
   const payload = await response.json();
 
@@ -40,10 +64,16 @@ async function main() {
 
   const liveCommit = String(payload.commit ?? "");
   const commitMatches =
-    Boolean(localCommit) && liveCommit.toLowerCase().startsWith(localCommit.toLowerCase());
+    Boolean(expectedBackendCommit) &&
+    liveCommit.toLowerCase().startsWith(expectedBackendCommit.toLowerCase());
   printStatus("local commit", Boolean(localCommit), localCommit ?? "unavailable");
+  printStatus(
+    "expected backend commit",
+    Boolean(expectedBackendCommit),
+    expectedBackendCommit ?? "unavailable",
+  );
   printStatus("live commit", Boolean(liveCommit), liveCommit || "missing");
-  printStatus("deployed current commit", commitMatches);
+  printStatus("deployed backend commit", commitMatches);
 
   const missing = Array.isArray(payload.missing) ? payload.missing : [];
   printStatus("required environment", missing.length === 0, missing.join(", ") || "complete");
@@ -59,7 +89,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`CHECK production health failed: ${error.message}`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(`CHECK production health failed: ${error.message}`);
+    process.exitCode = 1;
+  });
+}
