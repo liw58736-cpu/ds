@@ -27,6 +27,32 @@ export function getExpectedBackendCommit(execFile = execFileSync) {
   }
 }
 
+export function isLiveCommitCompatible(
+  expectedBackendCommit,
+  liveCommit,
+  execFile = execFileSync,
+) {
+  const expected = String(expectedBackendCommit ?? "").trim().toLowerCase();
+  const live = String(liveCommit ?? "").trim().toLowerCase();
+
+  if (!expected || !live) {
+    return false;
+  }
+
+  if (live.startsWith(expected)) {
+    return true;
+  }
+
+  try {
+    execFile("git", ["merge-base", "--is-ancestor", expected, live], {
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function getLocalCommit() {
   try {
     return execFileSync("git", ["rev-parse", "HEAD"], {
@@ -63,9 +89,10 @@ async function main() {
   }
 
   const liveCommit = String(payload.commit ?? "");
-  const commitMatches =
-    Boolean(expectedBackendCommit) &&
-    liveCommit.toLowerCase().startsWith(expectedBackendCommit.toLowerCase());
+  const commitMatches = isLiveCommitCompatible(
+    expectedBackendCommit,
+    liveCommit,
+  );
   printStatus("local commit", Boolean(localCommit), localCommit ?? "unavailable");
   printStatus(
     "expected backend commit",
