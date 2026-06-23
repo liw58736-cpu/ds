@@ -6,6 +6,7 @@ import {
   getCurrentAccountSnapshot,
   getCurrentAccount,
   getCurrentAccountWithCreditSync,
+  getWebBackendHealth,
   loginOrRegister,
   requestLoginCode,
   verifySignupCode,
@@ -382,6 +383,35 @@ describe("accountApi", () => {
           token: "123456",
         }),
       }),
+    );
+  });
+
+  it("loads web backend health without exposing secret values", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          ok: false,
+          service: "kroma-web-backend",
+          commit: "commit-1",
+          checked_at: "2026-06-23T00:00:00.000Z",
+          config: {
+            supabaseUrl: true,
+            paddleWebhookSecret: false,
+          },
+          missing: ["paddleWebhookSecret"],
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getWebBackendHealth()).resolves.toMatchObject({
+      ok: false,
+      missing: ["paddleWebhookSecret"],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/v1/health",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 

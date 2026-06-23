@@ -32,6 +32,15 @@ export interface AccountWithCreditSync {
   creditSyncStatus: AccountCreditSyncStatus;
 }
 
+export interface WebBackendHealth {
+  ok: boolean;
+  service: string;
+  commit: string;
+  checked_at: string;
+  config: Record<string, boolean>;
+  missing: string[];
+}
+
 export async function getCurrentAccount(): Promise<AccountSnapshot> {
   const syncedAccount = await getCurrentAccountWithCreditSync();
   return syncedAccount.account;
@@ -166,6 +175,25 @@ export async function requestLoginCode(identifier: string): Promise<KromaOtpResp
       ...(redirectTo ? { redirect_to: redirectTo } : {}),
     }),
   });
+}
+
+export async function getWebBackendHealth(): Promise<WebBackendHealth | null> {
+  const baseUrl = getConfiguredWebAccountApiBaseUrl();
+
+  if (!baseUrl) {
+    return null;
+  }
+
+  try {
+    return await requestKromaJson<WebBackendHealth>(`${baseUrl}/health`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+  } catch {
+    return null;
+  }
 }
 
 export async function verifySignupCode(

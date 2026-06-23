@@ -1537,11 +1537,16 @@ button {
   font-weight: 700;
 }
 
-.account-grid {
+.account-grid,
+.account-system-status {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-top: 16px;
+}
+
+.account-system-status {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .history-page {
@@ -2209,6 +2214,7 @@ button {
   .template-grid,
   .pricing-grid,
   .account-grid,
+  .account-system-status,
   .home-before-after,
   .compact-fields,
   .module-card-grid,
@@ -4025,6 +4031,7 @@ body {
 }
 
 .account-grid,
+.account-system-status,
 .account-disclosure,
 .account-ledger {
   margin-left: 18px;
@@ -4231,6 +4238,7 @@ body {
   }
 
   .account-grid,
+  .account-system-status,
   .account-disclosure,
   .account-ledger {
     margin-left: 14px;

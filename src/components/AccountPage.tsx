@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import {
   getCurrentAccountSnapshot,
   getCurrentAccountWithCreditSync,
+  getWebBackendHealth,
 } from "../api/accountApi";
-import type { AccountCreditSyncStatus } from "../api/accountApi";
+import type { AccountCreditSyncStatus, WebBackendHealth } from "../api/accountApi";
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("zh-CN").format(value);
@@ -15,6 +16,8 @@ interface AccountPageProps {
 
 export function AccountPage({ paymentStatus }: AccountPageProps) {
   const [account, setAccount] = useState(() => getCurrentAccountSnapshot());
+  const [backendHealth, setBackendHealth] =
+    useState<WebBackendHealth | null>(null);
   const [creditSyncStatus, setCreditSyncStatus] =
     useState<AccountCreditSyncStatus>(() =>
       getCurrentAccountSnapshot().session ? "cloud_sync_failed" : "trial",
@@ -25,6 +28,7 @@ export function AccountPage({ paymentStatus }: AccountPageProps) {
       setAccount(result.account);
       setCreditSyncStatus(result.creditSyncStatus);
     });
+    void getWebBackendHealth().then(setBackendHealth);
   }, []);
 
   const isCloudAccount = Boolean(account.session?.provider === "kroma");
@@ -62,6 +66,39 @@ export function AccountPage({ paymentStatus }: AccountPageProps) {
       note: "失败任务不计成功消耗",
     },
   ];
+  const systemItems = [
+    {
+      label: "账号服务",
+      value: backendHealth
+        ? backendHealth.config.supabaseUrl &&
+          backendHealth.config.supabaseAnonKey &&
+          backendHealth.config.supabaseServiceRoleKey &&
+          backendHealth.config.resendApiKey
+          ? "正常"
+          : "待配置"
+        : "未连接",
+      note: backendHealth
+        ? "注册、登录和验证码服务状态"
+        : "未检测到网页账号后端",
+    },
+    {
+      label: "支付入账",
+      value: backendHealth
+        ? backendHealth.config.paddleWebhookSecret &&
+          backendHealth.config.internalBillingKey
+          ? "正常"
+          : "待配置"
+        : "未连接",
+      note: "Paddle 付款后自动入账",
+    },
+    {
+      label: "真实生图",
+      value: import.meta.env.VITE_KROMA_API_BASE_URL?.trim()
+        ? "已连接"
+        : "待配置",
+      note: "未配置时生产环境不会使用模拟出图",
+    },
+  ];
 
   return (
     <main className="account-page page-surface">
@@ -78,6 +115,15 @@ export function AccountPage({ paymentStatus }: AccountPageProps) {
         ) : null}
         <div className="account-grid">
           {usageItems.map((item) => (
+            <article className="usage-card" key={item.label}>
+              <p className="summary-label">{item.label}</p>
+              <p className="summary-value">{item.value}</p>
+              <p className="summary-note">{item.note}</p>
+            </article>
+          ))}
+        </div>
+        <div className="account-system-status" aria-label="系统状态">
+          {systemItems.map((item) => (
             <article className="usage-card" key={item.label}>
               <p className="summary-label">{item.label}</p>
               <p className="summary-value">{item.value}</p>

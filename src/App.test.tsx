@@ -329,13 +329,68 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
   });
 
+  it("shows backend system status on the account page", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            credits: 12,
+            plan: "free",
+            is_paid: false,
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: false,
+            service: "kroma-web-backend",
+            commit: "commit-1",
+            checked_at: "2026-06-23T00:00:00.000Z",
+            config: {
+              supabaseUrl: true,
+              supabaseAnonKey: true,
+              supabaseServiceRoleKey: true,
+              resendApiKey: true,
+              internalBillingKey: true,
+              paddleWebhookSecret: false,
+            },
+            missing: ["paddleWebhookSecret"],
+          }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    signInWithKromaForTest();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "账户" }));
+
+    const systemStatus = screen.getByLabelText("系统状态");
+    await waitFor(() => {
+      expect(within(systemStatus).getByText("账号服务")).toBeInTheDocument();
+      expect(within(systemStatus).getByText("支付入账")).toBeInTheDocument();
+    });
+    expect(within(systemStatus).getAllByText("正常")).toHaveLength(1);
+    expect(within(systemStatus).getAllByText("待配置")).toHaveLength(2);
+  });
+
   it("labels cloud credits separately from trial credits on sync failure", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      text: () => Promise.resolve("Internal Server Error"),
-    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve("Internal Server Error"),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve("Internal Server Error"),
+      });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     signInWithKromaForTest();
