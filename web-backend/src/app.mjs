@@ -126,7 +126,7 @@ async function handleSignup(request, env, fetchImpl) {
     subject: "kroma 注册验证码",
     title: "kroma 注册验证码",
     intro: "你正在注册 kroma 网页端账号。",
-    action: "请在注册页面输入下面的 6 位验证码完成注册：",
+    action: "请在注册页面输入下面的验证码完成注册：",
   });
 
   return tokenResponse({});
@@ -168,7 +168,7 @@ async function handleOtp(request, env, fetchImpl) {
     subject: "kroma 登录验证码",
     title: "kroma 登录验证码",
     intro: "你正在登录 kroma 网页端账号。",
-    action: "请在登录页面输入下面的 6 位验证码：",
+    action: "请在登录页面输入下面的验证码：",
   });
 
   return jsonResponse({ sent: true });
