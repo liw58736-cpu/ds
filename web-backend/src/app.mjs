@@ -378,10 +378,8 @@ async function handleImageProxy(request, env, fetchImpl, upstreamPath, method) {
     });
   }
 
-  const body =
-    method === "GET"
-      ? undefined
-      : JSON.stringify(await readJsonBody(request));
+  const proxyBody = method === "GET" ? undefined : await readOptionalJsonBody(request);
+  const body = proxyBody === undefined ? undefined : JSON.stringify(proxyBody);
   const headers = {
     "Content-Type": "application/json",
     "X-Kroma-Client": "web-backend",
@@ -460,9 +458,10 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
   const data = payload.data ?? {};
   const customData = data.custom_data ?? data.customData ?? {};
   const userId = String(customData.user_id ?? customData.userId ?? "");
-  const credits = Math.max(0, Number.parseInt(String(customData.credits ?? "0"), 10));
-  const planId = String(customData.plan_id ?? customData.planId ?? "");
-  const planName = String(customData.plan_name ?? customData.planName ?? planId);
+  const fulfillment = resolvePaddleFulfillment(data, customData, env);
+  const credits = fulfillment.credits;
+  const planId = fulfillment.planId;
+  const planName = fulfillment.planName;
   const transactionId = String(data.id ?? eventId);
   let creditMutationStarted = false;
 
@@ -530,6 +529,71 @@ function requireInternalBillingAccess(request, env) {
 
   if (!configuredKey || providedKey !== configuredKey) {
     throw new HttpError(403, { detail: "Credit top-up requires internal billing access" });
+  }
+}
+
+function resolvePaddleFulfillment(data, customData, env) {
+  const customCredits = Math.max(
+    0,
+    Number.parseInt(String(customData.credits ?? "0"), 10),
+  );
+  const customPlanId = String(customData.plan_id ?? customData.planId ?? "");
+  const customPlanName = String(customData.plan_name ?? customData.planName ?? customPlanId);
+
+  if (customCredits > 0) {
+    return {
+      credits: customCredits,
+      planId: customPlanId,
+      planName: customPlanName,
+    };
+  }
+
+  const priceId = extractPaddlePriceId(data);
+  const mapped = priceId ? parsePaddlePriceCreditMap(env)[priceId] : null;
+
+  if (!mapped) {
+    return {
+      credits: 0,
+      planId: customPlanId,
+      planName: customPlanName,
+    };
+  }
+
+  return {
+    credits: Math.max(0, Number.parseInt(String(mapped.credits ?? "0"), 10)),
+    planId: String(mapped.plan_id ?? mapped.planId ?? customPlanId),
+    planName: String(mapped.plan_name ?? mapped.planName ?? mapped.plan_id ?? mapped.planId ?? customPlanName),
+  };
+}
+
+function extractPaddlePriceId(data) {
+  const items = Array.isArray(data?.items) ? data.items : [];
+
+  for (const item of items) {
+    const priceId = item?.price?.id ?? item?.price_id ?? item?.priceId;
+
+    if (priceId) {
+      return String(priceId);
+    }
+  }
+
+  return "";
+}
+
+function parsePaddlePriceCreditMap(env) {
+  const value = env.WEB_PADDLE_PRICE_CREDITS_JSON?.trim();
+
+  if (!value) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
   }
 }
 
@@ -832,6 +896,20 @@ async function readJsonBody(request) {
   }
 }
 
+async function readOptionalJsonBody(request) {
+  const text = await request.text();
+
+  if (!text.trim()) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new HttpError(422, { detail: "Invalid JSON body" });
+  }
+}
+
 function normalizeEmail(value) {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -873,6 +951,7 @@ async function buildHealthResponse(env, fetchImpl) {
     allowedAuthRedirects: Boolean(env.WEB_ALLOWED_AUTH_REDIRECTS),
     internalBillingKey: Boolean(env.WEB_INTERNAL_BILLING_KEY),
     paddleWebhookSecret: Boolean(env.WEB_PADDLE_WEBHOOK_SECRET),
+    paddlePriceCredits: Boolean(env.WEB_PADDLE_PRICE_CREDITS_JSON),
     imageApiBaseUrl: Boolean(env.WEB_IMAGE_API_BASE_URL),
     imageApiKey: Boolean(env.WEB_IMAGE_API_KEY),
   };

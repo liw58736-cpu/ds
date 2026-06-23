@@ -42,6 +42,7 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
       WEB_INTERNAL_BILLING_KEY: "billing-secret",
       WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+      WEB_PADDLE_PRICE_CREDITS_JSON: "{}",
       WEB_IMAGE_API_BASE_URL: "https://image-web.example.com/api/v1",
       WEB_IMAGE_API_KEY: "image-secret",
       RENDER_GIT_COMMIT: "commit-1",
@@ -77,6 +78,7 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       allowedAuthRedirects: true,
       internalBillingKey: true,
       paddleWebhookSecret: true,
+      paddlePriceCredits: true,
       imageApiBaseUrl: true,
       imageApiKey: true,
     },
@@ -125,6 +127,7 @@ test("health endpoint flags missing Supabase schema tables", async () => {
       WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
       WEB_INTERNAL_BILLING_KEY: "billing-secret",
       WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+      WEB_PADDLE_PRICE_CREDITS_JSON: "{}",
       WEB_IMAGE_API_BASE_URL: "https://image-web.example.com/api/v1",
       WEB_IMAGE_API_KEY: "image-secret",
     },
@@ -583,6 +586,39 @@ test("image generation proxy forwards to the dedicated web image upstream", asyn
   assert.equal(calls[1].url, "https://image-web.example.com/api/v1/image/generate");
 });
 
+test("image generation proxy forwards cancel requests without requiring a JSON body", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_IMAGE_API_BASE_URL: "https://image-web.example.com/api/v1",
+      WEB_IMAGE_API_KEY: "image-secret",
+    },
+    fetch: async (url, init = {}) => {
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://image-web.example.com/api/v1/image/task/task-1/cancel") {
+        assert.equal(init.method, "POST");
+        assert.equal(init.body, undefined);
+        return jsonResponse({ canceled: true });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/task/task-1/cancel", {
+      method: "POST",
+      headers: { Authorization: "Bearer access-token" },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), { canceled: true });
+});
+
 test("credit top-up endpoint requires an internal billing key", async () => {
   const app = createWebBackend({
     env: {
@@ -706,6 +742,94 @@ test("paddle webhook credits a web user once after signature verification", asyn
   });
   assert.equal(users[0].credits, 955);
   assert.equal(transactions.length, 1);
+});
+
+test("paddle webhook derives credits from server-side price mapping", async () => {
+  const users = [{ id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" }];
+  const transactions = [];
+  const billingEvents = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+      WEB_PADDLE_PRICE_CREDITS_JSON: JSON.stringify({
+        pri_standard: {
+          credits: 420,
+          plan_id: "standard-top-up",
+          plan_name: "标准包",
+        },
+      }),
+    },
+    fetch: async (url, init = {}) => {
+      if (url.endsWith("/rest/v1/web_billing_events")) {
+        const body = JSON.parse(init.body);
+        billingEvents.push(body);
+        return jsonResponse([body]);
+      }
+      if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_price_map")) {
+        if (init.method !== "PATCH") {
+          return jsonResponse(billingEvents.map((event) => ({ status: event.status })));
+        }
+        Object.assign(billingEvents[0], JSON.parse(init.body));
+        return jsonResponse([billingEvents[0]]);
+      }
+      if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
+        if (init.method === "PATCH") {
+          users[0].credits = JSON.parse(init.body).credits;
+          return jsonResponse([users[0]]);
+        }
+        return jsonResponse(users);
+      }
+      if (url.endsWith("/rest/v1/web_credit_transactions")) {
+        transactions.push(JSON.parse(init.body));
+        return jsonResponse([transactions.at(-1)]);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const payload = {
+    event_id: "evt_price_map",
+    event_type: "transaction.completed",
+    data: {
+      id: "txn_price_map",
+      custom_data: {
+        user_id: "web-user-1",
+      },
+      items: [
+        {
+          price: {
+            id: "pri_standard",
+          },
+        },
+      ],
+    },
+  };
+  const rawBody = JSON.stringify(payload);
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/billing/paddle/webhook", {
+      method: "POST",
+      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      body: rawBody,
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    received: true,
+    credited: 420,
+    credits_remaining: 425,
+  });
+  assert.equal(users[0].credits, 425);
+  assert.deepEqual(transactions[0], {
+    user_id: "web-user-1",
+    amount: 420,
+    type: "purchase",
+    description: "Paddle purchase: 标准包",
+    reference_id: "txn_price_map",
+  });
 });
 
 test("paddle webhook rejects invalid signatures before crediting", async () => {

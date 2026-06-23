@@ -85,6 +85,9 @@ POST /api/v1/billing/paddle/webhook
 The webhook verifies `Paddle-Signature`, handles `transaction.completed`, reads
 `custom_data.user_id` and `custom_data.credits`, credits the web account, and
 records the event for idempotency.
+If `custom_data.credits` is absent, the backend falls back to
+`WEB_PADDLE_PRICE_CREDITS_JSON` and derives credits from the Paddle price id in
+`data.items`.
 
 If Paddle is not configured in production, the price page shows a payment
 configuration error and does not create mock credits. Mock crediting is limited

@@ -34,6 +34,7 @@ WEB_AUTH_EMAIL_FROM=kroma <no-reply@i18.pro>
 WEB_RESEND_API_KEY=<resend-api-key>
 WEB_INTERNAL_BILLING_KEY=<server-to-server-billing-secret>
 WEB_PADDLE_WEBHOOK_SECRET=<paddle-webhook-secret>
+WEB_PADDLE_PRICE_CREDITS_JSON=<price-id-to-credit-json>
 WEB_IMAGE_API_BASE_URL=<dedicated-web-image-generation-api-base-url>
 WEB_IMAGE_API_KEY=<dedicated-web-image-generation-api-key>
 ```
@@ -63,6 +64,9 @@ Subscribe at least to `transaction.completed`. The checkout frontend sends
 `customData.user_id`, `customData.plan_id`, `customData.plan_name`, and
 `customData.credits`; the webhook verifies the `Paddle-Signature`, applies the
 credit top-up once, and stores the event in `web_billing_events` for idempotency.
+If Paddle sends a later transaction without `customData.credits`, the backend
+can derive credits from `WEB_PADDLE_PRICE_CREDITS_JSON` using the Paddle price
+id in `data.items`.
 
 The frontend static service should use:
 

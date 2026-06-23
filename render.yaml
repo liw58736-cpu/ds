@@ -25,6 +25,8 @@ services:
         sync: false
       - key: WEB_PADDLE_WEBHOOK_SECRET
         sync: false
+      - key: WEB_PADDLE_PRICE_CREDITS_JSON
+        value: '{"pri_01kvq85dsggpt3qcb5pk02s10a":{"credits":120,"plan_id":"basic-top-up","plan_name":"基础包"},"pri_01kvq89wc6w551q949arne6xvt":{"credits":420,"plan_id":"standard-top-up","plan_name":"标准包"},"pri_01kvq8cmj8xb0412zr80hracsp":{"credits":950,"plan_id":"pro-top-up","plan_name":"专业包"},"pri_01kvq8dppzzfbrbb5yqf15x7se":{"credits":260,"plan_id":"monthly-subscription","plan_name":"轻度创作首选"},"pri_01kvq8g8wwx973evrvc2dgcfad":{"credits":840,"plan_id":"quarterly-subscription","plan_name":"稳定创作更划算"},"pri_01kvq8f3masyt9nfcgs9zscrq5":{"credits":3500,"plan_id":"yearly-subscription","plan_name":"最高优惠"}}'
       - key: WEB_IMAGE_API_BASE_URL
         sync: false
       - key: WEB_IMAGE_API_KEY
