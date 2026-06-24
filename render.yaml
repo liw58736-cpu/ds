@@ -4,7 +4,7 @@ services:
     runtime: node
     branch: main
     rootDir: web-backend
-    buildCommand: npm install
+    buildCommand: npm ci
     startCommand: npm start
     envVars:
       - key: WEB_SUPABASE_URL
