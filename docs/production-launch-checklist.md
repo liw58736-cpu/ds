@@ -29,6 +29,72 @@ Expected:
 
 If `https://kromaai.app/version.json` returns HTML, redeploy `kroma-web`. The local build already writes `dist/version.json`; HTML means the static site is still serving an old build or the custom domain points at the wrong service.
 
+## Current Production Check Failures
+
+Use this section when `npm run check:production` reports the current known
+failure shape.
+
+### `CHECK deployed backend commit`
+
+The live `kroma-web-api` service is not running the latest backend-affecting
+commit.
+
+Fix:
+
+1. Open Render dashboard.
+2. Open service `kroma-web-api`.
+3. Confirm it is connected to GitHub repository `liw58736-cpu/ds`, branch
+   `main`, root directory `web-backend`.
+4. Trigger a manual deploy from the latest commit.
+5. Re-run `npm run check:production`.
+
+### `CHECK frontend version metadata: missing or rewritten to HTML`
+
+`https://kromaai.app/version.json` is returning the frontend HTML page instead
+of JSON build metadata. This usually means the static service is serving an old
+build, the static publish path is wrong, or the custom domain is attached to
+the wrong service.
+
+Fix:
+
+1. Open Render service `kroma-web`.
+2. Confirm it is a static site, not a web service.
+3. Confirm build command is `npm ci && npm run build`.
+4. Confirm static publish path is `./dist`.
+5. Confirm custom domain `kromaai.app` is attached to `kroma-web`, not
+   `kroma-web-api` or any placeholder service.
+6. Trigger a manual deploy from the latest commit.
+7. Open `https://kromaai.app/version.json`; it should show JSON with
+   `service`, `commit`, and `built_at`.
+
+### `CHECK required environment: paddleWebhookSecret`
+
+Paddle payment can open checkout, but completed payments cannot safely credit
+the account until the webhook signature secret is configured.
+
+Fix:
+
+1. In Paddle, create or open the webhook destination:
+   `https://kroma-web-api.onrender.com/api/v1/billing/paddle/webhook`.
+2. Subscribe to `transaction.completed`.
+3. Copy the webhook signing secret.
+4. Set `WEB_PADDLE_WEBHOOK_SECRET` on Render service `kroma-web-api`.
+5. Redeploy `kroma-web-api`.
+
+### `CHECK required environment: imageApiBaseUrl, imageApiKey`
+
+Real image generation is not ready until the web backend has its own image
+upstream configured.
+
+Fix:
+
+1. Choose the dedicated web image-generation upstream.
+2. Set `WEB_IMAGE_API_BASE_URL` on `kroma-web-api`.
+3. Set `WEB_IMAGE_API_KEY` on `kroma-web-api`.
+4. Redeploy `kroma-web-api`.
+5. Run one authenticated generation smoke test after
+   `npm run check:production` passes.
+
 ## 2. Required Backend Environment
 
 Set these on Render service `kroma-web-api`:
