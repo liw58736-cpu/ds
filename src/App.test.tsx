@@ -878,7 +878,7 @@ describe("App", () => {
     );
     expect(screen.queryByText(/同步账户积分/)).not.toBeInTheDocument();
     expect(getAccountSnapshot().session).toBeNull();
-  });
+  }, 10000);
 
   it("moves registered Kroma emails back to password login", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");

@@ -31,6 +31,37 @@ export function getExpectedBackendCommit(execFile = execFileSync) {
   }
 }
 
+export function getExpectedFrontendCommit(execFile = execFileSync) {
+  try {
+    return execFile(
+      "git",
+      [
+        "log",
+        "-1",
+        "--format=%H",
+        "--",
+        "src",
+        "public",
+        "index.html",
+        "package.json",
+        "package-lock.json",
+        "vite.config.ts",
+        "tsconfig.json",
+        "tsconfig.app.json",
+        "tsconfig.node.json",
+        "render.yaml",
+        "scripts/generate-build-metadata.mjs",
+      ],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    ).trim();
+  } catch {
+    return null;
+  }
+}
+
 export function isLiveCommitCompatible(
   expectedBackendCommit,
   liveCommit,
@@ -126,6 +157,7 @@ function printMissingGuidance(missing) {
 async function main() {
   const localCommit = getLocalCommit();
   const expectedBackendCommit = getExpectedBackendCommit();
+  const expectedFrontendCommit = getExpectedFrontendCommit();
   const [response, frontendResponse] = await Promise.all([
     fetch(healthUrl),
     fetch(frontendVersionUrl, { cache: "no-store" }),
@@ -161,6 +193,11 @@ async function main() {
     Boolean(expectedBackendCommit),
     expectedBackendCommit ?? "unavailable",
   );
+  printStatus(
+    "expected frontend commit",
+    Boolean(expectedFrontendCommit),
+    expectedFrontendCommit ?? "unavailable",
+  );
   printStatus("live commit", Boolean(liveCommit), liveCommit || "missing");
   printStatus("deployed backend commit", commitMatches);
 
@@ -173,7 +210,7 @@ async function main() {
   );
   const liveFrontendCommit = String(frontendPayload.commit ?? "");
   const frontendCommitMatches = isLiveCommitCompatible(
-    localCommit,
+    expectedFrontendCommit,
     liveFrontendCommit,
   );
   printStatus(

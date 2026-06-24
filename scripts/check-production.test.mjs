@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   getMissingEnvironmentGuidance,
   getExpectedBackendCommit,
+  getExpectedFrontendCommit,
   getFrontendVersionUrl,
   isLiveCommitCompatible,
   partitionMissingEnvironment,
@@ -27,6 +28,38 @@ test("production check compares the live backend to the latest backend-affecting
         "--",
         "web-backend",
         "render.yaml",
+      ],
+    ],
+  ]);
+});
+
+test("production check compares the live frontend to the latest frontend-affecting commit", () => {
+  const calls = [];
+  const commit = getExpectedFrontendCommit((command, args) => {
+    calls.push([command, args]);
+    return "frontend-commit\n";
+  });
+
+  assert.equal(commit, "frontend-commit");
+  assert.deepEqual(calls, [
+    [
+      "git",
+      [
+        "log",
+        "-1",
+        "--format=%H",
+        "--",
+        "src",
+        "public",
+        "index.html",
+        "package.json",
+        "package-lock.json",
+        "vite.config.ts",
+        "tsconfig.json",
+        "tsconfig.app.json",
+        "tsconfig.node.json",
+        "render.yaml",
+        "scripts/generate-build-metadata.mjs",
       ],
     ],
   ]);
