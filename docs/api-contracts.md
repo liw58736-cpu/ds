@@ -24,6 +24,10 @@ VITE_API_BASE_URL=
 Automated Playwright checks run in mock generation mode and do not consume real
 provider credits.
 
+Production builds also publish `/version.json` from the static frontend. Use
+`npm run check:production` after every Render deploy to verify both the frontend
+commit and the backend `/api/v1/health` commit.
+
 ## Auth
 
 `POST /api/v1/auth/signup`
@@ -47,6 +51,17 @@ Sends a 6 digit email login code.
 `POST /api/v1/auth/verify-code`
 
 Verifies the login code and returns an access token.
+
+The web backend never sends Supabase's native 8 digit OTP to users. It stores a
+hashed copy of the public kroma 6 digit code in `web_auth_codes` and rejects raw
+8 digit Supabase OTP input. `WEB_AUTH_CODE_SECRET` is recommended in production
+for stable code hashing, but missing it does not block service startup because
+the backend can fall back to existing server secrets.
+
+After a successful password or email-code login, the frontend routes to the
+account page. Logged-in navigation hides the Login entry, shows the current
+account email on the account page, and provides a logout button that clears the
+local web session.
 
 ## Credits
 
@@ -92,6 +107,10 @@ If `custom_data.credits` is absent, the backend falls back to
 If Paddle is not configured in production, the price page shows a payment
 configuration error and does not create mock credits. Mock crediting is limited
 to development and tests.
+
+Paddle checkout requires the frontend `VITE_PADDLE_CLIENT_TOKEN` plus the six
+plan price IDs. Webhook fulfillment requires `WEB_PADDLE_WEBHOOK_SECRET` and a
+valid `WEB_PADDLE_PRICE_CREDITS_JSON` map on `kroma-web-api`.
 
 ## Generation
 
