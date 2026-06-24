@@ -193,6 +193,14 @@ export function getFrontendVersionGuidance({ responseOk, status, contentType, bo
   return "version.json returned non-JSON content; redeploy kroma-web and confirm the static publish path is ./dist";
 }
 
+export function getBackendCommitGuidance({ expectedCommit, liveCommit }) {
+  return `redeploy kroma-web-api from GitHub main with rootDir web-backend; expected ${expectedCommit || "unknown"}, live ${liveCommit || "missing"}`;
+}
+
+export function getFrontendCommitGuidance({ expectedCommit, liveCommit }) {
+  return `redeploy kroma-web from GitHub main with build command "npm ci && npm run build" and static publish path ./dist; expected ${expectedCommit || "unknown"}, live ${liveCommit || "missing"}`;
+}
+
 async function main() {
   const localCommit = getLocalCommit();
   const expectedBackendCommit = getExpectedBackendCommit();
@@ -239,6 +247,14 @@ async function main() {
   );
   printStatus("live commit", Boolean(liveCommit), liveCommit || "missing");
   printStatus("deployed backend commit", commitMatches);
+  if (!commitMatches) {
+    console.log(
+      `NEXT backendDeploy: ${getBackendCommitGuidance({
+        expectedCommit: expectedBackendCommit,
+        liveCommit,
+      })}`,
+    );
+  }
 
   console.log(`Kroma web frontend version: ${frontendVersionUrl}`);
   printStatus("frontend version request", frontendResponse.ok, `${frontendResponse.status}`);
@@ -270,6 +286,14 @@ async function main() {
     frontendCommitMatches,
     liveFrontendCommit || "missing version.json commit",
   );
+  if (!frontendCommitMatches) {
+    console.log(
+      `NEXT frontendDeploy: ${getFrontendCommitGuidance({
+        expectedCommit: expectedFrontendCommit,
+        liveCommit: liveFrontendCommit,
+      })}`,
+    );
+  }
 
   const payloadMissing = Array.isArray(payload.missing) ? payload.missing : [];
   const payloadOptionalMissing = Array.isArray(payload.optionalMissing)

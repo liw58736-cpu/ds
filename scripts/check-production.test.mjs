@@ -4,6 +4,8 @@ import {
   getMissingEnvironmentGuidance,
   getExpectedBackendCommit,
   getExpectedFrontendCommit,
+  getBackendCommitGuidance,
+  getFrontendCommitGuidance,
   getFrontendVersionUrl,
   getFrontendVersionGuidance,
   isLiveCommitCompatible,
@@ -86,6 +88,30 @@ test("production check accepts a live commit that includes the latest backend co
   assert.deepEqual(calls, [
     ["git", ["merge-base", "--is-ancestor", "backend-commit", "frontend-commit"]],
   ]);
+});
+
+test("production check explains backend commit mismatches", () => {
+  const guidance = getBackendCommitGuidance({
+    expectedCommit: "expected-backend",
+    liveCommit: "live-backend",
+  });
+
+  assert.match(guidance, /kroma-web-api/);
+  assert.match(guidance, /rootDir web-backend/);
+  assert.match(guidance, /expected expected-backend/);
+  assert.match(guidance, /live live-backend/);
+});
+
+test("production check explains frontend commit mismatches", () => {
+  const guidance = getFrontendCommitGuidance({
+    expectedCommit: "expected-frontend",
+    liveCommit: "",
+  });
+
+  assert.match(guidance, /kroma-web/);
+  assert.match(guidance, /static publish path \.\/dist/);
+  assert.match(guidance, /expected expected-frontend/);
+  assert.match(guidance, /live missing/);
 });
 
 test("production check reads frontend version metadata from the deployed site", () => {
