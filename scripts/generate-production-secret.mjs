@@ -6,6 +6,10 @@ const secretTypes = {
     envName: "WEB_INTERNAL_BILLING_KEY",
     create: createInternalBillingKey,
   },
+  "auth-code-secret": {
+    envName: "WEB_AUTH_CODE_SECRET",
+    create: createAuthCodeSecret,
+  },
 };
 
 export function createInternalBillingKey({
@@ -14,8 +18,14 @@ export function createInternalBillingKey({
   return `kroma_web_bill_${randomBytes(32).toString("base64url")}`;
 }
 
+export function createAuthCodeSecret({
+  randomBytes = nodeRandomBytes,
+} = {}) {
+  return `kroma_web_auth_${randomBytes(32).toString("base64url")}`;
+}
+
 function printUsage() {
-  console.log("Usage: npm run secret:internal-billing");
+  console.log("Usage: npm run secret:internal-billing | npm run secret:auth-code");
 }
 
 function main() {

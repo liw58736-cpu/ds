@@ -51,10 +51,19 @@ WEB_INTERNAL_BILLING_KEY=<server-to-server-billing-secret>
 `WEB_AUTH_CODE_SECRET` is used to hash public 6 digit email codes before storing
 them in Supabase. Use a long random value and keep it stable after launch so
 codes issued before a redeploy remain verifiable during their short lifetime.
+Generate one with:
+
+```text
+npm run secret:auth-code
+```
 
 `WEB_INTERNAL_BILLING_KEY` protects internal manual credit top-ups. Paddle
 checkout and webhook crediting do not require it. Do not expose it to the
-frontend.
+frontend. Generate one with:
+
+```text
+npm run secret:internal-billing
+```
 
 After deploying, open:
 

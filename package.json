@@ -12,7 +12,8 @@
     "e2e": "playwright test",
     "lint": "tsc --noEmit",
     "check:production": "node scripts/check-production.mjs",
-    "secret:internal-billing": "node scripts/generate-production-secret.mjs internal-billing-key"
+    "secret:internal-billing": "node scripts/generate-production-secret.mjs internal-billing-key",
+    "secret:auth-code": "node scripts/generate-production-secret.mjs auth-code-secret"
   },
   "dependencies": {
     "lucide-react": "^1.18.0",

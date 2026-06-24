@@ -85,7 +85,7 @@ test("production check explains how to fill remaining production secrets", () =>
   );
   assert.match(
     getMissingEnvironmentGuidance("authCodeSecret"),
-    /WEB_AUTH_CODE_SECRET/,
+    /secret:auth-code/,
   );
 });
 

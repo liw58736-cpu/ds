@@ -104,7 +104,7 @@ export function getMissingEnvironmentGuidance(key) {
     paddlePriceCredits:
       "set WEB_PADDLE_PRICE_CREDITS_JSON from render.yaml on kroma-web-api",
     authCodeSecret:
-      "set WEB_AUTH_CODE_SECRET to a long random value on kroma-web-api",
+      "run npm run secret:auth-code, then set WEB_AUTH_CODE_SECRET on kroma-web-api",
   };
 
   return guidanceByKey[key] ?? "configure this value on kroma-web-api";
