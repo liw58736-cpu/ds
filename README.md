@@ -10,9 +10,16 @@ npm run dev -- --port 4290
 For local account API testing, point the frontend at the standalone web backend:
 
 ```env
-VITE_WEB_API_BASE_URL=http://127.0.0.1:8000/api/v1
-VITE_KROMA_API_BASE_URL=http://127.0.0.1:8000/api/v1
+VITE_WEB_API_BASE_URL=http://127.0.0.1:8010/api/v1
+VITE_KROMA_API_BASE_URL=http://127.0.0.1:8010/api/v1
 VITE_API_BASE_URL=
+```
+
+Run the local web backend on a separate port from the mobile app backend:
+
+```bash
+cd web-backend
+$env:PORT=8010; npm start
 ```
 
 ## Web deployment
