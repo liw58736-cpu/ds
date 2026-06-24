@@ -67,6 +67,20 @@ Fix:
 7. Open `https://kromaai.app/version.json`; it should show JSON with
    `service`, `commit`, and `built_at`.
 
+### `CHECK deployed frontend commit`
+
+The frontend static site is still serving an older commit than the current
+GitHub `main` branch. This can happen when Render automatic deploy does not
+start after a push.
+
+Fix:
+
+1. Open Render service `kroma-web`.
+2. Click `Manual Deploy`.
+3. Deploy the latest commit from branch `main`.
+4. Wait until the deploy succeeds.
+5. Re-run `npm run check:production`.
+
 ### `CHECK required environment: paddleWebhookSecret`
 
 Paddle payment can open checkout, but completed payments cannot safely credit
@@ -76,10 +90,16 @@ Fix:
 
 1. In Paddle, create or open the webhook destination:
    `https://kroma-web-api.onrender.com/api/v1/billing/paddle/webhook`.
-2. Subscribe to `transaction.completed`.
-3. Copy the webhook signing secret.
-4. Set `WEB_PADDLE_WEBHOOK_SECRET` on Render service `kroma-web-api`.
-5. Redeploy `kroma-web-api`.
+2. Set the description to `kroma web Paddle webhook`.
+3. Keep usage type as `Platform`.
+4. Subscribe to `transaction.completed` only.
+   - If Paddle opens the event list in a modal, the checkbox is on the far
+     right of the `transaction.completed` row.
+   - Do not save a destination with zero selected events.
+5. Save the destination.
+6. Copy the webhook signing secret.
+7. Set `WEB_PADDLE_WEBHOOK_SECRET` on Render service `kroma-web-api`.
+8. Redeploy `kroma-web-api`.
 
 ### `CHECK required environment: imageApiBaseUrl, imageApiKey`
 
@@ -94,6 +114,13 @@ Fix:
 4. Redeploy `kroma-web-api`.
 5. Run one authenticated generation smoke test after
    `npm run check:production` passes.
+
+Important:
+
+- Do not point `WEB_IMAGE_API_BASE_URL` at the mobile app backend unless a
+  separate web-only deployment of that backend has been created.
+- The web product must keep its auth, credits, Paddle billing, and image
+  generation traffic isolated from the mobile app environment.
 
 ## 2. Required Backend Environment
 
