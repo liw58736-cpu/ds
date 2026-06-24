@@ -85,3 +85,19 @@ test("static asset resolver rejects paths outside the static root", async () => 
     });
   });
 });
+
+test("static asset resolver rejects malformed encoded paths", async () => {
+  await withStaticRoot(async (staticRoot) => {
+    const asset = await resolveStaticAsset(
+      new Request("http://local.test/%E0%A4%A"),
+      { staticRoot, port: 8010 },
+    );
+
+    assert.deepEqual(asset, {
+      handled: true,
+      status: 400,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      body: "Bad Request",
+    });
+  });
+});

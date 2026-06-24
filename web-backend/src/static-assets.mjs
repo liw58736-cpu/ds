@@ -26,8 +26,17 @@ export async function resolveStaticAsset(request, { staticRoot, port }) {
     return { handled: false };
   }
 
-  const requestedPath =
-    url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
+  const requestedPath = decodeRequestPath(url.pathname);
+
+  if (!requestedPath) {
+    return {
+      handled: true,
+      status: 400,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      body: "Bad Request",
+    };
+  }
+
   const candidate = normalize(join(staticRoot, requestedPath));
   const resolvedCandidate = resolve(candidate);
   const relativeCandidate = relative(staticRoot, resolvedCandidate);
@@ -64,6 +73,18 @@ export async function resolveStaticAsset(request, { staticRoot, port }) {
     },
     filePath: assetPath,
   };
+}
+
+function decodeRequestPath(pathname) {
+  if (pathname === "/") {
+    return "/index.html";
+  }
+
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
 }
 
 async function getReadableAssetPath(candidate, staticRoot) {
