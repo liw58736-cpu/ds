@@ -22,6 +22,16 @@ cd web-backend
 $env:PORT=8010; npm start
 ```
 
+To preview the built frontend and web backend together at the same URL:
+
+```bash
+npm run preview:full
+```
+
+This builds `dist` and serves the complete site at `http://127.0.0.1:8000`.
+If port 8000 is already used by another local service, stop that service first
+so you do not accidentally inspect a stale placeholder page.
+
 ## Web deployment
 
 This website is deployed as two separate Render services:

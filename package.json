@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "lint": "tsc --noEmit",
+    "preview:full": "node scripts/start-local-preview.mjs",
     "check:production": "node scripts/check-production.mjs",
     "secret:internal-billing": "node scripts/generate-production-secret.mjs internal-billing-key",
     "secret:auth-code": "node scripts/generate-production-secret.mjs auth-code-secret"
