@@ -7,7 +7,7 @@ const healthUrl = `${apiBaseUrl.replace(/\/+$/, "")}/health`;
 const frontendBaseUrl =
   process.env.KROMA_WEB_FRONTEND_URL || "https://kromaai.app";
 const frontendVersionUrl = getFrontendVersionUrl(frontendBaseUrl);
-const optionalEnvironmentKeys = new Set(["internalBillingKey"]);
+const optionalEnvironmentKeys = new Set(["authCodeSecret", "internalBillingKey"]);
 
 export function getExpectedBackendCommit(execFile = execFileSync) {
   try {

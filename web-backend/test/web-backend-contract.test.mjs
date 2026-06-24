@@ -38,6 +38,7 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
       WEB_RESEND_API_KEY: "resend-key",
       WEB_AUTH_EMAIL_FROM: "kroma <no-reply@example.com>",
+      WEB_AUTH_CODE_SECRET: "auth-code-secret",
       WEB_AUTH_REDIRECT_URL: "https://kromaai.app",
       WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
       WEB_INTERNAL_BILLING_KEY: "billing-secret",
@@ -73,6 +74,7 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       supabaseAnonKey: true,
       supabaseServiceRoleKey: true,
       resendApiKey: true,
+      authCodeSecret: true,
       authEmailFrom: true,
       authRedirectUrl: true,
       allowedAuthRedirects: true,
@@ -116,7 +118,7 @@ test("health endpoint identifies missing production configuration", async () => 
   assert.ok(body.missing.includes("paddleWebhookSecret"));
 });
 
-test("health endpoint treats the internal billing key as optional manual top-up configuration", async () => {
+test("health endpoint treats non-blocking production helpers as optional configuration", async () => {
   const tablePaths = [
     "/rest/v1/web_users?select=id&limit=1",
     "/rest/v1/web_credit_transactions?select=id&limit=1",
@@ -154,8 +156,10 @@ test("health endpoint treats the internal billing key as optional manual top-up 
 
   assert.equal(response.status, 200);
   assert.equal(body.ok, true);
+  assert.equal(body.config.authCodeSecret, false);
   assert.equal(body.config.internalBillingKey, false);
-  assert.deepEqual(body.optionalMissing, ["internalBillingKey"]);
+  assert.deepEqual(body.optionalMissing, ["authCodeSecret", "internalBillingKey"]);
+  assert.ok(!body.missing.includes("authCodeSecret"));
   assert.ok(!body.missing.includes("internalBillingKey"));
 });
 

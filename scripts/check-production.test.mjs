@@ -92,13 +92,14 @@ test("production check explains how to fill remaining production secrets", () =>
 test("production check treats manual top-up key as optional", () => {
   assert.deepEqual(
     partitionMissingEnvironment([
+      "authCodeSecret",
       "internalBillingKey",
       "paddleWebhookSecret",
       "imageApiBaseUrl",
     ]),
     {
       required: ["paddleWebhookSecret", "imageApiBaseUrl"],
-      optional: ["internalBillingKey"],
+      optional: ["authCodeSecret", "internalBillingKey"],
     },
   );
 });

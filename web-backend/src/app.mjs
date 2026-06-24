@@ -1044,12 +1044,13 @@ function parseAllowedRedirects(env) {
 }
 
 async function buildHealthResponse(env, fetchImpl) {
-  const optionalConfigKeys = new Set(["internalBillingKey"]);
+  const optionalConfigKeys = new Set(["internalBillingKey", "authCodeSecret"]);
   const config = {
     supabaseUrl: Boolean(env.WEB_SUPABASE_URL),
     supabaseAnonKey: Boolean(env.WEB_SUPABASE_ANON_KEY),
     supabaseServiceRoleKey: Boolean(env.WEB_SUPABASE_SERVICE_ROLE_KEY),
     resendApiKey: Boolean(env.WEB_RESEND_API_KEY),
+    authCodeSecret: Boolean(env.WEB_AUTH_CODE_SECRET),
     authEmailFrom: Boolean(env.WEB_AUTH_EMAIL_FROM),
     authRedirectUrl: Boolean(env.WEB_AUTH_REDIRECT_URL),
     allowedAuthRedirects: Boolean(env.WEB_ALLOWED_AUTH_REDIRECTS),
