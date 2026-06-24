@@ -35,6 +35,7 @@ WEB_AUTH_REDIRECT_URL=https://kromaai.app
 WEB_ALLOWED_AUTH_REDIRECTS=https://kromaai.app,https://www.kromaai.app,https://kroma-web.onrender.com
 WEB_AUTH_EMAIL_FROM=kroma <no-reply@i18.pro>
 WEB_RESEND_API_KEY=<resend-api-key>
+WEB_AUTH_CODE_SECRET=<random-auth-code-hmac-secret>
 WEB_PADDLE_WEBHOOK_SECRET=<paddle-webhook-secret>
 WEB_PADDLE_PRICE_CREDITS_JSON=<price-id-to-credit-json>
 WEB_IMAGE_API_BASE_URL=<dedicated-web-image-generation-api-base-url>
@@ -46,6 +47,10 @@ Optional:
 ```text
 WEB_INTERNAL_BILLING_KEY=<server-to-server-billing-secret>
 ```
+
+`WEB_AUTH_CODE_SECRET` is used to hash public 6 digit email codes before storing
+them in Supabase. Use a long random value and keep it stable after launch so
+codes issued before a redeploy remain verifiable during their short lifetime.
 
 `WEB_INTERNAL_BILLING_KEY` protects internal manual credit top-ups. Paddle
 checkout and webhook crediting do not require it. Do not expose it to the
@@ -62,6 +67,15 @@ configuration, an `optionalMissing` list for non-blocking settings such as the
 manual top-up key, and a `database` object that confirms whether required
 Supabase tables are reachable. It only returns boolean status, never secret
 values.
+
+The root project also has:
+
+```text
+npm run check:production
+```
+
+That command checks both `kroma-web-api` and the static frontend
+`https://kromaai.app/version.json`. Use it after every Render deploy.
 
 ## Paddle Webhook
 
@@ -85,6 +99,14 @@ The frontend static service should use:
 VITE_WEB_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
 VITE_KROMA_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
 VITE_API_BASE_URL=
+VITE_PADDLE_ENVIRONMENT=production
+VITE_PADDLE_CLIENT_TOKEN=<paddle-client-token>
+VITE_PADDLE_PRICE_BASIC_TOP_UP=<paddle-price-id>
+VITE_PADDLE_PRICE_STANDARD_TOP_UP=<paddle-price-id>
+VITE_PADDLE_PRICE_PRO_TOP_UP=<paddle-price-id>
+VITE_PADDLE_PRICE_MONTHLY_SUBSCRIPTION=<paddle-price-id>
+VITE_PADDLE_PRICE_QUARTERLY_SUBSCRIPTION=<paddle-price-id>
+VITE_PADDLE_PRICE_YEARLY_SUBSCRIPTION=<paddle-price-id>
 ```
 
 `VITE_KROMA_API_BASE_URL` should point at the standalone web backend. The web

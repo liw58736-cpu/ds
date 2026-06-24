@@ -103,6 +103,8 @@ export function getMissingEnvironmentGuidance(key) {
       "set WEB_IMAGE_API_KEY for the dedicated web image-generation upstream",
     paddlePriceCredits:
       "set WEB_PADDLE_PRICE_CREDITS_JSON from render.yaml on kroma-web-api",
+    authCodeSecret:
+      "set WEB_AUTH_CODE_SECRET to a long random value on kroma-web-api",
   };
 
   return guidanceByKey[key] ?? "configure this value on kroma-web-api";

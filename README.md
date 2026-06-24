@@ -30,6 +30,14 @@ Frontend production variables:
 VITE_WEB_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
 VITE_KROMA_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
 VITE_API_BASE_URL=
+VITE_PADDLE_ENVIRONMENT=production
+VITE_PADDLE_CLIENT_TOKEN=<paddle-client-token>
+VITE_PADDLE_PRICE_BASIC_TOP_UP=<paddle-price-id>
+VITE_PADDLE_PRICE_STANDARD_TOP_UP=<paddle-price-id>
+VITE_PADDLE_PRICE_PRO_TOP_UP=<paddle-price-id>
+VITE_PADDLE_PRICE_MONTHLY_SUBSCRIPTION=<paddle-price-id>
+VITE_PADDLE_PRICE_QUARTERLY_SUBSCRIPTION=<paddle-price-id>
+VITE_PADDLE_PRICE_YEARLY_SUBSCRIPTION=<paddle-price-id>
 ```
 
 Keep `VITE_KROMA_API_BASE_URL` pointed at the standalone web backend, not the
@@ -39,12 +47,24 @@ generation.
 
 Backend setup details are in `web-backend/README.md`.
 
-After Render deploys both services, verify the live backend is on the current
-commit and has the required environment variables and Supabase tables:
+Every production build writes `version.json` into the static frontend. After
+Render deploys both services, verify the live frontend and backend are on the
+expected commits and that the backend has the required environment variables
+and Supabase tables:
 
 ```bash
 npm run check:production
 ```
 
-If this reports the old health format, redeploy `kroma-web-api` on Render before
-testing signup, payment, or credit balance behavior.
+The check must report:
+
+- `OK deployed backend commit`
+- `OK frontend version metadata`
+- `OK deployed frontend commit`
+- `OK required environment`
+- `OK required Supabase tables`
+
+If `frontend version metadata` says `missing or rewritten to HTML`, redeploy
+`kroma-web` so the latest build publishes `/version.json`. If the backend commit
+is old, redeploy `kroma-web-api` before testing signup, payment, or credit
+balance behavior.

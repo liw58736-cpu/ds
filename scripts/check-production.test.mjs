@@ -83,6 +83,10 @@ test("production check explains how to fill remaining production secrets", () =>
     getMissingEnvironmentGuidance("imageApiBaseUrl"),
     /WEB_IMAGE_API_BASE_URL/,
   );
+  assert.match(
+    getMissingEnvironmentGuidance("authCodeSecret"),
+    /WEB_AUTH_CODE_SECRET/,
+  );
 });
 
 test("production check treats manual top-up key as optional", () => {
