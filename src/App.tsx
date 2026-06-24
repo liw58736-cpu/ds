@@ -9,6 +9,7 @@ import { LoginPage } from "./components/LoginPage";
 import { PricingPage } from "./components/PricingPage";
 import { Workspace } from "./components/Workspace";
 import { getCurrentAccountSnapshot } from "./api/accountApi";
+import { clearAccountSession } from "./storage/accountStore";
 
 const studioPages = [
   "main_image",
@@ -59,6 +60,12 @@ export default function App() {
     setPage(nextPage);
   };
 
+  const handleLogout = () => {
+    clearAccountSession();
+    setIsAuthenticated(false);
+    setPage("login");
+  };
+
   const secondaryPage =
     page === "home" ? (
       <HomePage onOpenStudio={handlePageChange} />
@@ -67,7 +74,7 @@ export default function App() {
     ) : page === "pricing" ? (
       <PricingPage />
     ) : page === "account" ? (
-      <AccountPage paymentStatus={initialPaymentStatus} />
+      <AccountPage paymentStatus={initialPaymentStatus} onLogout={handleLogout} />
     ) : page === "login" ? (
       <LoginPage
         onOpenLegal={handlePageChange}

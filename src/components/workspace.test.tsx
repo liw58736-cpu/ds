@@ -621,7 +621,7 @@ describe("AppShell", () => {
   it("enables nav buttons and marks the current page active", async () => {
     const user = userEvent.setup();
     const onPageChange = vi.fn();
-    render(
+    const { container } = render(
       <AppShell
         page="main_image"
         onPageChange={onPageChange}
@@ -634,10 +634,11 @@ describe("AppShell", () => {
     expect(screen.getByRole("button", { name: "商品主图" })).toHaveClass(
       "nav-active",
     );
-    for (const label of ["AI工具", "详情页", "历史任务", "价格", "账户", "登录"]) {
-      expect(screen.getByRole("button", { name: label })).toBeEnabled();
-    }
-    expect(screen.queryByRole("button", { name: "模板库" })).not.toBeInTheDocument();
+    const navButtons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".topnav-button"),
+    );
+    expect(navButtons).toHaveLength(7);
+    navButtons.forEach((button) => expect(button).toBeEnabled());
 
     await user.click(screen.getByRole("button", { name: "价格" }));
 

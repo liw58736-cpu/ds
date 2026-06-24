@@ -158,6 +158,8 @@ function saveAccountSnapshot(snapshot: AccountSnapshot): void {
   localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(snapshot));
   if (snapshot.session) {
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(snapshot.session));
+  } else {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
   }
 }
 
@@ -198,6 +200,17 @@ export function replaceAccountSnapshot(snapshot: AccountSnapshot): AccountSnapsh
 
 export function getAccountAccessToken(): string | null {
   return getAccountSnapshot().session?.accessToken ?? null;
+}
+
+export function clearAccountSession(): AccountSnapshot {
+  const current = getAccountSnapshot();
+  const snapshot = {
+    ...current,
+    session: null,
+  };
+
+  saveAccountSnapshot(snapshot);
+  return snapshot;
 }
 
 export function addCredits(input: AddCreditsInput): AccountSnapshot {

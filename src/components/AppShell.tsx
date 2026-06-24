@@ -53,7 +53,9 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const visibleTopNavItems = topNavItems.filter(
-    (item) => isAuthenticated || !privatePages.has(item.page),
+    (item) =>
+      (isAuthenticated || !privatePages.has(item.page)) &&
+      (!isAuthenticated || item.page !== "login"),
   );
 
   return (

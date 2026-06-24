@@ -4037,10 +4037,40 @@ body {
 
 .account-grid,
 .account-system-status,
+.account-session-card,
 .account-disclosure,
 .account-ledger {
   margin-left: 18px;
   margin-right: 18px;
+}
+
+.account-session-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #d8dee4;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.account-session-card .summary-label,
+.account-session-card .summary-value,
+.account-session-card .summary-note {
+  margin: 0;
+}
+
+.account-session-card .summary-value {
+  margin-top: 5px;
+}
+
+.account-session-card .summary-note {
+  margin-top: 6px;
+}
+
+.account-logout-button {
+  flex: 0 0 auto;
 }
 
 .usage-card {
@@ -4244,10 +4274,20 @@ body {
 
   .account-grid,
   .account-system-status,
+  .account-session-card,
   .account-disclosure,
   .account-ledger {
     margin-left: 14px;
     margin-right: 14px;
+  }
+
+  .account-session-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-logout-button {
+    width: fit-content;
   }
 }
 

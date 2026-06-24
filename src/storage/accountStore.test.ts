@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   addCredits,
+  clearAccountSession,
   deductCredits,
   getAccountSnapshot,
   initializeSession,
@@ -61,6 +62,29 @@ describe("accountStore", () => {
       userId: "user-1",
     });
     expect(getAccountSnapshot().session?.accessToken).toBe("access-token-1");
+  });
+
+  it("clears the current login session without removing credits", () => {
+    initializeSession({
+      identifier: "seller@example.com",
+      authView: "login",
+      mode: "password",
+      storeName: "",
+      inviteCode: "",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      provider: "kroma",
+      userId: "user-1",
+      accessToken: "access-token-1",
+      refreshToken: "refresh-token-1",
+    });
+
+    const snapshot = clearAccountSession();
+
+    expect(snapshot).toMatchObject({
+      balance: 5,
+      session: null,
+    });
+    expect(getAccountSnapshot().session).toBeNull();
   });
 
   it("adds purchased credits and records the selected plan", () => {

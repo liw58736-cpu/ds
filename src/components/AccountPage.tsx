@@ -43,9 +43,10 @@ function getImageStatusNote(backendHealth: WebBackendHealth | null): string {
 
 interface AccountPageProps {
   paymentStatus?: string | null;
+  onLogout?: () => void;
 }
 
-export function AccountPage({ paymentStatus }: AccountPageProps) {
+export function AccountPage({ paymentStatus, onLogout }: AccountPageProps) {
   const [account, setAccount] = useState(() => getCurrentAccountSnapshot());
   const [backendHealth, setBackendHealth] =
     useState<WebBackendHealth | null>(null);
@@ -148,6 +149,26 @@ export function AccountPage({ paymentStatus }: AccountPageProps) {
           <p className="account-payment-status" role="status">
             支付已完成，积分到账可能需要几秒钟，请刷新账户余额确认。
           </p>
+        ) : null}
+        {account.session ? (
+          <div className="account-session-card">
+            <div>
+              <p className="summary-label">{"当前登录邮箱"}</p>
+              <p className="summary-value account-email">
+                {account.session.identifier}
+              </p>
+              <p className="summary-note">
+                {"当前账号的积分、订单和历史任务会记录在这个邮箱下。"}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="secondary-button account-logout-button"
+              onClick={onLogout}
+            >
+              {"退出登录"}
+            </button>
+          </div>
         ) : null}
         <div className="account-grid">
           {usageItems.map((item) => (

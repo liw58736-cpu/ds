@@ -471,16 +471,28 @@ describe("App", () => {
   it("opens the account page", async () => {
     const user = userEvent.setup();
     signInForTest();
-    render(<App />);
+    const { container } = render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "账户" }));
+    const topNavButtons = container.querySelectorAll<HTMLButtonElement>(".topnav-button");
+    const accountButton = topNavButtons[topNavButtons.length - 1];
+    await user.click(accountButton);
 
-    expect(screen.getByRole("heading", { name: "账户与用量" })).toBeInTheDocument();
+    expect(container.querySelector(".account-panel")).not.toBeNull();
+    expect(container.querySelector(".account-email")?.textContent).toContain(
+      "seller@example.com",
+    );
     expect(screen.queryByText("Account Settings")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "登录或绑定账户" })).not.toBeInTheDocument();
+    expect(container.querySelector(".login-form")).toBeNull();
+    expect(container.querySelectorAll(".topnav-button")).toHaveLength(7);
 
-    await user.click(screen.getByRole("button", { name: "登录" }));
-    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+    const logoutButton = container.querySelector<HTMLButtonElement>(
+      ".account-logout-button",
+    );
+    expect(logoutButton).not.toBeNull();
+    await user.click(logoutButton!);
+
+    expect(container.querySelector(".login-form")).not.toBeNull();
+    expect(container.querySelector(".account-panel")).toBeNull();
   });
 
   it("shows backend system status on the account page", async () => {
@@ -657,7 +669,7 @@ describe("App", () => {
     expect(container.querySelector(".login-form")).toBeNull();
   });
 
-  it("routes successful Kroma password login to the account page", async () => {
+  it("routes successful Kroma password login to account controls", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     vi.stubGlobal(
       "fetch",
@@ -735,6 +747,22 @@ describe("App", () => {
       expect(container.querySelector(".account-panel")).not.toBeNull();
     });
     expect(container.querySelector(".login-form")).toBeNull();
+    expect(container.querySelector(".account-email")?.textContent).toContain(
+      "seller@example.com",
+    );
+    expect(
+      Array.from(container.querySelectorAll(".topnav-button")).some(
+        (button) => button.textContent === "登录",
+      ),
+    ).toBe(false);
+
+    const logoutButton =
+      container.querySelector<HTMLButtonElement>(".account-logout-button");
+    expect(logoutButton).not.toBeNull();
+    await user.click(logoutButton!);
+
+    expect(container.querySelector(".login-form")).not.toBeNull();
+    expect(container.querySelector(".account-panel")).toBeNull();
   });
 
   it("registers through Kroma and waits for real email verification", async () => {

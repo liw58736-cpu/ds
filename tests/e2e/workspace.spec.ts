@@ -140,11 +140,9 @@ test("navigation surfaces render and preserve generated history", async ({
   await expect(page.getByText("951 credits")).toBeVisible();
   await expect(page.getByText("购买 专业包")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "登录", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "登录", level: 1 }),
-  ).toBeVisible();
-  await expect(page.getByRole("form", { name: "登录表单" })).toBeVisible();
+  await expect(page.locator(".topnav-button")).toHaveCount(7);
+  await expect(page.locator(".account-email")).toBeVisible();
+  await expect(page.locator(".account-logout-button")).toBeVisible();
   await expectNoHorizontalDocumentOverflow(page);
 
   await page.getByRole("button", { name: "历史任务" }).click();
