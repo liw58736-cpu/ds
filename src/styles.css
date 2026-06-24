@@ -3202,7 +3202,7 @@ body {
   }
 }
 
-/* Shopix-inspired homepage structure, adapted for kroma with flat brand color. */
+/* Kroma homepage structure with a flat brand color system. */
 .home-page {
   gap: 18px;
   margin-top: -84px;
@@ -4291,7 +4291,7 @@ body {
   }
 }
 
-/* Final homepage layout guard. Keep the Shopix-like flow above older homepage experiments. */
+/* Final homepage layout guard. Keep the current kroma flow above older homepage experiments. */
 .home-page .home-flow-section {
   gap: 0;
   padding: 0;
