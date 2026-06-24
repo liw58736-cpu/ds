@@ -681,7 +681,9 @@ describe("App", () => {
 
     expect(screen.getByText("云端积分余额")).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText("已登录，云端余额暂时同步失败，请刷新后重试。")).toBeInTheDocument();
+      expect(
+        screen.getByText("登录状态可能已过期，请退出后重新登录以同步云端余额。"),
+      ).toBeInTheDocument();
     });
     expect(screen.queryByText("试用积分余额")).not.toBeInTheDocument();
   });

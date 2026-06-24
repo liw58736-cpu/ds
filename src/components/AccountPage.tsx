@@ -69,7 +69,7 @@ export function AccountPage({ paymentStatus, onLogout }: AccountPageProps) {
     creditSyncStatus === "cloud"
       ? "当前显示网页端云端积分余额。"
       : creditSyncStatus === "cloud_sync_failed"
-        ? "已登录，云端余额暂时同步失败，请刷新后重试。"
+        ? "登录状态可能已过期，请退出后重新登录以同步云端余额。"
         : "未登录时仅显示本机试用积分，登录后同步云端余额。";
 
   const usageItems = [
