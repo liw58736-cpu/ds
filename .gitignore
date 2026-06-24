@@ -1,5 +1,6 @@
 node_modules
 dist
+public/version.json
 coverage
 playwright-report
 test-results

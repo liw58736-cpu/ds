@@ -4,6 +4,9 @@ import { pathToFileURL } from "node:url";
 const apiBaseUrl =
   process.env.KROMA_WEB_API_BASE_URL || "https://kroma-web-api.onrender.com/api/v1";
 const healthUrl = `${apiBaseUrl.replace(/\/+$/, "")}/health`;
+const frontendBaseUrl =
+  process.env.KROMA_WEB_FRONTEND_URL || "https://kromaai.app";
+const frontendVersionUrl = getFrontendVersionUrl(frontendBaseUrl);
 const optionalEnvironmentKeys = new Set(["internalBillingKey"]);
 
 export function getExpectedBackendCommit(execFile = execFileSync) {
@@ -65,6 +68,18 @@ function getLocalCommit() {
   }
 }
 
+export function getFrontendVersionUrl(baseUrl) {
+  return `${String(baseUrl).replace(/\/+$/, "")}/version.json`;
+}
+
+export async function readJsonResponse(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
 function printStatus(label, ok, detail = "") {
   const marker = ok ? "OK" : "CHECK";
   console.log(`${marker} ${label}${detail ? `: ${detail}` : ""}`);
@@ -103,8 +118,14 @@ function printMissingGuidance(missing) {
 async function main() {
   const localCommit = getLocalCommit();
   const expectedBackendCommit = getExpectedBackendCommit();
-  const response = await fetch(healthUrl);
-  const payload = await response.json();
+  const [response, frontendResponse] = await Promise.all([
+    fetch(healthUrl),
+    fetch(frontendVersionUrl, { cache: "no-store" }),
+  ]);
+  const payload = await readJsonResponse(response);
+  const frontendPayload = frontendResponse.ok
+    ? await readJsonResponse(frontendResponse)
+    : {};
 
   console.log(`Kroma web API health: ${healthUrl}`);
   printStatus("HTTP health request", response.ok, `${response.status}`);
@@ -132,6 +153,19 @@ async function main() {
   );
   printStatus("live commit", Boolean(liveCommit), liveCommit || "missing");
   printStatus("deployed backend commit", commitMatches);
+
+  console.log(`Kroma web frontend version: ${frontendVersionUrl}`);
+  printStatus("frontend version request", frontendResponse.ok, `${frontendResponse.status}`);
+  const liveFrontendCommit = String(frontendPayload.commit ?? "");
+  const frontendCommitMatches = isLiveCommitCompatible(
+    localCommit,
+    liveFrontendCommit,
+  );
+  printStatus(
+    "deployed frontend commit",
+    frontendCommitMatches,
+    liveFrontendCommit || "missing version.json commit",
+  );
 
   const payloadMissing = Array.isArray(payload.missing) ? payload.missing : [];
   const payloadOptionalMissing = Array.isArray(payload.optionalMissing)
@@ -165,7 +199,13 @@ async function main() {
     payload.ok ||
     (missing.length === 0 && failedTables.length === 0);
 
-  if (!healthOk || !commitMatches || missing.length > 0 || failedTables.length > 0) {
+  if (
+    !healthOk ||
+    !commitMatches ||
+    !frontendCommitMatches ||
+    missing.length > 0 ||
+    failedTables.length > 0
+  ) {
     process.exitCode = 1;
   }
 }

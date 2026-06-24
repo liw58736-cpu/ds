@@ -3,8 +3,10 @@ import test from "node:test";
 import {
   getMissingEnvironmentGuidance,
   getExpectedBackendCommit,
+  getFrontendVersionUrl,
   isLiveCommitCompatible,
   partitionMissingEnvironment,
+  readJsonResponse,
 } from "./check-production.mjs";
 
 test("production check compares the live backend to the latest backend-affecting commit", () => {
@@ -45,6 +47,24 @@ test("production check accepts a live commit that includes the latest backend co
   assert.deepEqual(calls, [
     ["git", ["merge-base", "--is-ancestor", "backend-commit", "frontend-commit"]],
   ]);
+});
+
+test("production check reads frontend version metadata from the deployed site", () => {
+  assert.equal(
+    getFrontendVersionUrl("https://kromaai.app/"),
+    "https://kromaai.app/version.json",
+  );
+});
+
+test("production check handles non-json frontend version responses", async () => {
+  const payload = await readJsonResponse(
+    new Response("<!doctype html>", {
+      status: 200,
+      headers: { "Content-Type": "text/html" },
+    }),
+  );
+
+  assert.deepEqual(payload, {});
 });
 
 test("production check explains how to fill remaining production secrets", () => {
