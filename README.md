@@ -45,7 +45,8 @@ mobile app backend. The web backend forwards image generation to its own
 `WEB_IMAGE_API_BASE_URL`. Production builds do not fall back to mock image
 generation.
 
-Backend setup details are in `web-backend/README.md`.
+Backend setup details are in `web-backend/README.md`. The complete launch
+checklist is in `docs/production-launch-checklist.md`.
 
 Every production build writes `version.json` into the static frontend. After
 Render deploys both services, verify the live frontend and backend are on the
