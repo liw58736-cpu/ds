@@ -18,7 +18,10 @@ export function getExpectedBackendCommit(execFile = execFileSync) {
         "-1",
         "--format=%H",
         "--",
-        "web-backend",
+        "web-backend/src",
+        "web-backend/package.json",
+        "web-backend/package-lock.json",
+        "web-backend/supabase",
         "render.yaml",
       ],
       {
