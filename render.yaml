@@ -7,6 +7,8 @@ services:
     buildCommand: npm ci
     startCommand: npm start
     envVars:
+      - key: NODE_VERSION
+        value: 24.14.1
       - key: WEB_SUPABASE_URL
         sync: false
       - key: WEB_SUPABASE_ANON_KEY
@@ -41,6 +43,8 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
     envVars:
+      - key: NODE_VERSION
+        value: 24.14.1
       - key: VITE_API_BASE_URL
         value: ""
       - key: VITE_WEB_API_BASE_URL

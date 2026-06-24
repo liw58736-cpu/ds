@@ -25,6 +25,10 @@ token, but that internal token is never shown in the kroma email.
 
 ## Render Environment
 
+The backend service should use the same pinned Node 24.x runtime as the
+frontend. `render.yaml` sets `NODE_VERSION=24.14.1`, and
+`web-backend/package.json` keeps the accepted engine range under Node 25.
+
 Set these values on the `kroma-web-api` service:
 
 ```text

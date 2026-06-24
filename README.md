@@ -31,6 +31,10 @@ This website is deployed as two separate Render services:
 
 The web product must not be deployed into `F:\ai图像生成app` or the mobile app backend. The mobile app and web product use separate Supabase projects, separate credit balances, and separate Render services.
 
+Node is pinned to the current 24.x runtime through `.node-version`, package
+`engines`, and `render.yaml` so local builds, the static frontend, and the web
+backend use the same major runtime.
+
 Frontend production variables:
 
 ```env
