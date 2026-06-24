@@ -74,9 +74,15 @@ export function getFrontendVersionUrl(baseUrl) {
 
 export async function readJsonResponse(response) {
   try {
-    return await response.json();
+    return {
+      ok: true,
+      payload: await response.json(),
+    };
   } catch {
-    return {};
+    return {
+      ok: false,
+      payload: {},
+    };
   }
 }
 
@@ -122,10 +128,12 @@ async function main() {
     fetch(healthUrl),
     fetch(frontendVersionUrl, { cache: "no-store" }),
   ]);
-  const payload = await readJsonResponse(response);
-  const frontendPayload = frontendResponse.ok
+  const backendJson = await readJsonResponse(response);
+  const frontendJson = frontendResponse.ok
     ? await readJsonResponse(frontendResponse)
-    : {};
+    : { ok: false, payload: {} };
+  const payload = backendJson.payload;
+  const frontendPayload = frontendJson.payload;
 
   console.log(`Kroma web API health: ${healthUrl}`);
   printStatus("HTTP health request", response.ok, `${response.status}`);
@@ -156,6 +164,11 @@ async function main() {
 
   console.log(`Kroma web frontend version: ${frontendVersionUrl}`);
   printStatus("frontend version request", frontendResponse.ok, `${frontendResponse.status}`);
+  printStatus(
+    "frontend version metadata",
+    frontendJson.ok,
+    frontendJson.ok ? "valid JSON" : "missing or rewritten to HTML",
+  );
   const liveFrontendCommit = String(frontendPayload.commit ?? "");
   const frontendCommitMatches = isLiveCommitCompatible(
     localCommit,
@@ -202,6 +215,7 @@ async function main() {
   if (
     !healthOk ||
     !commitMatches ||
+    !frontendJson.ok ||
     !frontendCommitMatches ||
     missing.length > 0 ||
     failedTables.length > 0

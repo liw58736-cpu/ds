@@ -57,14 +57,17 @@ test("production check reads frontend version metadata from the deployed site", 
 });
 
 test("production check handles non-json frontend version responses", async () => {
-  const payload = await readJsonResponse(
+  const result = await readJsonResponse(
     new Response("<!doctype html>", {
       status: 200,
       headers: { "Content-Type": "text/html" },
     }),
   );
 
-  assert.deepEqual(payload, {});
+  assert.deepEqual(result, {
+    ok: false,
+    payload: {},
+  });
 });
 
 test("production check explains how to fill remaining production secrets", () => {
