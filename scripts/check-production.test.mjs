@@ -60,6 +60,8 @@ test("production check compares the live frontend to the latest frontend-affecti
         "tsconfig.node.json",
         "render.yaml",
         "scripts/generate-build-metadata.mjs",
+        ":(exclude)**/*.test.ts",
+        ":(exclude)**/*.test.tsx",
       ],
     ],
   ]);

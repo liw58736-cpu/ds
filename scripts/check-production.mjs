@@ -51,6 +51,8 @@ export function getExpectedFrontendCommit(execFile = execFileSync) {
         "tsconfig.node.json",
         "render.yaml",
         "scripts/generate-build-metadata.mjs",
+        ":(exclude)**/*.test.ts",
+        ":(exclude)**/*.test.tsx",
       ],
       {
         encoding: "utf8",
