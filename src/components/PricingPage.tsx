@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { getWebBackendHealth } from "../api/accountApi";
-import { isPaddleCheckoutConfigured, purchasePlan } from "../api/billingApi";
+import {
+  getMissingPaddleCheckoutConfig,
+  isPaddleCheckoutConfigured,
+  purchasePlan,
+} from "../api/billingApi";
 import { getAccountSnapshot } from "../storage/accountStore";
 import type { WebBackendHealth } from "../api/accountApi";
 
@@ -250,6 +254,7 @@ export function PricingPage() {
     const creditAmount = parseCreditAmount(plan.campaignCredits ?? plan.baseCredits);
     const session = getAccountSnapshot().session;
     const usePaddle = isPaddleCheckoutConfigured();
+    const missingPaddleConfig = getMissingPaddleCheckoutConfig(plan.id);
 
     if (usePaddle && !session?.userId) {
       setSelectedPlan(plan);
@@ -260,6 +265,13 @@ export function PricingPage() {
     setSelectedPlan(plan);
     try {
       if (usePaddle) {
+        if (missingPaddleConfig.length > 0) {
+          setPaymentStatus(
+            `支付套餐未配置完成：${missingPaddleConfig.join("、")}。`,
+          );
+          return;
+        }
+
         const backendHealth = await getWebBackendHealth();
 
         if (!isPaymentFulfillmentReady(backendHealth)) {

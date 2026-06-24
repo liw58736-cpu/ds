@@ -304,6 +304,30 @@ describe("App", () => {
     expect(getAccountSnapshot().balance).toBe(5);
   });
 
+  it("blocks Paddle checkout when the selected plan price id is missing", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
+    const checkoutOpen = vi.fn();
+    vi.stubGlobal("Paddle", {
+      Initialize: vi.fn(),
+      Checkout: { open: checkoutOpen },
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    signInWithKromaForTest("seller@example.com");
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "价格" }));
+    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "支付套餐未配置完成：VITE_PADDLE_PRICE_PRO_TOP_UP。",
+    );
+    expect(checkoutOpen).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("does not block Paddle checkout when only the internal top-up key is missing", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
@@ -496,6 +520,29 @@ describe("App", () => {
 
     expect(container.querySelector(".login-form")).not.toBeNull();
     expect(container.querySelector(".account-panel")).toBeNull();
+  });
+
+  it("leaves the login page when a saved session becomes available", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "登录" }));
+    expect(container.querySelector(".login-form")).not.toBeNull();
+
+    signInWithKromaForTest("seller@example.com");
+
+    await waitFor(() => {
+      expect(container.querySelector(".account-panel")).not.toBeNull();
+      expect(container.querySelector(".login-form")).toBeNull();
+      expect(container.querySelector(".account-email")?.textContent).toContain(
+        "seller@example.com",
+      );
+      expect(
+        Array.from(container.querySelectorAll(".topnav-button")).some(
+          (button) => button.textContent === "登录",
+        ),
+      ).toBe(false);
+    });
   });
 
   it("shows backend system status on the account page", async () => {

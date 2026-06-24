@@ -56,6 +56,20 @@ export function isPaddleCheckoutConfigured(): boolean {
   return Boolean(import.meta.env.VITE_PADDLE_CLIENT_TOKEN?.trim());
 }
 
+export function getMissingPaddleCheckoutConfig(planId: string): string[] {
+  const missing: string[] = [];
+
+  if (!import.meta.env.VITE_PADDLE_CLIENT_TOKEN?.trim()) {
+    missing.push("VITE_PADDLE_CLIENT_TOKEN");
+  }
+
+  if (!getPaddlePriceId(planId)) {
+    missing.push(getPaddlePriceEnvName(planId));
+  }
+
+  return missing;
+}
+
 export async function purchasePlan(
   input: PurchasePlanInput,
 ): Promise<PurchasePlanResult> {
@@ -140,6 +154,19 @@ function getPaddlePriceId(planId: string): string | undefined {
   };
 
   return paddlePriceEnvByPlanId[planId]?.trim();
+}
+
+function getPaddlePriceEnvName(planId: string): string {
+  const paddlePriceEnvNameByPlanId: Record<string, string> = {
+    "basic-top-up": "VITE_PADDLE_PRICE_BASIC_TOP_UP",
+    "standard-top-up": "VITE_PADDLE_PRICE_STANDARD_TOP_UP",
+    "pro-top-up": "VITE_PADDLE_PRICE_PRO_TOP_UP",
+    "monthly-subscription": "VITE_PADDLE_PRICE_MONTHLY_SUBSCRIPTION",
+    "quarterly-subscription": "VITE_PADDLE_PRICE_QUARTERLY_SUBSCRIPTION",
+    "yearly-subscription": "VITE_PADDLE_PRICE_YEARLY_SUBSCRIPTION",
+  };
+
+  return paddlePriceEnvNameByPlanId[planId] ?? `Paddle price ID for ${planId}`;
 }
 
 async function loadPaddle(token: string): Promise<PaddleApi> {

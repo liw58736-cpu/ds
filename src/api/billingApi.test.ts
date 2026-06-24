@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getCurrentAccount } from "./accountApi";
-import { purchasePlan } from "./billingApi";
+import { getMissingPaddleCheckoutConfig, purchasePlan } from "./billingApi";
 import { getAccountSnapshot } from "../storage/accountStore";
 
 beforeEach(() => {
@@ -13,6 +13,19 @@ afterEach(() => {
 });
 
 describe("billingApi", () => {
+  it("reports missing Paddle checkout configuration for a selected plan", () => {
+    expect(getMissingPaddleCheckoutConfig("pro-top-up")).toEqual([
+      "VITE_PADDLE_CLIENT_TOKEN",
+      "VITE_PADDLE_PRICE_PRO_TOP_UP",
+    ]);
+
+    vi.stubEnv("VITE_PADDLE_CLIENT_TOKEN", "test-client-token");
+
+    expect(getMissingPaddleCheckoutConfig("pro-top-up")).toEqual([
+      "VITE_PADDLE_PRICE_PRO_TOP_UP",
+    ]);
+  });
+
   it("creates a paid mock checkout and credits the selected plan", async () => {
     const result = await purchasePlan({
       planId: "pro-top-up",

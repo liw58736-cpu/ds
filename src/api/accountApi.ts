@@ -313,6 +313,13 @@ async function getCurrentKromaAccountWithCreditSync(): Promise<AccountWithCredit
     };
   }
 
+  if (getAccountSnapshot().session?.accessToken !== accessToken) {
+    return {
+      account: getAccountSnapshot(),
+      creditSyncStatus: "cloud_sync_failed",
+    };
+  }
+
   return {
     account: initializeSessionSnapshot({
       ...current,
@@ -327,7 +334,7 @@ async function fetchKromaCredits(
   accessToken: string,
 ): Promise<KromaCreditsResponse | null> {
   try {
-    return await requestKromaJson<KromaCreditsResponse>(`${baseUrl}/user/credits`, {
+    const payload = await requestKromaJson<KromaCreditsResponse>(`${baseUrl}/user/credits`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -335,6 +342,8 @@ async function fetchKromaCredits(
         Authorization: `Bearer ${accessToken}`,
       },
     });
+
+    return typeof payload.credits === "number" ? payload : null;
   } catch {
     return null;
   }

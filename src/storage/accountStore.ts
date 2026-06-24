@@ -51,6 +51,7 @@ export interface RecordCreditSpendInput {
 const ACCOUNT_STORAGE_KEY = "commerce-studio-account-v1";
 const SESSION_STORAGE_KEY = "commerce-studio-session-v1";
 const TRIAL_CREDITS = 5;
+export const ACCOUNT_CHANGED_EVENT = "kroma-account-changed";
 
 function createTransactionId(type: CreditTransactionType): string {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -163,6 +164,12 @@ function saveAccountSnapshot(snapshot: AccountSnapshot): void {
   }
 }
 
+function emitAccountChanged(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(ACCOUNT_CHANGED_EVENT));
+  }
+}
+
 export function getAccountSnapshot(): AccountSnapshot {
   const storedAccount = parseStoredAccount(
     localStorage.getItem(ACCOUNT_STORAGE_KEY),
@@ -185,6 +192,7 @@ export function initializeSession(session: AccountSession): AccountSnapshot {
   };
 
   saveAccountSnapshot(snapshot);
+  emitAccountChanged();
   return snapshot;
 }
 
@@ -195,6 +203,7 @@ export function replaceAccountSnapshot(snapshot: AccountSnapshot): AccountSnapsh
   };
 
   saveAccountSnapshot(safeSnapshot);
+  emitAccountChanged();
   return safeSnapshot;
 }
 
@@ -210,6 +219,7 @@ export function clearAccountSession(): AccountSnapshot {
   };
 
   saveAccountSnapshot(snapshot);
+  emitAccountChanged();
   return snapshot;
 }
 

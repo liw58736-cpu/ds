@@ -9,7 +9,7 @@ import { LoginPage } from "./components/LoginPage";
 import { PricingPage } from "./components/PricingPage";
 import { Workspace } from "./components/Workspace";
 import { getCurrentAccountSnapshot } from "./api/accountApi";
-import { clearAccountSession } from "./storage/accountStore";
+import { ACCOUNT_CHANGED_EVENT, clearAccountSession } from "./storage/accountStore";
 
 const studioPages = [
   "main_image",
@@ -45,9 +45,20 @@ export default function App() {
   const shouldMountWorkspace = page !== "home" && page !== "history";
 
   const handlePageChange = (nextPage: AppPage) => {
+    const hasSavedSession = Boolean(getCurrentAccountSnapshot().session);
+
+    if (hasSavedSession !== isAuthenticated) {
+      setIsAuthenticated(hasSavedSession);
+    }
+
+    if (nextPage === "login" && hasSavedSession) {
+      setPage("account");
+      return;
+    }
+
     if (
       (nextPage === "history" || nextPage === "account") &&
-      !isAuthenticated
+      !hasSavedSession
     ) {
       setPage("login");
       return;
@@ -96,6 +107,34 @@ export default function App() {
     ) : page === "about" ? (
       <LegalPage type="about" />
     ) : null;
+
+  useEffect(() => {
+    const syncAccountState = () => {
+      const hasSavedSession = Boolean(getCurrentAccountSnapshot().session);
+
+      setIsAuthenticated(hasSavedSession);
+      setPage((currentPage) => {
+        if (hasSavedSession && currentPage === "login") {
+          return "account";
+        }
+
+        if (!hasSavedSession && (currentPage === "account" || currentPage === "history")) {
+          return "login";
+        }
+
+        return currentPage;
+      });
+    };
+
+    window.addEventListener(ACCOUNT_CHANGED_EVENT, syncAccountState);
+    window.addEventListener("storage", syncAccountState);
+    syncAccountState();
+
+    return () => {
+      window.removeEventListener(ACCOUNT_CHANGED_EVENT, syncAccountState);
+      window.removeEventListener("storage", syncAccountState);
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.scrollTop = 0;
