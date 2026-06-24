@@ -35,7 +35,6 @@ WEB_AUTH_REDIRECT_URL=https://kromaai.app
 WEB_ALLOWED_AUTH_REDIRECTS=https://kromaai.app,https://www.kromaai.app,https://kroma-web.onrender.com
 WEB_AUTH_EMAIL_FROM=kroma <no-reply@i18.pro>
 WEB_RESEND_API_KEY=<resend-api-key>
-WEB_AUTH_CODE_SECRET=<random-auth-code-hmac-secret>
 WEB_PADDLE_WEBHOOK_SECRET=<paddle-webhook-secret>
 WEB_PADDLE_PRICE_CREDITS_JSON=<price-id-to-credit-json>
 WEB_IMAGE_API_BASE_URL=<dedicated-web-image-generation-api-base-url>
@@ -45,13 +44,15 @@ WEB_IMAGE_API_KEY=<dedicated-web-image-generation-api-key>
 Optional:
 
 ```text
+WEB_AUTH_CODE_SECRET=<random-auth-code-hmac-secret>
 WEB_INTERNAL_BILLING_KEY=<server-to-server-billing-secret>
 ```
 
 `WEB_AUTH_CODE_SECRET` is used to hash public 6 digit email codes before storing
 them in Supabase. Use a long random value and keep it stable after launch so
 codes issued before a redeploy remain verifiable during their short lifetime.
-Generate one with:
+It is recommended, but missing it does not block startup because the backend
+can fall back to other server-only secrets. Generate one with:
 
 ```text
 npm run secret:auth-code

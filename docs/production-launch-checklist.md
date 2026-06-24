@@ -107,7 +107,6 @@ WEB_AUTH_REDIRECT_URL=https://kromaai.app
 WEB_ALLOWED_AUTH_REDIRECTS=https://kromaai.app,https://www.kromaai.app,https://kroma-web.onrender.com
 WEB_AUTH_EMAIL_FROM=kroma <no-reply@i18.pro>
 WEB_RESEND_API_KEY=<resend-api-key>
-WEB_AUTH_CODE_SECRET=<generated-secret>
 WEB_PADDLE_WEBHOOK_SECRET=<paddle-webhook-secret>
 WEB_PADDLE_PRICE_CREDITS_JSON=<price-id-to-credit-json>
 WEB_IMAGE_API_BASE_URL=<dedicated-web-image-upstream>
@@ -117,6 +116,7 @@ WEB_IMAGE_API_KEY=<dedicated-web-image-upstream-key>
 Optional but recommended:
 
 ```text
+WEB_AUTH_CODE_SECRET=<generated-secret>
 WEB_INTERNAL_BILLING_KEY=<generated-secret>
 ```
 
@@ -126,6 +126,12 @@ Generate server secrets locally:
 npm run secret:auth-code
 npm run secret:internal-billing
 ```
+
+`WEB_AUTH_CODE_SECRET` is recommended so email verification code hashing remains
+stable across deploys. It does not block startup because the backend can fall
+back to existing server-only secrets. `WEB_INTERNAL_BILLING_KEY` only protects
+manual internal top-ups; Paddle checkout and webhook crediting do not require
+it.
 
 ## 3. Paddle Webhook
 
