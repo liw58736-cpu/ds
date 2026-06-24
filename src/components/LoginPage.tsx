@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { AppPage } from "./AppShell";
-import { loginOrRegister, requestLoginCode, verifySignupCode } from "../api/accountApi";
+import {
+  getCurrentAccountSnapshot,
+  loginOrRegister,
+  requestLoginCode,
+  verifySignupCode,
+} from "../api/accountApi";
 import type { AuthView, LoginMode } from "../storage/accountStore";
 import kromaLogo from "../assets/brand/kroma-logo.png";
 
@@ -29,6 +34,12 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
   const [message, setMessage] = useState(INITIAL_STATUS);
   const [messageType, setMessageType] = useState<"status" | "alert">("status");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (getCurrentAccountSnapshot().session) {
+      onAuthenticated?.();
+    }
+  }, [onAuthenticated]);
 
   const isRegister = authView === "register";
   const isRegisterVerification = isRegister && registerStep === "verify";

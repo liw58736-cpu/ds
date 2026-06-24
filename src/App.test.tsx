@@ -1,4 +1,5 @@
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -16,9 +17,11 @@ import {
 
 beforeEach(() => {
   localStorage.clear();
+  window.history.replaceState({}, "", "/");
 });
 
 afterEach(() => {
+  cleanup();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -597,7 +600,9 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "账户" }));
 
     const systemStatus = await screen.findByLabelText("系统状态");
-    expect(within(systemStatus).getByText("支付入账")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(systemStatus).getByText("支付入账")).toBeInTheDocument();
+    });
     const paymentCard = within(systemStatus)
       .getByText("支付入账")
       .closest("article");
@@ -671,98 +676,96 @@ describe("App", () => {
 
   it("routes successful Kroma password login to account controls", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              access_token: "access-token-1",
-              refresh_token: "refresh-token-1",
-              user_id: "user-1",
-            }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              credits: 5,
-              is_paid: false,
-              plan: "free",
-            }),
-        })
-        .mockResolvedValue({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              ok: true,
-              service: "kroma-web-api",
-              commit: "test",
-              checked_at: "2026-06-24T00:00:00.000Z",
-              config: {
-                supabaseUrl: true,
-                supabaseAnonKey: true,
-                supabaseServiceRoleKey: true,
-                resendApiKey: true,
-                paddleWebhookSecret: false,
-                paddlePriceCreditMap: true,
-                imageApiBaseUrl: false,
-                imageApiKey: false,
-              },
-              database: {
-                users: true,
-                creditTransactions: true,
-                generations: true,
-                templates: true,
-                authCodes: true,
-              },
-              missing: [],
-            }),
-        }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: "access-token-1",
+            refresh_token: "refresh-token-1",
+            user_id: "user-1",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            credits: 5,
+            is_paid: false,
+            plan: "free",
+          }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            service: "kroma-web-api",
+            commit: "test",
+            checked_at: "2026-06-24T00:00:00.000Z",
+            config: {
+              supabaseUrl: true,
+              supabaseAnonKey: true,
+              supabaseServiceRoleKey: true,
+              resendApiKey: true,
+              paddleWebhookSecret: false,
+              paddlePriceCreditMap: true,
+              imageApiBaseUrl: false,
+              imageApiKey: false,
+            },
+            database: {
+              users: true,
+              creditTransactions: true,
+              generations: true,
+              templates: true,
+              authCodes: true,
+            },
+            missing: [],
+          }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    let logoutButton: HTMLButtonElement | null = null;
     const user = userEvent.setup();
     const { container } = render(<App />);
 
     const topNavButtons = container.querySelectorAll<HTMLButtonElement>(".topnav-button");
     await user.click(topNavButtons[topNavButtons.length - 1]);
-    const loginForm = container.querySelector<HTMLFormElement>(".login-form");
-    expect(loginForm).not.toBeNull();
-    const identifierInput = loginForm!.querySelector<HTMLInputElement>('input[type="text"]');
-    const passwordInput = loginForm!.querySelector<HTMLInputElement>('input[type="password"]');
-    const agreementInput = loginForm!.querySelector<HTMLInputElement>('input[type="checkbox"]');
-    const submitButton = loginForm!.querySelector<HTMLButtonElement>(".login-submit");
-    expect(identifierInput).not.toBeNull();
-    expect(passwordInput).not.toBeNull();
-    expect(agreementInput).not.toBeNull();
-    expect(submitButton).not.toBeNull();
+    const loginForm = await screen.findByRole("form", { name: "登录表单" });
 
-    await user.type(identifierInput!, "seller@example.com");
-    await user.type(passwordInput!, "secret-password");
-    await user.click(agreementInput!);
-    await user.click(submitButton!);
+    await user.type(
+      within(loginForm).getByLabelText("手机号或邮箱"),
+      "seller@example.com",
+    );
+    await user.type(within(loginForm).getByLabelText("密码"), "secret-password");
+    await user.click(within(loginForm).getByLabelText("我已阅读并同意"));
+    await user.click(within(loginForm).getByRole("button", { name: "登录 kroma" }));
 
     await waitFor(() => {
       expect(container.querySelector(".account-panel")).not.toBeNull();
+      expect(container.querySelector(".login-form")).toBeNull();
+      expect(container.querySelector(".account-email")?.textContent).toContain(
+        "seller@example.com",
+      );
+      logoutButton =
+        container.querySelector<HTMLButtonElement>(".account-logout-button");
+      expect(logoutButton).not.toBeNull();
+      expect(
+        Array.from(container.querySelectorAll(".topnav-button")).some(
+          (button) => button.textContent === "登录",
+        ),
+      ).toBe(false);
     });
-    expect(container.querySelector(".login-form")).toBeNull();
-    expect(container.querySelector(".account-email")?.textContent).toContain(
-      "seller@example.com",
-    );
-    expect(
-      Array.from(container.querySelectorAll(".topnav-button")).some(
-        (button) => button.textContent === "登录",
-      ),
-    ).toBe(false);
-
-    const logoutButton =
-      container.querySelector<HTMLButtonElement>(".account-logout-button");
-    expect(logoutButton).not.toBeNull();
     await user.click(logoutButton!);
 
     expect(container.querySelector(".login-form")).not.toBeNull();
     expect(container.querySelector(".account-panel")).toBeNull();
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "http://127.0.0.1:8000/api/v1/auth/login",
+      "http://127.0.0.1:8000/api/v1/user/credits",
+      "http://127.0.0.1:8000/api/v1/user/credits",
+      "http://127.0.0.1:8000/api/v1/health",
+    ]);
   });
 
   it("registers through Kroma and waits for real email verification", async () => {

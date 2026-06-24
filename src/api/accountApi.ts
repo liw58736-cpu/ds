@@ -277,11 +277,14 @@ const auth = await requestKromaJson<KromaAuthResponse>(`${baseUrl}${endpoint}`, 
     accessToken: auth.access_token,
     refreshToken: auth.refresh_token,
   };
-  const current = initializeSession(authenticatedSession);
+  const current: AccountSnapshot = {
+    ...getAccountSnapshot(),
+    session: authenticatedSession,
+  };
   const credits = await fetchKromaCredits(baseUrl, auth.access_token);
 
   if (!credits) {
-    return current;
+    return initializeSessionSnapshot(current);
   }
 
   const snapshot: AccountSnapshot = {
