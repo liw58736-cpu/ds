@@ -5,6 +5,7 @@ import {
   getExpectedBackendCommit,
   getExpectedFrontendCommit,
   getFrontendVersionUrl,
+  getFrontendVersionGuidance,
   isLiveCommitCompatible,
   partitionMissingEnvironment,
   readJsonResponse,
@@ -102,7 +103,45 @@ test("production check handles non-json frontend version responses", async () =>
   assert.deepEqual(result, {
     ok: false,
     payload: {},
+    contentType: "text/html",
+    bodyPreview: "<!doctype html>",
   });
+});
+
+test("production check explains frontend version HTML rewrites", () => {
+  assert.match(
+    getFrontendVersionGuidance({
+      responseOk: true,
+      status: 200,
+      contentType: "text/html; charset=utf-8",
+      bodyPreview: "<!doctype html><html>",
+    }),
+    /static frontend service/,
+  );
+});
+
+test("production check explains empty frontend version responses", () => {
+  assert.match(
+    getFrontendVersionGuidance({
+      responseOk: true,
+      status: 200,
+      contentType: "application/json",
+      bodyPreview: "",
+    }),
+    /dist\/version\.json/,
+  );
+});
+
+test("production check explains failed frontend version requests", () => {
+  assert.match(
+    getFrontendVersionGuidance({
+      responseOk: false,
+      status: 404,
+      contentType: "",
+      bodyPreview: "",
+    }),
+    /HTTP 404/,
+  );
 });
 
 test("production check explains how to fill remaining production secrets", () => {

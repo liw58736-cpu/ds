@@ -106,17 +106,28 @@ export function getFrontendVersionUrl(baseUrl) {
 }
 
 export async function readJsonResponse(response) {
+  const contentType = response.headers.get("content-type") ?? "";
+  const text = await response.text();
+
   try {
     return {
       ok: true,
-      payload: await response.json(),
+      payload: JSON.parse(text),
+      contentType,
+      bodyPreview: createBodyPreview(text),
     };
   } catch {
     return {
       ok: false,
       payload: {},
+      contentType,
+      bodyPreview: createBodyPreview(text),
     };
   }
+}
+
+function createBodyPreview(text) {
+  return String(text ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
 function printStatus(label, ok, detail = "") {
@@ -154,6 +165,29 @@ function printMissingGuidance(missing) {
   missing.forEach((key) => {
     console.log(`NEXT ${key}: ${getMissingEnvironmentGuidance(key)}`);
   });
+}
+
+export function getFrontendVersionGuidance({ responseOk, status, contentType, bodyPreview }) {
+  if (!responseOk) {
+    return `open the frontend service and confirm /version.json is published; request returned HTTP ${status}`;
+  }
+
+  const normalizedContentType = String(contentType ?? "").toLowerCase();
+  const normalizedPreview = String(bodyPreview ?? "").toLowerCase();
+
+  if (
+    normalizedContentType.includes("text/html") ||
+    normalizedPreview.includes("<!doctype html") ||
+    normalizedPreview.includes("<html")
+  ) {
+    return "version.json is being served as HTML; redeploy kroma-web and confirm kromaai.app is attached to the static frontend service, not an API or placeholder service";
+  }
+
+  if (!bodyPreview) {
+    return "version.json returned an empty body; redeploy kroma-web and confirm the build publishes dist/version.json";
+  }
+
+  return "version.json returned non-JSON content; redeploy kroma-web and confirm the static publish path is ./dist";
 }
 
 async function main() {
@@ -210,6 +244,19 @@ async function main() {
     frontendJson.ok,
     frontendJson.ok ? "valid JSON" : "missing or rewritten to HTML",
   );
+  if (!frontendJson.ok) {
+    console.log(
+      `NEXT frontendVersion: ${getFrontendVersionGuidance({
+        responseOk: frontendResponse.ok,
+        status: frontendResponse.status,
+        contentType: frontendJson.contentType,
+        bodyPreview: frontendJson.bodyPreview,
+      })}`,
+    );
+    if (frontendJson.bodyPreview) {
+      console.log(`INFO frontendVersion preview: ${frontendJson.bodyPreview}`);
+    }
+  }
   const liveFrontendCommit = String(frontendPayload.commit ?? "");
   const frontendCommitMatches = isLiveCommitCompatible(
     expectedFrontendCommit,
