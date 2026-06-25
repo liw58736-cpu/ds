@@ -32,7 +32,7 @@ services:
       - key: WEB_PADDLE_PRICE_CREDITS_JSON
         value: '{"pri_01kvq85dsggpt3qcb5pk02s10a":{"credits":120,"plan_id":"basic-top-up","plan_name":"\u57fa\u7840\u5305"},"pri_01kvq89wc6w551q949arne6xvt":{"credits":420,"plan_id":"standard-top-up","plan_name":"\u6807\u51c6\u5305"},"pri_01kvq8cmj8xb0412zr80hracsp":{"credits":950,"plan_id":"pro-top-up","plan_name":"\u4e13\u4e1a\u5305"},"pri_01kvq8dppzzfbrbb5yqf15x7se":{"credits":260,"plan_id":"monthly-subscription","plan_name":"\u8f7b\u5ea6\u521b\u4f5c\u9996\u9009"},"pri_01kvq8g8wwx973evrvc2dgcfad":{"credits":840,"plan_id":"quarterly-subscription","plan_name":"\u7a33\u5b9a\u521b\u4f5c\u66f4\u5212\u7b97"},"pri_01kvq8f3masyt9nfcgs9zscrq5":{"credits":3500,"plan_id":"yearly-subscription","plan_name":"\u6700\u9ad8\u4f18\u60e0"}}'
       - key: WEB_IMAGE_API_BASE_URL
-        sync: false
+        value: https://kroma-api.onrender.com/api/v1
       - key: WEB_IMAGE_API_KEY
         sync: false
 

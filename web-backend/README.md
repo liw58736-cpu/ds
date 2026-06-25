@@ -41,8 +41,7 @@ WEB_AUTH_EMAIL_FROM=kroma <no-reply@i18.pro>
 WEB_RESEND_API_KEY=<resend-api-key>
 WEB_PADDLE_WEBHOOK_SECRET=<paddle-webhook-secret>
 WEB_PADDLE_PRICE_CREDITS_JSON=<price-id-to-credit-json>
-WEB_IMAGE_API_BASE_URL=<dedicated-web-image-generation-api-base-url>
-WEB_IMAGE_API_KEY=<dedicated-web-image-generation-api-key>
+WEB_IMAGE_API_BASE_URL=https://kroma-api.onrender.com/api/v1
 ```
 
 Optional:
@@ -50,6 +49,7 @@ Optional:
 ```text
 WEB_AUTH_CODE_SECRET=<random-auth-code-hmac-secret>
 WEB_INTERNAL_BILLING_KEY=<server-to-server-billing-secret>
+WEB_IMAGE_API_KEY=<dedicated-image-upstream-key-if-required>
 ```
 
 `WEB_AUTH_CODE_SECRET` is used to hash public 6 digit email codes before storing
@@ -125,4 +125,9 @@ VITE_PADDLE_PRICE_YEARLY_SUBSCRIPTION=<paddle-price-id>
 
 `VITE_KROMA_API_BASE_URL` should point at the standalone web backend. The web
 backend proxies `/image/*` calls to `WEB_IMAGE_API_BASE_URL`, so the browser
-never calls the mobile app backend directly.
+never calls the mobile app backend directly. The current production setup reuses
+the mobile app image router at `https://kroma-api.onrender.com/api/v1` only for
+generation routing. Web auth, credits, billing, and Supabase remain isolated in
+`kroma-web-api`; the proxy does not forward the web user's bearer token to the
+app backend. `WEB_IMAGE_API_KEY` is only needed if the chosen image upstream
+requires its own server-to-server key.

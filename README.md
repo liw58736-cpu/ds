@@ -39,7 +39,11 @@ This website is deployed as two separate Render services:
 - `kroma-web`: static frontend for `https://kromaai.app`
 - `kroma-web-api`: standalone Node account and billing backend
 
-The web product must not be deployed into `F:\ai图像生成app` or the mobile app backend. The mobile app and web product use separate Supabase projects, separate credit balances, and separate Render services.
+The web product must not be deployed into `F:\ai图像生成app` or share the
+mobile app account backend. The mobile app and web product use separate
+Supabase projects, separate credit balances, and separate Render services. The
+web backend may proxy image generation to the app image router at
+`https://kroma-api.onrender.com/api/v1` without forwarding web user auth.
 
 Node is pinned to the current 24.x runtime through `.node-version`, package
 `engines`, and `render.yaml` so local builds, the static frontend, and the web
@@ -62,9 +66,9 @@ VITE_PADDLE_PRICE_YEARLY_SUBSCRIPTION=<paddle-price-id>
 ```
 
 Keep `VITE_KROMA_API_BASE_URL` pointed at the standalone web backend, not the
-mobile app backend. The web backend forwards image generation to its own
-`WEB_IMAGE_API_BASE_URL`. Production builds do not fall back to mock image
-generation.
+mobile app backend. The web backend forwards image generation to
+`WEB_IMAGE_API_BASE_URL`, currently the app image router. Production builds do
+not fall back to mock image generation.
 
 Backend setup details are in `web-backend/README.md`. The complete launch
 checklist is in `docs/production-launch-checklist.md`.

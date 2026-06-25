@@ -101,26 +101,27 @@ Fix:
 7. Set `WEB_PADDLE_WEBHOOK_SECRET` on Render service `kroma-web-api`.
 8. Redeploy `kroma-web-api`.
 
-### `CHECK required environment: imageApiBaseUrl, imageApiKey`
+### `CHECK required environment: imageApiBaseUrl`
 
-Real image generation is not ready until the web backend has its own image
-upstream configured.
+Real image generation is not ready until the web backend has an image upstream
+configured. The current production choice is to reuse the mobile app image
+router only for generation routing.
 
 Fix:
 
-1. Choose the dedicated web image-generation upstream.
-2. Set `WEB_IMAGE_API_BASE_URL` on `kroma-web-api`.
-3. Set `WEB_IMAGE_API_KEY` on `kroma-web-api`.
-4. Redeploy `kroma-web-api`.
-5. Run one authenticated generation smoke test after
+1. Set `WEB_IMAGE_API_BASE_URL=https://kroma-api.onrender.com/api/v1` on
+   `kroma-web-api`.
+2. Leave `WEB_IMAGE_API_KEY` empty for the current app image router.
+3. Redeploy `kroma-web-api`.
+4. Run one authenticated generation smoke test after
    `npm run check:production` passes.
 
 Important:
 
-- Do not point `WEB_IMAGE_API_BASE_URL` at the mobile app backend unless a
-  separate web-only deployment of that backend has been created.
-- The web product must keep its auth, credits, Paddle billing, and image
-  generation traffic isolated from the mobile app environment.
+- The web product keeps auth, credits, Paddle billing, and Supabase isolated in
+  `kroma-web-api`.
+- `kroma-web-api` only proxies `/api/v1/image/*` to the app image router and
+  does not forward the web user's bearer token to the app backend.
 
 ## 2. Required Backend Environment
 
@@ -136,8 +137,8 @@ WEB_AUTH_EMAIL_FROM=kroma <no-reply@i18.pro>
 WEB_RESEND_API_KEY=<resend-api-key>
 WEB_PADDLE_WEBHOOK_SECRET=<paddle-webhook-secret>
 WEB_PADDLE_PRICE_CREDITS_JSON=<price-id-to-credit-json>
-WEB_IMAGE_API_BASE_URL=<dedicated-web-image-upstream>
-WEB_IMAGE_API_KEY=<dedicated-web-image-upstream-key>
+WEB_IMAGE_API_BASE_URL=https://kroma-api.onrender.com/api/v1
+WEB_IMAGE_API_KEY=
 ```
 
 Optional but recommended:
@@ -184,14 +185,16 @@ The frontend sends `customData.user_id`, `customData.plan_id`, `customData.plan_
 
 ## 4. Image Generation Upstream
 
-Set the dedicated web image upstream on `kroma-web-api`:
+Set the image upstream on `kroma-web-api`:
 
 ```text
-WEB_IMAGE_API_BASE_URL=<dedicated-web-image-upstream>
-WEB_IMAGE_API_KEY=<dedicated-web-image-upstream-key>
+WEB_IMAGE_API_BASE_URL=https://kroma-api.onrender.com/api/v1
+WEB_IMAGE_API_KEY=
 ```
 
-The browser calls `kroma-web-api`. The backend then proxies `/api/v1/image/*` to `WEB_IMAGE_API_BASE_URL`. Do not point browser-facing frontend variables directly at the mobile app backend.
+The browser calls `kroma-web-api`. The backend then proxies `/api/v1/image/*` to
+`WEB_IMAGE_API_BASE_URL`. Do not point browser-facing frontend variables directly
+at the mobile app backend.
 
 ## 5. Required Frontend Environment
 

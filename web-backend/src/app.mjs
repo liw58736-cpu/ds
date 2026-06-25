@@ -1045,6 +1045,9 @@ function parseAllowedRedirects(env) {
 
 async function buildHealthResponse(env, fetchImpl) {
   const optionalConfigKeys = new Set(["internalBillingKey", "authCodeSecret"]);
+  const usesMobileAppImageRouter = isMobileAppImageRouter(
+    env.WEB_IMAGE_API_BASE_URL,
+  );
   const config = {
     supabaseUrl: Boolean(env.WEB_SUPABASE_URL),
     supabaseAnonKey: Boolean(env.WEB_SUPABASE_ANON_KEY),
@@ -1058,7 +1061,7 @@ async function buildHealthResponse(env, fetchImpl) {
     paddleWebhookSecret: Boolean(env.WEB_PADDLE_WEBHOOK_SECRET),
     paddlePriceCredits: hasValidPaddlePriceCreditMap(env),
     imageApiBaseUrl: Boolean(env.WEB_IMAGE_API_BASE_URL),
-    imageApiKey: Boolean(env.WEB_IMAGE_API_KEY),
+    imageApiKey: Boolean(env.WEB_IMAGE_API_KEY) || usesMobileAppImageRouter,
   };
   const missing = Object.entries(config)
     .filter(([key, configured]) => !configured && !optionalConfigKeys.has(key))
@@ -1079,6 +1082,18 @@ async function buildHealthResponse(env, fetchImpl) {
     missing,
     optionalMissing,
   };
+}
+
+function isMobileAppImageRouter(value) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    return new URL(value).hostname === "kroma-api.onrender.com";
+  } catch {
+    return false;
+  }
 }
 
 async function checkDatabaseHealth(fetchImpl, env, config) {

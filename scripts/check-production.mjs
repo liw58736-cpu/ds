@@ -145,9 +145,9 @@ export function getMissingEnvironmentGuidance(key) {
     paddleWebhookSecret:
       "create the Paddle webhook and set WEB_PADDLE_WEBHOOK_SECRET on kroma-web-api",
     imageApiBaseUrl:
-      "set WEB_IMAGE_API_BASE_URL to the dedicated web image-generation upstream",
+      "set WEB_IMAGE_API_BASE_URL to https://kroma-api.onrender.com/api/v1 or another image-generation upstream",
     imageApiKey:
-      "set WEB_IMAGE_API_KEY for the dedicated web image-generation upstream",
+      "set WEB_IMAGE_API_KEY only if the selected image-generation upstream requires a server key",
     paddlePriceCredits:
       "set WEB_PADDLE_PRICE_CREDITS_JSON from render.yaml on kroma-web-api",
     authCodeSecret:

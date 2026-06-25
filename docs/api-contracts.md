@@ -12,9 +12,10 @@ VITE_WEB_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1
 ```
 
 `VITE_KROMA_API_BASE_URL` must point at the standalone web backend. Do not point
-the web product at the mobile app backend. The web backend proxies `/image/*`
-requests to `WEB_IMAGE_API_BASE_URL`, which must be a dedicated web image
-generation upstream.
+the browser directly at the mobile app backend. The web backend proxies
+`/image/*` requests to `WEB_IMAGE_API_BASE_URL`, currently the app image router
+at `https://kroma-api.onrender.com/api/v1`. Web auth, credits, billing, and
+Supabase remain isolated in `kroma-web-api`.
 
 ```env
 VITE_KROMA_API_BASE_URL=https://kroma-web-api.onrender.com/api/v1

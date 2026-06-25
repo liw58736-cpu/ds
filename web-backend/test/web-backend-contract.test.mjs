@@ -96,6 +96,48 @@ test("health endpoint reports deployment commit and missing configuration", asyn
   });
 });
 
+test("health endpoint accepts the mobile app image router without an image api key", async () => {
+  const tablePaths = [
+    "/rest/v1/web_users?select=id&limit=1",
+    "/rest/v1/web_credit_transactions?select=id&limit=1",
+    "/rest/v1/web_generations?select=id&limit=1",
+    "/rest/v1/web_auth_codes?select=id&limit=1",
+    "/rest/v1/web_billing_events?select=id&limit=1",
+  ];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_RESEND_API_KEY: "resend-key",
+      WEB_AUTH_EMAIL_FROM: "kroma <no-reply@i18.pro>",
+      WEB_AUTH_REDIRECT_URL: "https://kromaai.app",
+      WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
+      WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+      WEB_PADDLE_PRICE_CREDITS_JSON: '{"pri_test":{"credits":120}}',
+      WEB_IMAGE_API_BASE_URL: "https://kroma-api.onrender.com/api/v1",
+      RENDER_GIT_COMMIT: "commit-1",
+    },
+    fetch: async (url) => {
+      if (tablePaths.some((path) => url.endsWith(path))) {
+        return jsonResponse([]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/health"),
+  );
+  const health = await readJson(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(health.config.imageApiBaseUrl, true);
+  assert.equal(health.config.imageApiKey, true);
+  assert.deepEqual(health.missing, []);
+});
+
 test("health endpoint identifies missing production configuration", async () => {
   const app = createWebBackend({
     env: {
@@ -846,6 +888,51 @@ test("image generation proxy forwards to the dedicated web image upstream", asyn
   });
   assert.equal(calls[0].url, "https://web-project.supabase.co/auth/v1/user");
   assert.equal(calls[1].url, "https://image-web.example.com/api/v1/image/generate");
+});
+
+test("image generation proxy can use the mobile app image router without mixing auth", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_IMAGE_API_BASE_URL: "https://kroma-api.onrender.com/api/v1",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://kroma-api.onrender.com/api/v1/image/generate") {
+        assert.equal(init.method, "POST");
+        assert.equal(init.headers.Authorization, undefined);
+        assert.equal(init.headers["X-Kroma-Client"], "web-backend");
+        assert.deepEqual(JSON.parse(init.body), { prompt: "product hero" });
+        return jsonResponse({
+          task_id: "image-task-1",
+          status: "processing",
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({ prompt: "product hero" }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    task_id: "image-task-1",
+    status: "processing",
+  });
+  assert.equal(calls[0].url, "https://web-project.supabase.co/auth/v1/user");
+  assert.equal(calls[1].url, "https://kroma-api.onrender.com/api/v1/image/generate");
 });
 
 test("image generation proxy forwards cancel requests without requiring a JSON body", async () => {
