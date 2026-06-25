@@ -42,7 +42,7 @@ export function ResultPreview({
           {hasResult ? (
             <div className="preview-result-list">
               {resultUrls.map((resultUrl, index) => (
-                <figure className="preview-result-item" key={resultUrl}>
+                <figure className="preview-result-item" key={`${resultUrl}-${index}`}>
                   <img src={resultUrl} alt="生成结果" />
                   <a
                     className="ghost-action-button"

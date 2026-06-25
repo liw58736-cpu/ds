@@ -46,6 +46,49 @@ async function expectNoHorizontalDocumentOverflow(page: Page) {
   );
 }
 
+async function seedAuthenticatedAccount(page: Page, balance = 100) {
+  await page.addInitScript((accountBalance) => {
+    const session = {
+      identifier: "seller@example.com",
+      authView: "login",
+      mode: "password",
+      storeName: "",
+      inviteCode: "",
+      createdAt: "2026-06-20T00:00:00.000Z",
+    };
+    localStorage.setItem(
+      "commerce-studio-account-v1",
+      JSON.stringify({
+        balance: accountBalance,
+        session,
+        transactions: [],
+      }),
+    );
+  }, balance);
+}
+
+async function openStudioPage(page: Page, navIndex: number) {
+  await page.goto("/");
+  await page.locator(".topnav-button").nth(navIndex).click();
+  await expect(page.locator(".workspace-route")).toBeVisible();
+}
+
+async function useSampleProductByCss(page: Page) {
+  await page.locator(".upload-actions .secondary-button").click();
+  await expect(page.locator(".current-product img")).toBeVisible();
+}
+
+async function chooseStandardOneK(page: Page) {
+  await page.locator(".version-grid button").first().click();
+  await page.getByRole("button", { name: "1K", exact: true }).click();
+}
+
+async function generateAndExpectResults(page: Page, count: number) {
+  await page.locator(".generate-button").click();
+  await expect(page.locator(".preview-result-item img")).toHaveCount(count);
+  await expect(page.locator(".preview-result-item .ghost-action-button")).toHaveCount(count);
+}
+
 test("sample product generates a mock ecommerce image", async ({ page }) => {
   await loadSampleProduct(page);
   await generateSampleAsset(page);
@@ -53,6 +96,61 @@ test("sample product generates a mock ecommerce image", async ({ page }) => {
   await expect(page.getByAltText("生成结果")).toBeVisible();
   await expect(page.getByText("已生成")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "最近任务" })).toHaveCount(0);
+});
+
+test("main image multi-select creates one result per selected function and records the function", async ({
+  page,
+}) => {
+  await seedAuthenticatedAccount(page);
+  await openStudioPage(page, 1);
+  await useSampleProductByCss(page);
+  await chooseStandardOneK(page);
+
+  await page.locator(".module-card-button").nth(0).click();
+  await page.locator(".module-card-button").nth(1).click();
+  await expect(page.locator(".generation-footer")).toContainText("2");
+
+  await generateAndExpectResults(page, 2);
+
+  await page.locator(".topnav-button").nth(4).click();
+  await expect(page.locator(".history-task-row")).toHaveCount(1);
+  await expect(page.locator(".history-task-row strong")).toContainText("/");
+  await expect(page.locator(".history-task-row strong")).toContainText("KV");
+});
+
+test("detail page quantity controls create multiple results for the same module", async ({
+  page,
+}) => {
+  await seedAuthenticatedAccount(page);
+  await openStudioPage(page, 2);
+  await useSampleProductByCss(page);
+  await chooseStandardOneK(page);
+
+  const firstDetailModule = page.locator(".detail-module-button").first();
+  await firstDetailModule.click();
+  await firstDetailModule.locator(".detail-module-stepper button").last().click();
+  await expect(firstDetailModule.locator(".detail-module-stepper b")).toHaveText("2");
+  await expect(page.locator(".generation-footer")).toContainText("2");
+
+  await generateAndExpectResults(page, 2);
+});
+
+test("AI tool modes all connect to generation and return a downloadable result", async ({
+  page,
+}) => {
+  await seedAuthenticatedAccount(page, 100);
+  await openStudioPage(page, 3);
+  await useSampleProductByCss(page);
+  await chooseStandardOneK(page);
+
+  const toolButtons = page.locator(".segmented-control").first().getByRole("button");
+  const toolCount = await toolButtons.count();
+  expect(toolCount).toBe(6);
+
+  for (let index = 0; index < toolCount; index += 1) {
+    await toolButtons.nth(index).click();
+    await generateAndExpectResults(page, 1);
+  }
 });
 
 test("preview canvas uses an opaque surface behind generated results", async ({
