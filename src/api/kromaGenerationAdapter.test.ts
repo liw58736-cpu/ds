@@ -3,6 +3,7 @@ import { buildGenerationTaskRequest } from "./apiContracts";
 import {
   buildKromaGenerateRequest,
   cancelKromaGenerationTask,
+  getConfiguredKromaApiBaseUrl,
   resumeKromaGenerationTask,
   submitKromaGenerationTask,
 } from "./kromaGenerationAdapter";
@@ -50,6 +51,14 @@ describe("kromaGenerationAdapter", () => {
       keep_user_outfit_pose: false,
       style: "main_image:standard",
     });
+  });
+
+  it("falls back to the web backend base url when the dedicated kroma url is missing", () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1/");
+
+    expect(getConfiguredKromaApiBaseUrl()).toBe(
+      "https://web-api.example.com/api/v1",
+    );
   });
 
   it("maps browser-held data images to image_base64 for the reference backend", () => {

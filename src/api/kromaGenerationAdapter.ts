@@ -34,7 +34,9 @@ interface KromaGenerationSubmitOptions {
 }
 
 export function getConfiguredKromaApiBaseUrl(): string | null {
-  const value = import.meta.env.VITE_KROMA_API_BASE_URL?.trim();
+  const value =
+    import.meta.env.VITE_KROMA_API_BASE_URL?.trim() ||
+    import.meta.env.VITE_WEB_API_BASE_URL?.trim();
 
   if (!value) {
     return null;
