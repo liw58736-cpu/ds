@@ -172,6 +172,23 @@ describe("generationApi", () => {
     expect(result.resultUrls[0]).toContain("data:image/svg+xml;charset=utf-8,");
   });
 
+  it("generates one result per selected main image module without duplicating brand edition credits", async () => {
+    const result = await generateAsset({
+      ...input,
+      config: {
+        ...input.config,
+        resolution: "1K",
+        generationVersion: "brand",
+        selectedMainModules: ["hero_kv", "overall_show"],
+      },
+    });
+
+    expect(result.resultUrls).toHaveLength(2);
+    expect(decodeURIComponent(result.resultUrls[0])).toContain("首屏 KV");
+    expect(decodeURIComponent(result.resultUrls[1])).toContain("整体展示");
+    expect(result.creditCost).toBe(4);
+  });
+
   it("forwards generation failures without consuming credits in this layer", async () => {
     await expect(
       createGenerationTask({

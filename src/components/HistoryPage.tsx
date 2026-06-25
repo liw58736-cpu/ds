@@ -3,7 +3,7 @@ import {
   getGenerationTaskSnapshot,
   listGenerationTasks,
 } from "../api/generationApi";
-import { moduleLabels } from "../domain/defaults";
+import { describeTaskFunction } from "../domain/taskDisplay";
 import type { GenerationTask, TaskStatus } from "../domain/types";
 
 const statusLabels = {
@@ -91,7 +91,8 @@ export function HistoryPage() {
             {tasks.map((task) => (
               <article className="history-task-row" key={task.id}>
                 <div>
-                  <strong>{moduleLabels[task.config.module]}</strong>
+                  <small>功能</small>
+                  <strong>{describeTaskFunction(task)}</strong>
                   <span>{task.productInput.fileName}</span>
                 </div>
                 <div>

@@ -197,11 +197,8 @@ describe("Workspace", () => {
     );
   });
 
-  it("displays uploaded product image and filename from a created object URL", async () => {
+  it("displays uploaded product image and filename from a persisted data URL", async () => {
     const user = userEvent.setup();
-    const createObjectURL = vi
-      .spyOn(URL, "createObjectURL")
-      .mockReturnValue("blob:product-photo");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     render(<Workspace />);
 
@@ -210,20 +207,16 @@ describe("Workspace", () => {
     });
     await user.upload(screen.getByLabelText("上传商品图"), file);
 
-    expect(createObjectURL).toHaveBeenCalledWith(file);
     expect(screen.getByAltText("当前商品图")).toHaveAttribute(
       "src",
-      "blob:product-photo",
+      "data:image/png;base64,cHJvZHVjdA==",
     );
     expect(screen.queryByAltText("原始商品图")).not.toBeInTheDocument();
     expect(screen.getByText("product-photo.png")).toBeInTheDocument();
   });
 
-  it("revokes uploaded object URLs when replaced and unmounted without revoking sample URLs", async () => {
+  it("does not revoke persisted data URLs when replaced or unmounted", async () => {
     const user = userEvent.setup();
-    vi.spyOn(URL, "createObjectURL")
-      .mockReturnValueOnce("blob:first-product")
-      .mockReturnValueOnce("blob:second-product");
     const revokeObjectURL = vi
       .spyOn(URL, "revokeObjectURL")
       .mockImplementation(() => undefined);
@@ -241,17 +234,11 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
     unmount();
 
-    expect(revokeObjectURL).toHaveBeenCalledTimes(2);
-    expect(revokeObjectURL).toHaveBeenNthCalledWith(1, "blob:first-product");
-    expect(revokeObjectURL).toHaveBeenNthCalledWith(2, "blob:second-product");
+    expect(revokeObjectURL).not.toHaveBeenCalled();
   });
 
   it("allows uploading the same file again after using the sample product", async () => {
     const user = userEvent.setup();
-    const createObjectURL = vi
-      .spyOn(URL, "createObjectURL")
-      .mockReturnValueOnce("blob:first-same-file")
-      .mockReturnValueOnce("blob:second-same-file");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     render(<Workspace />);
     const uploadInput = screen.getByLabelText("上传商品图");
@@ -264,11 +251,10 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
     await user.upload(uploadInput, file);
 
-    expect(createObjectURL).toHaveBeenCalledTimes(2);
     expect(screen.getByText("same-product.png")).toBeInTheDocument();
     expect(screen.getByAltText("当前商品图")).toHaveAttribute(
       "src",
-      "blob:second-same-file",
+      "data:image/png;base64,c2FtZQ==",
     );
   });
 

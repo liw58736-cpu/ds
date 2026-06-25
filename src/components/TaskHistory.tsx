@@ -1,4 +1,4 @@
-import { moduleLabels } from "../domain/defaults";
+import { describeTaskFunction } from "../domain/taskDisplay";
 import type { GenerationTask, TaskStatus } from "../domain/types";
 
 interface TaskHistoryProps {
@@ -48,8 +48,9 @@ export function TaskHistory({
           {tasks.map((task) => (
             <article className="task-history-item" key={task.id}>
               <div className="task-history-summary">
+                <span className="task-label">功能</span>
                 <span className="task-module">
-                  {moduleLabels[task.config.module]}
+                  {describeTaskFunction(task)}
                 </span>
                 <span className={`task-status task-status-${task.status}`}>
                   {statusLabels[task.status]}

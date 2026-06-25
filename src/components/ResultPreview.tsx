@@ -15,9 +15,12 @@ export function ResultPreview({
 }: ResultPreviewProps) {
   const isTaskRunning =
     latestTask?.status === "queued" || latestTask?.status === "processing";
-  const resultUrl =
-    latestTask?.status === "completed" ? latestTask.resultUrls[0] : undefined;
-  const hasResult = Boolean(resultUrl);
+  const resultUrls =
+    latestTask?.status === "completed" ? latestTask.resultUrls : [];
+  const hasResult = resultUrls.length > 0;
+  const canRetryFailedTask =
+    latestTask?.status === "failed" &&
+    latestTask.errorCode !== "upload_source_unavailable";
   const runningProgress =
     isTaskRunning && latestTask?.progress ? latestTask.progress : "处理中";
 
@@ -36,8 +39,21 @@ export function ResultPreview({
             <p className="preview-title">生成预览</p>
             <span>{hasResult ? "Ready" : "Draft"}</span>
           </div>
-          {resultUrl ? (
-            <img src={resultUrl} alt="生成结果" />
+          {hasResult ? (
+            <div className="preview-result-list">
+              {resultUrls.map((resultUrl, index) => (
+                <figure className="preview-result-item" key={resultUrl}>
+                  <img src={resultUrl} alt="生成结果" />
+                  <a
+                    className="ghost-action-button"
+                    href={resultUrl}
+                    download={`kroma-result-${index + 1}.png`}
+                  >
+                    下载
+                  </a>
+                </figure>
+              ))}
+            </div>
           ) : isTaskRunning ? (
             <div className="preview-placeholder" role="status">
               <strong>{runningProgress}</strong>
@@ -57,14 +73,16 @@ export function ResultPreview({
             <div className="preview-placeholder preview-error" role="alert">
               <strong>{latestTask.errorMessage ?? "生成失败，请重试。"}</strong>
               <span>失败任务不会计入成功消耗。</span>
-              <button
-                type="button"
-                className="ghost-action-button"
-                onClick={() => onRetryTask?.(latestTask)}
-                disabled={!onRetryTask}
-              >
-                重新生成
-              </button>
+              {canRetryFailedTask ? (
+                <button
+                  type="button"
+                  className="ghost-action-button"
+                  onClick={() => onRetryTask?.(latestTask)}
+                  disabled={!onRetryTask}
+                >
+                  重新生成
+                </button>
+              ) : null}
             </div>
           ) : (
             <div className="preview-placeholder">

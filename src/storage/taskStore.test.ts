@@ -205,6 +205,31 @@ describe("taskStore", () => {
     ]);
   });
 
+  it("keeps persisted upload data URL tasks available after reload", () => {
+    const uploadedDataTask: GenerationTask = {
+      ...task,
+      productInput: {
+        ...task.productInput,
+        imageUrl: "data:image/png;base64,cHJvZHVjdA==",
+        source: "upload",
+      },
+      status: "completed",
+      resultUrls: ["/mock/completed-result.png"],
+      creditCost: 1,
+    };
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([uploadedDataTask]),
+    );
+
+    expect(loadTasks()).toEqual([
+      {
+        ...uploadedDataTask,
+        config: taskWithHydratedConfig.config,
+      },
+    ]);
+  });
+
   it("marks persisted processing upload blob tasks as failed source-unavailable tasks", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T03:00:00.000Z"));

@@ -120,7 +120,10 @@ export function Workspace({
   const isOutOfCredits = accountBalance < estimatedCreditCost;
 
   const revokeUploadedProduct = (productToRevoke: ProductInput | null) => {
-    if (productToRevoke?.source === "upload") {
+    if (
+      productToRevoke?.source === "upload" &&
+      productToRevoke.imageUrl.startsWith("blob:")
+    ) {
       URL.revokeObjectURL(productToRevoke.imageUrl);
     }
   };

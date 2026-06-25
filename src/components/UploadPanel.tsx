@@ -30,6 +30,25 @@ function createSampleProduct(): ProductInput {
   };
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Uploaded image could not be read."));
+    });
+    reader.addEventListener("error", () => {
+      reject(reader.error ?? new Error("Uploaded image could not be read."));
+    });
+    reader.readAsDataURL(file);
+  });
+}
+
 export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -38,12 +57,14 @@ export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
       return;
     }
 
-    onProductChange({
-      id: `upload-${file.name}-${file.lastModified}`,
-      imageUrl: URL.createObjectURL(file),
-      fileName: file.name,
-      createdAt: new Date().toISOString(),
-      source: "upload",
+    void readFileAsDataUrl(file).then((imageUrl) => {
+      onProductChange({
+        id: `upload-${file.name}-${file.lastModified}`,
+        imageUrl,
+        fileName: file.name,
+        createdAt: new Date().toISOString(),
+        source: "upload",
+      });
     });
     event.currentTarget.value = "";
   };

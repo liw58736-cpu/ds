@@ -43,6 +43,26 @@ const failedTask: GenerationTask = {
   completedAt: "2026-06-17T00:01:00.000Z",
 };
 
+const completedMultiResultTask: GenerationTask = {
+  ...processingTask,
+  id: "task-completed",
+  status: "completed",
+  resultUrls: [
+    "data:image/png;base64,result-one",
+    "https://cdn.example.com/result-two.png",
+  ],
+  creditCost: 2,
+  progress: undefined,
+  completedAt: "2026-06-17T00:02:00.000Z",
+};
+
+const unavailableUploadTask: GenerationTask = {
+  ...failedTask,
+  id: "task-upload-failed",
+  errorCode: "upload_source_unavailable",
+  errorMessage: "原始上传图已失效，请重新上传后再生成。",
+};
+
 describe("ResultPreview", () => {
   it("shows backend progress while a generation task is running", () => {
     render(<ResultPreview product={product} latestTask={processingTask} />);
@@ -85,5 +105,28 @@ describe("ResultPreview", () => {
     await user.click(screen.getByRole("button", { name: "重新生成" }));
 
     expect(onRetryTask).toHaveBeenCalledWith(failedTask);
+  });
+
+  it("shows every generated image with a download link", () => {
+    render(
+      <ResultPreview
+        product={product}
+        latestTask={completedMultiResultTask}
+      />,
+    );
+
+    expect(screen.getAllByAltText("生成结果")).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "下载" })).toHaveLength(2);
+  });
+
+  it("hides retry for unavailable upload source tasks", () => {
+    render(
+      <ResultPreview
+        product={product}
+        latestTask={unavailableUploadTask}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "重新生成" })).not.toBeInTheDocument();
   });
 });

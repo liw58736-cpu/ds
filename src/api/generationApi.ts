@@ -1,6 +1,13 @@
 import { type GenerateInput } from "../providers/generationProvider";
 import { GenerationProviderError } from "../providers/generationProvider";
-import type { GenerationResult, GenerationTask } from "../domain/types";
+import { estimateGenerationCredits } from "../domain/creditCost";
+import type {
+  DetailPageModuleId,
+  GenerationConfig,
+  GenerationResult,
+  GenerationTask,
+  MainImageModuleId,
+} from "../domain/types";
 import { loadTasks, saveTasks } from "../storage/taskStore";
 import { buildGenerationTaskRequest, buildTaskListRequest } from "./apiContracts";
 import {
@@ -99,9 +106,14 @@ export async function generateAsset(
   input: GenerateInput,
   options: GenerationApiOptions = {},
 ): Promise<GenerationResult> {
-  const response = await createGenerationTask(input, options);
+  const responses = await Promise.all(
+    expandGenerationInputs(input).map((generationInput) =>
+      createGenerationTask(generationInput, options),
+    ),
+  );
+  const response = responses.find((item) => item.status === "failed");
 
-  if (response.status === "failed") {
+  if (response !== undefined) {
     throw new GenerationProviderError(
       response.errorCode ?? "unknown_generation_error",
       response.errorMessage ?? "生成失败，请重试。",
@@ -109,9 +121,50 @@ export async function generateAsset(
   }
 
   return {
-    resultUrls: response.resultUrls,
-    creditCost: response.creditCost,
+    resultUrls: responses.flatMap((item) => item.resultUrls),
+    creditCost: estimateGenerationCredits(input.config),
   };
+}
+
+function expandGenerationInputs(input: GenerateInput): GenerateInput[] {
+  return expandGenerationConfigs(input.config).map((config) => ({
+    ...input,
+    config,
+  }));
+}
+
+function expandGenerationConfigs(config: GenerationConfig): GenerationConfig[] {
+  if (config.module === "main_image") {
+    const modules =
+      config.selectedMainModules && config.selectedMainModules.length > 0
+        ? config.selectedMainModules
+        : (["hero_kv"] satisfies MainImageModuleId[]);
+
+    return modules.map((moduleId) => ({
+      ...config,
+      selectedMainModules: [moduleId],
+    }));
+  }
+
+  if (config.module === "detail_page") {
+    const counts = config.detailModuleCounts ?? {};
+    const modules = Object.entries(counts)
+      .filter((entry): entry is [DetailPageModuleId, number] => entry[1] > 0)
+      .flatMap(([moduleId, count]) =>
+        Array.from({ length: Math.floor(count) }, () => moduleId),
+      );
+    const selectedModules =
+      modules.length > 0
+        ? modules
+        : (["main_display"] satisfies DetailPageModuleId[]);
+
+    return selectedModules.map((moduleId) => ({
+      ...config,
+      detailModuleCounts: { [moduleId]: 1 },
+    }));
+  }
+
+  return [config];
 }
 
 export async function cancelGenerationTask(
