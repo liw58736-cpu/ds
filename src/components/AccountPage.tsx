@@ -105,9 +105,6 @@ export function AccountPage({ paymentStatus, onLogout }: AccountPageProps) {
             </article>
           ))}
         </div>
-        <p className="account-disclosure">
-          生成成功后才会扣除积分；失败、取消或通道异常的任务不会计入成功消耗。
-        </p>
       </section>
     </main>
   );

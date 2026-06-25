@@ -596,6 +596,9 @@ describe("App", () => {
     expect(screen.queryByText("账号服务")).not.toBeInTheDocument();
     expect(screen.queryByText("支付入账")).not.toBeInTheDocument();
     expect(screen.queryByText("真实生图")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("生成成功后才会扣除积分；失败、取消或通道异常的任务不会计入成功消耗。"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not show payment configuration status on the account page", async () => {
@@ -643,6 +646,9 @@ describe("App", () => {
     expect(screen.queryByLabelText("系统状态")).not.toBeInTheDocument();
     expect(screen.queryByText("支付入账")).not.toBeInTheDocument();
     expect(screen.queryByText(/内部入账密钥/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("生成成功后才会扣除积分；失败、取消或通道异常的任务不会计入成功消耗。"),
+    ).not.toBeInTheDocument();
   });
 
   it("labels cloud credits separately from trial credits on sync failure", async () => {
