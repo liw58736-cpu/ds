@@ -898,6 +898,7 @@ test("image generation proxy can use the mobile app image router without mixing 
       WEB_SUPABASE_ANON_KEY: "anon-key",
       WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
       WEB_IMAGE_API_BASE_URL: "https://kroma-api.onrender.com/api/v1",
+      WEB_IMAGE_API_KEY: "stale-web-or-app-token",
     },
     fetch: async (url, init = {}) => {
       calls.push({ url, init });

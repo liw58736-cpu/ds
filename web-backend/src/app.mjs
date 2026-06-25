@@ -469,7 +469,9 @@ async function handleImageProxy(request, env, fetchImpl, upstreamPath, method) {
     "Content-Type": "application/json",
     "X-Kroma-Client": "web-backend",
   };
-  const imageApiKey = env.WEB_IMAGE_API_KEY?.trim();
+  const imageApiKey = isMobileAppImageRouter(baseUrl)
+    ? ""
+    : env.WEB_IMAGE_API_KEY?.trim();
 
   if (imageApiKey) {
     headers.Authorization = `Bearer ${imageApiKey}`;
