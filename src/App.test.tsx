@@ -704,7 +704,7 @@ describe("App", () => {
     await user.click(submitButton!);
     expect(loginForm!.querySelector('[role="alert"]')).not.toBeNull();
 
-    const identifierInput = loginForm!.querySelector<HTMLInputElement>('input[type="text"]');
+    const identifierInput = loginForm!.querySelector<HTMLInputElement>('input[type="email"]');
     const passwordInput = loginForm!.querySelector<HTMLInputElement>('input[type="password"]');
     const agreementInput = loginForm!.querySelector<HTMLInputElement>('input[type="checkbox"]');
     expect(identifierInput).not.toBeNull();
@@ -783,7 +783,7 @@ describe("App", () => {
     const loginForm = await screen.findByRole("form", { name: "登录表单" });
 
     await user.type(
-      within(loginForm).getByLabelText("手机号或邮箱"),
+      within(loginForm).getByLabelText("邮箱"),
       "seller@example.com",
     );
     await user.type(within(loginForm).getByLabelText("密码"), "secret-password");
@@ -858,10 +858,10 @@ describe("App", () => {
 
     expect(screen.getByRole("heading", { name: "注册" })).toBeInTheDocument();
     await user.click(within(registerForm).getByRole("button", { name: "注册 kroma" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("请输入手机号或邮箱。");
+    expect(screen.getByRole("alert")).toHaveTextContent("请输入邮箱。");
 
     await user.type(
-      within(registerForm).getByLabelText("手机号或邮箱"),
+      within(registerForm).getByLabelText("邮箱"),
       "new-seller@example.com",
     );
     await user.type(within(registerForm).getByLabelText("密码"), "new-password");
@@ -918,7 +918,7 @@ describe("App", () => {
 
     const loginForm = screen.getByRole("form", { name: "登录表单" });
     expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
-    expect(within(loginForm).getByLabelText("手机号或邮箱")).toHaveValue(
+    expect(within(loginForm).getByLabelText("邮箱")).toHaveValue(
       "new-seller@example.com",
     );
     expect(within(loginForm).getByLabelText("密码")).toHaveValue("");
@@ -953,7 +953,7 @@ describe("App", () => {
     const registerForm = screen.getByRole("form", { name: "注册表单" });
 
     await user.type(
-      within(registerForm).getByLabelText("手机号或邮箱"),
+      within(registerForm).getByLabelText("邮箱"),
       "seller@example.com",
     );
     await user.type(within(registerForm).getByLabelText("密码"), "new-password");
@@ -992,7 +992,7 @@ describe("App", () => {
 
     const registerForm = container.querySelector<HTMLFormElement>(".login-form");
     expect(registerForm).not.toBeNull();
-    const emailInput = registerForm!.querySelector<HTMLInputElement>('input[type="text"]');
+    const emailInput = registerForm!.querySelector<HTMLInputElement>('input[type="email"]');
     const passwordInput = registerForm!.querySelector<HTMLInputElement>(
       'input[type="password"]',
     );
@@ -1040,7 +1040,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "登录" }));
     const loginForm = screen.getByRole("form", { name: "登录表单" });
 
-    expect(within(loginForm).getByLabelText("手机号或邮箱")).toBeInTheDocument();
+    expect(within(loginForm).getByLabelText("邮箱")).toBeInTheDocument();
     expect(within(loginForm).getByLabelText("密码")).toBeInTheDocument();
     expect(within(loginForm).queryByRole("button", { name: "使用验证码登录" })).not.toBeInTheDocument();
     expect(within(loginForm).queryByLabelText("验证码")).not.toBeInTheDocument();

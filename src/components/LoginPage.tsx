@@ -16,7 +16,7 @@ interface LoginPageProps {
   onAuthenticated?: () => void;
 }
 
-const INITIAL_STATUS = "使用手机号或邮箱登录，查看积分、订单和历史任务。";
+const INITIAL_STATUS = "使用邮箱登录，查看积分、订单和历史任务。";
 const EMAIL_VERIFICATION_MESSAGE =
   "验证码已发送至邮箱。只输入 kroma 邮件里的 6 位数字验证码，不要输入 8 位验证码或点击邮件链接。";
 const SIX_DIGIT_CODE_PATTERN = /^\d{6}$/;
@@ -141,7 +141,7 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
       activeMode === "password" ? normalizedPassword : normalizedCode;
 
     if (!normalizedIdentifier) {
-      showError("请输入手机号或邮箱。");
+      showError("请输入邮箱。");
       return;
     }
 
@@ -287,9 +287,9 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
 
         <form className="login-form" aria-label={`${title}表单`} onSubmit={handleSubmit}>
           <label className="field login-field">
-            <span>手机号或邮箱</span>
+            <span>邮箱</span>
             <input
-              type="text"
+              type="email"
               value={identifier}
               onChange={(event) => setIdentifier(event.target.value)}
               autoComplete="username"
