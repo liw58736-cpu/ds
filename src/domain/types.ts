@@ -10,7 +10,14 @@ export type GenerationModule =
 
 export type Platform = "amazon" | "shopify" | "independent_store";
 
-export type AspectRatio = "original" | "1:1" | "4:5" | "16:9" | "long_page";
+export type AspectRatio =
+  | "original"
+  | "1:1"
+  | "4:5"
+  | "3:4"
+  | "16:9"
+  | "9:16"
+  | "long_page";
 
 export type VisualStyle = "studio" | "lifestyle" | "premium" | "minimal";
 
@@ -84,6 +91,7 @@ export interface GenerationConfig {
   outputFormat: OutputFormat;
   sellingPoints: string;
   specifications: string;
+  outputLanguage?: string;
   resolution?: GenerationResolution;
   generationVersion?: GenerationVersion;
   selectedMainModules?: MainImageModuleId[];

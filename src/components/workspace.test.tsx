@@ -77,11 +77,14 @@ describe("Workspace", () => {
     const user = userEvent.setup();
     render(<Workspace />);
 
-    await user.selectOptions(screen.getByLabelText("输出语言"), "English");
+    expect(screen.getByRole("option", { name: "日语" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "西班牙语" })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("输出语言"), "日语");
     await user.click(screen.getByRole("button", { name: "4K" }));
     await user.click(screen.getByRole("button", { name: "标准版快速出图，适合批量 SKU" }));
 
-    expect(screen.getByLabelText("输出语言")).toHaveValue("English");
+    expect(screen.getByLabelText("输出语言")).toHaveValue("日语");
     expect(screen.getByRole("button", { name: "4K" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -89,6 +92,28 @@ describe("Workspace", () => {
     expect(
       screen.getByRole("button", { name: "标准版快速出图，适合批量 SKU" }),
     ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows ecommerce aspect ratios for main images and detail pages", () => {
+    const { unmount } = render(<Workspace />);
+
+    for (const label of [
+      "原图尺寸",
+      "1:1 方图",
+      "4:5 竖图",
+      "3:4 竖图",
+      "9:16 竖图",
+      "16:9 横图",
+    ]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+
+    unmount();
+    render(<Workspace activeModule="detail_page" />);
+
+    expect(screen.getByRole("button", { name: "3:4 竖图" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "9:16 竖图" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "详情长图" })).toBeInTheDocument();
   });
 
   it("updates estimated credits from selected modules, resolution, and edition", async () => {

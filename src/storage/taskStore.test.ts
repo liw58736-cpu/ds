@@ -19,6 +19,7 @@ const task: GenerationTask = {
     outputFormat: "png",
     sellingPoints: "BPA-free, dishwasher safe",
     specifications: "500ml, stainless steel",
+    outputLanguage: "中文",
   },
   status: "completed",
   resultUrls: ["/mock/main-image.png"],
@@ -99,6 +100,24 @@ describe("taskStore", () => {
       id: "task-1",
       progress: "Trying HD channel...",
       backendTaskId: "kroma-task-1",
+    });
+  });
+
+  it("round trips ecommerce aspect ratios and output language", () => {
+    const localizedTask: GenerationTask = {
+      ...task,
+      config: {
+        ...task.config,
+        aspectRatio: "9:16",
+        outputLanguage: "西班牙语",
+      },
+    };
+
+    saveTasks([localizedTask]);
+
+    expect(loadTasks()[0]?.config).toMatchObject({
+      aspectRatio: "9:16",
+      outputLanguage: "西班牙语",
     });
   });
 

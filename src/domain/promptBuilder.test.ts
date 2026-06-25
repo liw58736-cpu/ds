@@ -60,6 +60,15 @@ describe("buildGenerationPrompt", () => {
     expect(prompt.modules[0].prompt).toContain("subtle contact shadow");
   });
 
+  it("includes the selected output language in the final prompt", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      outputLanguage: "日语",
+    });
+
+    expect(prompt.finalPrompt).toContain("output language: 日语");
+  });
+
   it("creates one detail-page prompt per selected module count", () => {
     const prompt = buildGenerationPrompt({
       ...baseConfig,

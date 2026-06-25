@@ -64,11 +64,28 @@ const aspectRatioOptions: Array<{ value: AspectRatio; label: string }> = [
   { value: "original", label: "原图尺寸" },
   { value: "1:1", label: "1:1 方图" },
   { value: "4:5", label: "4:5 竖图" },
+  { value: "3:4", label: "3:4 竖图" },
+  { value: "9:16", label: "9:16 竖图" },
   { value: "16:9", label: "16:9 横图" },
   { value: "long_page", label: "详情长图" },
 ];
 
-const outputLanguages = ["中文", "English"];
+const outputLanguages = [
+  "中文",
+  "English",
+  "日语",
+  "韩语",
+  "法语",
+  "德语",
+  "西班牙语",
+  "意大利语",
+  "葡萄牙语",
+  "俄语",
+  "阿拉伯语",
+  "泰语",
+  "越南语",
+  "印尼语",
+];
 const resolutionOptions: GenerationResolution[] = ["1K", "2K", "4K"];
 const versionOptions: Array<{
   value: GenerationVersion;
@@ -149,7 +166,9 @@ export function ParameterPanel({
   hasRunningTask,
   isOutOfCredits = false,
 }: ParameterPanelProps) {
-  const [outputLanguage, setOutputLanguage] = useState(outputLanguages[0]);
+  const [outputLanguage, setOutputLanguage] = useState(
+    config.outputLanguage ?? outputLanguages[0],
+  );
   const resolution = config.resolution ?? "1K";
   const generationVersion = config.generationVersion ?? "brand";
   const selectedMainModules = config.selectedMainModules ?? [];
@@ -354,7 +373,10 @@ export function ParameterPanel({
             <select
               id="output-language"
               value={outputLanguage}
-              onChange={(event) => setOutputLanguage(event.target.value)}
+              onChange={(event) => {
+                setOutputLanguage(event.target.value);
+                updateConfig("outputLanguage", event.target.value);
+              }}
             >
               {outputLanguages.map((language) => (
                 <option key={language} value={language}>

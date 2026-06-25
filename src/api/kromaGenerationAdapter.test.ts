@@ -104,6 +104,34 @@ describe("kromaGenerationAdapter", () => {
     });
   });
 
+  it("maps ecommerce portrait ratios to backend pixel sizes", () => {
+    const threeByFourRequest = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        aspectRatio: "3:4",
+        resolution: "1K",
+      },
+    });
+    const nineBySixteenRequest = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        aspectRatio: "9:16",
+        resolution: "4K",
+      },
+    });
+
+    expect(buildKromaGenerateRequest(threeByFourRequest)).toMatchObject({
+      size: "1024x1365",
+      quality: "standard",
+    });
+    expect(buildKromaGenerateRequest(nineBySixteenRequest)).toMatchObject({
+      size: "2160x3840",
+      quality: "4k",
+    });
+  });
+
   it("posts to the reference async endpoint, polls the task, and maps success to the frontend task response", async () => {
     vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1/");
     initializeSession({

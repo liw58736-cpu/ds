@@ -191,6 +191,7 @@ export function buildGenerationPrompt(
     `page type: ${config.module}`,
     `aspect ratio: ${config.aspectRatio}`,
     `output format: ${config.outputFormat}`,
+    `output language: ${config.outputLanguage ?? "中文"}`,
     config.sellingPoints ? `product requirements: ${config.sellingPoints}` : "",
     config.specifications ? `promotion information: ${config.specifications}` : "",
     "avoid loud domestic promotional poster aesthetics, fake tiny unreadable text, distorted logos, and changed product identity",

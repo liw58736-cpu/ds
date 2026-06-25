@@ -8,6 +8,7 @@ export const defaultConfig: GenerationConfig = {
   outputFormat: "png",
   sellingPoints: "",
   specifications: "",
+  outputLanguage: "中文",
   resolution: "1K",
   generationVersion: "brand",
   selectedMainModules: [],

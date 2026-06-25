@@ -41,9 +41,12 @@ const platforms = new Set<Platform>([
   "independent_store",
 ]);
 const aspectRatios = new Set<AspectRatio>([
+  "original",
   "1:1",
   "4:5",
+  "3:4",
   "16:9",
+  "9:16",
   "long_page",
 ]);
 const styles = new Set<VisualStyle>([
@@ -189,6 +192,7 @@ function parseConfig(value: unknown): GenerationConfig | null {
     outputFormat,
     sellingPoints,
     specifications,
+    outputLanguage,
     resolution,
     selectedMainModules,
     detailModuleCounts,
@@ -221,6 +225,7 @@ function parseConfig(value: unknown): GenerationConfig | null {
     outputFormat: outputFormat as OutputFormat,
     sellingPoints,
     specifications,
+    outputLanguage: isString(outputLanguage) ? outputLanguage : "中文",
     resolution:
       isString(resolution) && resolutions.has(resolution as GenerationResolution)
         ? (resolution as GenerationResolution)
