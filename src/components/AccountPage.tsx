@@ -2,43 +2,11 @@ import { useEffect, useState } from "react";
 import {
   getCurrentAccountSnapshot,
   getCurrentAccountWithCreditSync,
-  getWebBackendHealth,
 } from "../api/accountApi";
-import type { AccountCreditSyncStatus, WebBackendHealth } from "../api/accountApi";
+import type { AccountCreditSyncStatus } from "../api/accountApi";
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("zh-CN").format(value);
-}
-
-function formatMissing(items: string[], fallback: string): string {
-  return items.length > 0 ? `缺少${items.join("、")}` : fallback;
-}
-
-function getPaymentStatusNote(backendHealth: WebBackendHealth | null): string {
-  if (!backendHealth) {
-    return "未检测到网页账号后端";
-  }
-
-  const missing = [
-    !backendHealth.config.paddleWebhookSecret ? "Paddle webhook" : "",
-    !backendHealth.config.paddlePriceCredits ? "价格积分映射" : "",
-    backendHealth.database?.webBillingEvents === false ? "账单事件表" : "",
-  ].filter(Boolean);
-
-  return formatMissing(missing, "Paddle 付款后自动入账");
-}
-
-function getImageStatusNote(backendHealth: WebBackendHealth | null): string {
-  if (!backendHealth) {
-    return "未检测到网页账号后端";
-  }
-
-  const missing = [
-    !backendHealth.config.imageApiBaseUrl ? "生图上游地址" : "",
-    !backendHealth.config.imageApiKey ? "生图上游密钥" : "",
-  ].filter(Boolean);
-
-  return formatMissing(missing, "生产生图经网页后端独立转发，不连接 app 后端");
 }
 
 interface AccountPageProps {
@@ -48,8 +16,6 @@ interface AccountPageProps {
 
 export function AccountPage({ paymentStatus, onLogout }: AccountPageProps) {
   const [account, setAccount] = useState(() => getCurrentAccountSnapshot());
-  const [backendHealth, setBackendHealth] =
-    useState<WebBackendHealth | null>(null);
   const [creditSyncStatus, setCreditSyncStatus] =
     useState<AccountCreditSyncStatus>(() =>
       getCurrentAccountSnapshot().session ? "cloud_sync_failed" : "trial",
@@ -60,7 +26,6 @@ export function AccountPage({ paymentStatus, onLogout }: AccountPageProps) {
       setAccount(result.account);
       setCreditSyncStatus(result.creditSyncStatus);
     });
-    void getWebBackendHealth().then(setBackendHealth);
   }, []);
 
   const isCloudAccount = Boolean(account.session?.provider === "kroma");
@@ -98,45 +63,6 @@ export function AccountPage({ paymentStatus, onLogout }: AccountPageProps) {
       note: "失败任务不计成功消耗",
     },
   ];
-  const systemItems = [
-    {
-      label: "账号服务",
-      value: backendHealth
-        ? backendHealth.config.supabaseUrl &&
-          backendHealth.config.supabaseAnonKey &&
-          backendHealth.config.supabaseServiceRoleKey &&
-          backendHealth.config.resendApiKey &&
-          backendHealth.database?.webUsers !== false &&
-          backendHealth.database?.webAuthCodes !== false
-          ? "正常"
-          : "待配置"
-        : "未连接",
-      note: backendHealth
-        ? "注册、登录和验证码服务状态"
-        : "未检测到网页账号后端",
-    },
-    {
-      label: "支付入账",
-      value: backendHealth
-        ? backendHealth.config.paddleWebhookSecret &&
-          backendHealth.config.paddlePriceCredits &&
-          backendHealth.database?.webBillingEvents !== false
-          ? "正常"
-          : "待配置"
-        : "未连接",
-      note: getPaymentStatusNote(backendHealth),
-    },
-    {
-      label: "真实生图",
-      value: backendHealth
-        ? backendHealth.config.imageApiBaseUrl && backendHealth.config.imageApiKey
-          ? "已连接"
-          : "待配置"
-        : "未连接",
-      note: getImageStatusNote(backendHealth),
-    },
-  ];
-
   return (
     <main className="account-page page-surface">
       <section className="panel account-panel">
@@ -172,15 +98,6 @@ export function AccountPage({ paymentStatus, onLogout }: AccountPageProps) {
         ) : null}
         <div className="account-grid">
           {usageItems.map((item) => (
-            <article className="usage-card" key={item.label}>
-              <p className="summary-label">{item.label}</p>
-              <p className="summary-value">{item.value}</p>
-              <p className="summary-note">{item.note}</p>
-            </article>
-          ))}
-        </div>
-        <div className="account-system-status" aria-label="系统状态">
-          {systemItems.map((item) => (
             <article className="usage-card" key={item.label}>
               <p className="summary-label">{item.label}</p>
               <p className="summary-value">{item.value}</p>

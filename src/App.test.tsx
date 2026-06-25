@@ -545,7 +545,7 @@ describe("App", () => {
     });
   });
 
-  it("shows backend system status on the account page", async () => {
+  it("hides backend system status cards on the account page", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const fetchMock = vi
       .fn()
@@ -592,19 +592,13 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "账户" }));
 
-    const systemStatus = screen.getByLabelText("系统状态");
-    await waitFor(() => {
-      expect(within(systemStatus).getByText("账号服务")).toBeInTheDocument();
-      expect(within(systemStatus).getByText("支付入账")).toBeInTheDocument();
-      expect(within(systemStatus).getByText("真实生图")).toBeInTheDocument();
-    });
-    expect(within(systemStatus).getAllByText("正常")).toHaveLength(1);
-    expect(within(systemStatus).getAllByText("待配置")).toHaveLength(2);
-    expect(within(systemStatus).getByText(/缺少Paddle webhook/)).toBeInTheDocument();
-    expect(within(systemStatus).getByText(/缺少生图上游地址/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("系统状态")).not.toBeInTheDocument();
+    expect(screen.queryByText("账号服务")).not.toBeInTheDocument();
+    expect(screen.queryByText("支付入账")).not.toBeInTheDocument();
+    expect(screen.queryByText("真实生图")).not.toBeInTheDocument();
   });
 
-  it("does not mark Paddle payment as incomplete when only manual top-up is missing", async () => {
+  it("does not show payment configuration status on the account page", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     vi.stubGlobal(
       "fetch",
@@ -646,16 +640,9 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "账户" }));
 
-    const systemStatus = await screen.findByLabelText("系统状态");
-    await waitFor(() => {
-      expect(within(systemStatus).getByText("支付入账")).toBeInTheDocument();
-    });
-    const paymentCard = within(systemStatus)
-      .getByText("支付入账")
-      .closest("article");
-    expect(paymentCard).not.toBeNull();
-    expect(within(paymentCard!).getByText("正常")).toBeInTheDocument();
-    expect(within(systemStatus).queryByText(/内部入账密钥/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("系统状态")).not.toBeInTheDocument();
+    expect(screen.queryByText("支付入账")).not.toBeInTheDocument();
+    expect(screen.queryByText(/内部入账密钥/)).not.toBeInTheDocument();
   });
 
   it("labels cloud credits separately from trial credits on sync failure", async () => {
@@ -813,7 +800,6 @@ describe("App", () => {
       "http://127.0.0.1:8000/api/v1/auth/login",
       "http://127.0.0.1:8000/api/v1/user/credits",
       "http://127.0.0.1:8000/api/v1/user/credits",
-      "http://127.0.0.1:8000/api/v1/health",
     ]);
   });
 
