@@ -4,7 +4,6 @@ import type { AppPage } from "./AppShell";
 import {
   getCurrentAccountSnapshot,
   loginOrRegister,
-  requestLoginCode,
   verifySignupCode,
 } from "../api/accountApi";
 import type { AuthView, LoginMode } from "../storage/accountStore";
@@ -24,7 +23,6 @@ const SIX_DIGIT_CODE_PATTERN = /^\d{6}$/;
 
 export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
   const [authView, setAuthView] = useState<AuthView>("login");
-  const [loginMode, setLoginMode] = useState<LoginMode>("password");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -43,11 +41,7 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
 
   const isRegister = authView === "register";
   const isRegisterVerification = isRegister && registerStep === "verify";
-  const activeMode: LoginMode = isRegister
-    ? isRegisterVerification
-      ? "code"
-      : "password"
-    : loginMode;
+  const activeMode: LoginMode = isRegisterVerification ? "code" : "password";
   const title = isRegister ? "注册" : "登录";
   const submitLabel = isSubmitting
     ? isRegister
@@ -75,7 +69,6 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
     }
 
     setAuthView(nextView);
-    setLoginMode("password");
     setRegisterStep("form");
     setPassword("");
     setConfirmPassword("");
@@ -86,50 +79,6 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
         : INITIAL_STATUS,
     );
     setMessageType("status");
-  };
-
-  const toggleLoginMode = () => {
-    if (isSubmitting) {
-      return;
-    }
-
-    const nextMode = activeMode === "password" ? "code" : "password";
-    setLoginMode(nextMode);
-    setMessage(
-      nextMode === "code"
-        ? "验证码登录仅用于快速进入当前会话。"
-        : INITIAL_STATUS,
-    );
-    setMessageType("status");
-  };
-
-  const handleSendCode = async () => {
-    if (isSubmitting) {
-      return;
-    }
-
-    const normalizedIdentifier = identifier.trim();
-
-    if (!normalizedIdentifier) {
-      showError("请输入手机号或邮箱后再获取验证码。");
-      return;
-    }
-
-    setIsSubmitting(true);
-    showStatus("正在发送验证码，请稍候...");
-
-    try {
-      await requestLoginCode(normalizedIdentifier);
-      showStatus(`验证码已发送至 ${normalizedIdentifier}，请查看短信或邮箱。`);
-    } catch (error) {
-      showError(
-        error instanceof Error
-          ? `验证码发送失败：${error.message}`
-          : "验证码发送失败，请稍后重试。",
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   const handleResendSignupCode = async () => {
@@ -240,7 +189,6 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
       if (isRegisterVerification) {
         await verifySignupCode(normalizedIdentifier, normalizedCode);
         setAuthView("login");
-        setLoginMode("password");
         setRegisterStep("form");
         setPassword("");
         setConfirmPassword("");
@@ -289,7 +237,6 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
 
       if (isRegister && errorMessage.includes("已注册")) {
         setAuthView("login");
-        setLoginMode("password");
         setRegisterStep("form");
         setPassword("");
         setConfirmPassword("");
@@ -412,28 +359,9 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
                     返回修改
                   </button>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={handleSendCode}
-                  disabled={isSubmitting}
-                >
-                  获取验证码
-                </button>
-              )}
+              ) : null}
             </div>
           )}
-
-          {!isRegister ? (
-            <button
-              type="button"
-              className="login-mode-toggle"
-              onClick={toggleLoginMode}
-            >
-              {activeMode === "password" ? "使用验证码登录" : "使用密码登录"}
-            </button>
-          ) : null}
 
           <div className="login-agreement">
             <label>

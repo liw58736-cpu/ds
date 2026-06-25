@@ -1042,7 +1042,7 @@ describe("App", () => {
 
     expect(within(loginForm).getByLabelText("手机号或邮箱")).toBeInTheDocument();
     expect(within(loginForm).getByLabelText("密码")).toBeInTheDocument();
-    expect(within(loginForm).getByRole("button", { name: "使用验证码登录" })).toBeInTheDocument();
+    expect(within(loginForm).queryByRole("button", { name: "使用验证码登录" })).not.toBeInTheDocument();
     expect(within(loginForm).queryByLabelText("验证码")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("店铺或团队名称")).not.toBeInTheDocument();
     expect(screen.queryByText("或使用快捷方式")).not.toBeInTheDocument();
