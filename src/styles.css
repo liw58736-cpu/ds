@@ -2309,11 +2309,14 @@ button {
   --hairline-strong: #cfd6dd;
   --accent: #0f766e;
   --accent-blue: #2563eb;
-  --button: #0f766e;
-  --button-hover: #0b5f58;
-  --button-soft: #e7f6f2;
-  --selected: #0b5f58;
-  --selected-soft: #e6f4ef;
+  --button: #0e6f66;
+  --button-hover: #09564f;
+  --button-soft: #edf8f5;
+  --button-soft-hover: #dff1ec;
+  --button-border: #b8dcd4;
+  --button-text: #235f57;
+  --selected: #084c45;
+  --selected-soft: #e5f3ef;
   --danger: #9f2d20;
   --danger-bg: #fff3ef;
   --success: #166534;
@@ -2383,7 +2386,7 @@ body {
   padding: 4px;
   border: 1px solid var(--hairline);
   border-radius: 999px;
-  background: var(--surface-soft);
+  background: #f1f8f6;
 }
 
 .topnav-button,
@@ -2398,6 +2401,7 @@ body {
 .topnav-button {
   min-height: 34px;
   padding: 0 13px;
+  color: var(--button-text);
   border-color: transparent;
   background: transparent;
   font-size: 0.86rem;
@@ -2597,8 +2601,8 @@ body {
 .detail-module-button {
   position: relative;
   overflow: hidden;
-  border-color: #dce1e6;
-  background: #fbfbf7;
+  border-color: var(--button-border);
+  background: #f8fcfa;
   transition:
     border-color 160ms ease,
     background-color 160ms ease,
@@ -2623,7 +2627,7 @@ body {
   inset: auto 11px 9px auto;
   width: 8px;
   height: 8px;
-  border: 1px solid #b7c0ca;
+  border: 1px solid #a9d0c8;
   border-radius: 999px;
   background: #ffffff;
 }
@@ -2728,6 +2732,8 @@ body {
 
 .segmented-control button {
   min-height: 38px;
+  color: var(--button-text);
+  border-color: var(--button-border);
   background: #ffffff;
   font-size: 0.82rem;
 }
@@ -2743,7 +2749,9 @@ body {
 
 .version-grid button {
   border-radius: var(--radius-lg);
-  background: #fbfbf7;
+  color: var(--button-text);
+  border-color: var(--button-border);
+  background: #f8fcfa;
 }
 
 .version-grid button.is-active span,
@@ -2999,8 +3007,8 @@ body {
 }
 
 .topnav {
-  border-color: #e3eaf8;
-  background: #f8fbff;
+  border-color: var(--button-border);
+  background: #f1f8f6;
 }
 
 .topnav-button:hover,
@@ -3008,20 +3016,30 @@ body {
 .secondary-button:hover,
 .result-actions button:hover,
 .task-history-actions button:hover {
-  background: #eaf6ff;
+  color: var(--button-hover);
+  border-color: var(--button-border);
+  background: var(--button-soft-hover);
 }
 
 .topnav-button.nav-active,
 .primary-button,
-.secondary-button,
 .segmented-control button.is-active,
 .version-grid button.is-active,
 .filter-chip.is-active,
 .pricing-plan-switch button.is-active,
 .detail-module-button.is-active em {
   color: #ffffff;
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--selected);
+  border-color: var(--selected);
+}
+
+.secondary-button,
+.result-actions button,
+.task-history-actions button,
+.pricing-plan-switch button {
+  color: var(--button-text);
+  background: var(--button-soft);
+  border-color: var(--button-border);
 }
 
 .primary-button:hover,
@@ -3029,8 +3047,8 @@ body {
 .plan-pay-button:hover,
 .generate-button:hover:not(:disabled) {
   color: #ffffff;
-  background: #0b6fb3;
-  border-color: #0b6fb3;
+  background: var(--button-hover);
+  border-color: var(--button-hover);
 }
 
 .card-meta,
@@ -3043,9 +3061,9 @@ body {
 .generation-summary span,
 .preview-title-row span,
 .task-meta-row span {
-  color: #3c248f;
-  background: #eee9ff;
-  border-color: #ded8ff;
+  color: var(--button-text);
+  background: var(--button-soft);
+  border-color: var(--button-border);
 }
 
 .summary-card,
@@ -4351,7 +4369,7 @@ body {
 
 .pr-eyebrow {
   margin: 0 0 14px;
-  color: #312a8f;
+  color: var(--selected);
   font-size: 0.78rem;
   font-weight: 820;
   letter-spacing: 0.08em;
@@ -4424,8 +4442,8 @@ body {
 .pr-hero-actions .secondary-button,
 .pr-feature-copy .secondary-button {
   background: #ffffff;
-  color: #0b6fb3;
-  border-color: #b7d9f8;
+  color: var(--button-text);
+  border-color: var(--button-border);
 }
 
 .pr-hero-proof {
