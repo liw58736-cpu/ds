@@ -288,6 +288,106 @@ describe("Workspace", () => {
     });
   });
 
+  it("allows starting another generation while a previous task is still running", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    let submittedCount = 0;
+    const fetchMock = vi.fn((url: RequestInfo | URL) => {
+      const requestUrl = String(url);
+
+      if (requestUrl.startsWith("/")) {
+        return Promise.resolve({
+          ok: true,
+          headers: new Headers({ "Content-Type": "image/png" }),
+          arrayBuffer: () => Promise.resolve(new Uint8Array([137, 80]).buffer),
+        } as Response);
+      }
+
+      if (requestUrl.endsWith("/image/generate")) {
+        submittedCount += 1;
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              task_id: `kroma-parallel-${submittedCount}`,
+              status: "processing",
+              progress: "处理中",
+            }),
+        } as Response);
+      }
+
+      if (requestUrl.includes("/image/task/")) {
+        return new Promise<Response>(() => undefined);
+      }
+
+      return Promise.reject(new Error(`Unexpected request: ${requestUrl}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Workspace />);
+
+    fireEvent.click(screen.getByRole("button", { name: "使用示例商品" }));
+
+    await waitFor(() => {
+      expect(screen.getByAltText("当前商品图")).toBeInTheDocument();
+    });
+
+    const generateButton = screen.getByRole("button", { name: "生成商品主图" });
+    fireEvent.click(generateButton);
+
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+
+      expect(storedTasks).toHaveLength(1);
+      expect(storedTasks[0]?.status).toBe("processing");
+    });
+    expect(screen.getByRole("button", { name: "生成商品主图" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "生成商品主图" }));
+
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+
+      expect(storedTasks).toHaveLength(2);
+      expect(storedTasks.every((task) => task.status === "processing")).toBe(true);
+    });
+
+    screen
+      .getAllByRole("button", { name: "取消生成" })
+      .forEach((button) => fireEvent.click(button));
+  });
+
+  it("stops new submissions when the local concurrent task limit is full", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => undefined)),
+    );
+    const runningTasks = Array.from({ length: 3 }, (_, index) =>
+      createStoredTask({
+        id: `task-running-${index + 1}`,
+        status: "processing",
+        backendTaskId: `backend-running-${index + 1}`,
+        progress: "处理中",
+        resultUrls: [],
+        creditCost: 0,
+        completedAt: undefined,
+      }),
+    );
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify(runningTasks),
+    );
+    render(<Workspace />);
+
+    fireEvent.click(screen.getByRole("button", { name: "使用示例商品" }));
+
+    expect(await screen.findByRole("button", { name: "任务已满" })).toBeDisabled();
+    expect(screen.getByText(/当前进行中 3\/3/)).toBeInTheDocument();
+  });
+
   it("does not render inline recent tasks in the workspace settings column", async () => {
     const user = userEvent.setup();
     render(<Workspace />);

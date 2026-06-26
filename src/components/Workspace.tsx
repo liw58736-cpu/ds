@@ -40,6 +40,8 @@ function moveTaskToTop(
   return [nextTask, ...tasks.filter((task) => task.id !== nextTask.id)];
 }
 
+const maxConcurrentGenerationTasks = 3;
+
 function getFailureDetails(error: unknown): {
   errorCode: string;
   errorMessage: string;
@@ -108,8 +110,10 @@ export function Workspace({
   const hasLoadedTasksRef = useRef(true);
   const taskRunTokensRef = useRef<Record<string, number>>({});
   const latestTask = tasks[0];
-  const hasRunningLatestTask =
-    tasks.some((task) => task.status === "queued" || task.status === "processing");
+  const runningTaskCount = tasks.filter(
+    (task) => task.status === "queued" || task.status === "processing",
+  ).length;
+  const isConcurrencyFull = runningTaskCount >= maxConcurrentGenerationTasks;
   const previewTasks = tasks.slice(0, 8);
   const estimatedCreditCost = estimateGenerationCredits(config);
   const isOutOfCredits = accountBalance < estimatedCreditCost;
@@ -240,7 +244,7 @@ export function Workspace({
       return;
     }
 
-    if (!product || hasRunningLatestTask) {
+    if (!product || isConcurrencyFull) {
       return;
     }
 
@@ -289,7 +293,7 @@ export function Workspace({
       return;
     }
 
-    if (hasRunningLatestTask) {
+    if (isConcurrencyFull) {
       return;
     }
 
@@ -356,8 +360,10 @@ export function Workspace({
             onChange={setConfig}
             onGenerate={handleGenerate}
             onBuyCredits={onOpenPricing}
-            isGenerateDisabled={!product || hasRunningLatestTask}
-            hasRunningTask={hasRunningLatestTask}
+            isGenerateDisabled={!product || isConcurrencyFull}
+            isConcurrencyFull={isConcurrencyFull}
+            runningTaskCount={runningTaskCount}
+            maxConcurrentTasks={maxConcurrentGenerationTasks}
             isOutOfCredits={isAuthenticated && isOutOfCredits}
           />
         </section>

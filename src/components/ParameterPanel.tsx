@@ -29,7 +29,9 @@ interface ParameterPanelProps {
   onGenerate: () => void;
   onBuyCredits?: () => void;
   isGenerateDisabled: boolean;
-  hasRunningTask: boolean;
+  isConcurrencyFull: boolean;
+  runningTaskCount: number;
+  maxConcurrentTasks: number;
   isOutOfCredits?: boolean;
 }
 
@@ -163,7 +165,9 @@ export function ParameterPanel({
   onGenerate,
   onBuyCredits,
   isGenerateDisabled,
-  hasRunningTask,
+  isConcurrencyFull,
+  runningTaskCount,
+  maxConcurrentTasks,
   isOutOfCredits = false,
 }: ParameterPanelProps) {
   const [outputLanguage, setOutputLanguage] = useState(
@@ -511,12 +515,12 @@ export function ParameterPanel({
           type="button"
           className="primary-button generate-button"
           onClick={isOutOfCredits ? onBuyCredits : onGenerate}
-          disabled={hasRunningTask || (!isOutOfCredits && isGenerateDisabled)}
+          disabled={!isOutOfCredits && isGenerateDisabled}
         >
           {isOutOfCredits
             ? "购买积分"
-            : hasRunningTask
-              ? "生成中"
+            : isConcurrencyFull
+              ? "任务已满"
               : `生成${
                   activeModule === "white_background"
                     ? activeAiToolLabel
@@ -524,7 +528,7 @@ export function ParameterPanel({
                 }`}
         </button>
         <p>
-          {`预计消耗 ${estimatedCredits} 积分（${estimatedImageCount} 张 × ${resolution} 每张 ${resolutionCreditCost} 分${generationVersion === "brand" ? ` + 品牌版 ${brandVersionExtraCredits} 分` : ""}），失败不扣点。${isOutOfCredits ? "当前余额不足，请购买积分后继续生成。" : ""}`}
+          {`预计消耗 ${estimatedCredits} 积分（${estimatedImageCount} 张 × ${resolution} 每张 ${resolutionCreditCost} 分${generationVersion === "brand" ? ` + 品牌版 ${brandVersionExtraCredits} 分` : ""}），失败不扣点。当前进行中 ${runningTaskCount}/${maxConcurrentTasks}。${isConcurrencyFull ? "请等任一任务完成后继续提交。" : ""}${isOutOfCredits ? "当前余额不足，请购买积分后继续生成。" : ""}`}
         </p>
       </div>
     </aside>
