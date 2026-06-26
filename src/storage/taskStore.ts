@@ -89,6 +89,12 @@ const detailPageModules = new Set<DetailPageModuleId>([
   "chapter",
 ]);
 const whiteBackgroundModes = new Set<WhiteBackgroundMode>([
+  "white_background",
+  "ghost_model",
+  "ai_background",
+  "retouch",
+  "outfit_change",
+  "product_showcase",
   "pure_white",
   "transparent",
   "light_gray",

@@ -121,6 +121,25 @@ describe("taskStore", () => {
     });
   });
 
+  it("preserves AI tool modes in stored task history", () => {
+    const aiToolTask: GenerationTask = {
+      ...task,
+      config: {
+        ...task.config,
+        module: "white_background",
+        aspectRatio: "original",
+        whiteBackgroundMode: "product_showcase",
+      },
+    };
+
+    saveTasks([aiToolTask]);
+
+    expect(loadTasks()[0]?.config).toMatchObject({
+      module: "white_background",
+      whiteBackgroundMode: "product_showcase",
+    });
+  });
+
   it("normalizes stored transient tasks into interrupted failures and persists them", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T02:00:00.000Z"));
