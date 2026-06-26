@@ -249,6 +249,55 @@ describe("taskStore", () => {
     ]);
   });
 
+  it("compacts older uploaded source images when browser storage is full", () => {
+    const originalSetItem = Storage.prototype.setItem;
+    let callCount = 0;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key,
+      value,
+    ) {
+      callCount += 1;
+
+      if (callCount === 1) {
+        throw new DOMException("Quota exceeded", "QuotaExceededError");
+      }
+
+      return originalSetItem.call(this, key, value);
+    });
+    const newestTask: GenerationTask = {
+      ...task,
+      id: "task-newest",
+      productInput: {
+        ...task.productInput,
+        imageUrl: "data:image/png;base64,bmV3ZXN0",
+        source: "upload",
+      },
+    };
+    const olderTask: GenerationTask = {
+      ...task,
+      id: "task-older",
+      productInput: {
+        ...task.productInput,
+        imageUrl: "data:image/png;base64,b2xkZXI=",
+        source: "upload",
+      },
+    };
+
+    saveTasks([newestTask, olderTask]);
+
+    const storedTasks = JSON.parse(
+      localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+    ) as GenerationTask[];
+    expect(storedTasks).toHaveLength(2);
+    expect(storedTasks[0]?.productInput.imageUrl).toBe(
+      "data:image/png;base64,bmV3ZXN0",
+    );
+    expect(storedTasks[1]?.productInput.imageUrl).toBe(
+      "blob:kroma-history-upload-compacted",
+    );
+  });
+
   it("marks persisted processing upload blob tasks as failed source-unavailable tasks", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T03:00:00.000Z"));

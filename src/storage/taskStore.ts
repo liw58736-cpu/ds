@@ -17,6 +17,7 @@ import type {
 } from "../domain/types";
 
 const TASKS_STORAGE_KEY = "commerce-studio-tasks-v1";
+const COMPACTED_UPLOAD_IMAGE_URL = "blob:kroma-history-upload-compacted";
 const INTERRUPTED_TASK_ERROR = {
   errorCode: "task_interrupted",
   errorMessage: "任务在上次会话中断，请重新生成。",
@@ -379,5 +380,52 @@ export function loadTasks(options: LoadTasksOptions = {}): GenerationTask[] {
 }
 
 export function saveTasks(tasks: GenerationTask[]): void {
-  localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
+  try {
+    localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
+    return;
+  } catch {
+    // Uploaded product images are stored as data URLs so recent tasks can survive
+    // a reload. Browser storage can still fill up during batch generation, so
+    // keep task metadata/results and compact older uploaded source images.
+  }
+
+  const candidates = [
+    compactUploadedSources(tasks, 1),
+    compactUploadedSources(tasks, 0),
+    compactUploadedSources(tasks.slice(0, 20), 1),
+    compactUploadedSources(tasks.slice(0, 10), 1),
+    compactUploadedSources(tasks.slice(0, 5), 1),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(candidate));
+      return;
+    } catch {
+      // Try the next smaller fallback.
+    }
+  }
+}
+
+function compactUploadedSources(
+  tasks: GenerationTask[],
+  keepRecentOriginalCount: number,
+): GenerationTask[] {
+  return tasks.map((task, index) => {
+    if (
+      index < keepRecentOriginalCount ||
+      task.productInput.source !== "upload" ||
+      !task.productInput.imageUrl.startsWith("data:")
+    ) {
+      return task;
+    }
+
+    return {
+      ...task,
+      productInput: {
+        ...task.productInput,
+        imageUrl: COMPACTED_UPLOAD_IMAGE_URL,
+      },
+    };
+  });
 }
