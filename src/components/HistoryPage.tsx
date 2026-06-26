@@ -3,6 +3,11 @@ import {
   getGenerationTaskSnapshot,
   listGenerationTasks,
 } from "../api/generationApi";
+import {
+  downloadTaskAssets,
+  getTaskDownloadName,
+  getTaskResultAssets,
+} from "../domain/resultAssets";
 import { describeTaskFunction } from "../domain/taskDisplay";
 import type { GenerationTask, TaskStatus } from "../domain/types";
 
@@ -112,6 +117,37 @@ export function HistoryPage() {
                 <span className={`task-status task-status-${task.status}`}>
                   {statusLabels[task.status]}
                 </span>
+                {task.status === "completed" && getTaskResultAssets(task).length > 0 ? (
+                  <div className="history-result-strip">
+                    <div className="history-result-actions">
+                      <span>{getTaskResultAssets(task).length} 张图片</span>
+                      {getTaskResultAssets(task).length > 1 ? (
+                        <button
+                          type="button"
+                          className="ghost-action-button"
+                          onClick={() => downloadTaskAssets(task)}
+                        >
+                          下载本次任务全部图片
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="history-result-grid">
+                      {getTaskResultAssets(task).map((asset, index) => (
+                        <figure className="history-result-item" key={`${asset.url}-${index}`}>
+                          <img src={asset.url} alt="生成结果缩略图" />
+                          <figcaption>{asset.label}</figcaption>
+                          <a
+                            className="ghost-action-button"
+                            href={asset.url}
+                            download={getTaskDownloadName(task, asset, index)}
+                          >
+                            下载
+                          </a>
+                        </figure>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>

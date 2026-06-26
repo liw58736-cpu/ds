@@ -106,6 +106,7 @@ export interface GenerationTask {
   config: GenerationConfig;
   status: TaskStatus;
   resultUrls: string[];
+  resultAssets?: GenerationResultAsset[];
   errorCode?: string;
   errorMessage?: string;
   progress?: string;
@@ -116,7 +117,13 @@ export interface GenerationTask {
   attempt: number;
 }
 
+export interface GenerationResultAsset {
+  url: string;
+  label: string;
+}
+
 export interface GenerationResult {
   resultUrls: string[];
+  resultAssets?: GenerationResultAsset[];
   creditCost: number;
 }

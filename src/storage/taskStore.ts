@@ -4,6 +4,7 @@ import type {
   GenerationConfig,
   GenerationResolution,
   GenerationModule,
+  GenerationResultAsset,
   MainImageModuleId,
   GenerationTask,
   OutputFormat,
@@ -186,6 +187,19 @@ function parseProductInput(value: unknown): ProductInput | null {
   };
 }
 
+function parseResultAssets(value: unknown): GenerationResultAsset[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const resultAssets = value.filter(
+    (asset): asset is GenerationResultAsset =>
+      isRecord(asset) && isString(asset.url) && isString(asset.label),
+  );
+
+  return resultAssets.length > 0 ? resultAssets : undefined;
+}
+
 function parseConfig(value: unknown): GenerationConfig | null {
   if (!isRecord(value)) {
     return null;
@@ -280,6 +294,7 @@ function parseTask(value: unknown): GenerationTask | null {
   const completedAt = readOptionalString(value.completedAt);
   const progress = readOptionalString(value.progress);
   const backendTaskId = readOptionalString(value.backendTaskId);
+  const resultAssets = parseResultAssets(value.resultAssets);
 
   return {
     id,
@@ -295,6 +310,7 @@ function parseTask(value: unknown): GenerationTask | null {
     ...(completedAt ? { completedAt } : {}),
     ...(progress ? { progress } : {}),
     ...(backendTaskId ? { backendTaskId } : {}),
+    ...(resultAssets ? { resultAssets } : {}),
   };
 }
 

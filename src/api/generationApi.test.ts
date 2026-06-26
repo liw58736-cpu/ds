@@ -186,6 +186,10 @@ describe("generationApi", () => {
     expect(result.resultUrls).toHaveLength(2);
     expect(decodeURIComponent(result.resultUrls[0])).toContain("首屏 KV");
     expect(decodeURIComponent(result.resultUrls[1])).toContain("整体展示");
+    expect(result.resultAssets).toEqual([
+      { url: result.resultUrls[0], label: "首屏 KV" },
+      { url: result.resultUrls[1], label: "整体展示" },
+    ]);
     expect(result.creditCost).toBe(4);
   });
 

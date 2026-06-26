@@ -54,6 +54,19 @@ const completedMultiResultTask: GenerationTask = {
   creditCost: 2,
   progress: undefined,
   completedAt: "2026-06-17T00:02:00.000Z",
+  resultAssets: [
+    { url: "data:image/png;base64,result-one", label: "首屏 KV" },
+    { url: "https://cdn.example.com/result-two.png", label: "整体展示" },
+  ],
+};
+
+const olderCompletedTask: GenerationTask = {
+  ...completedMultiResultTask,
+  id: "task-older",
+  resultUrls: ["https://cdn.example.com/older.png"],
+  resultAssets: [{ url: "https://cdn.example.com/older.png", label: "细节特写" }],
+  createdAt: "2026-06-16T23:00:00.000Z",
+  completedAt: "2026-06-16T23:01:00.000Z",
 };
 
 const unavailableUploadTask: GenerationTask = {
@@ -117,6 +130,28 @@ describe("ResultPreview", () => {
 
     expect(screen.getAllByAltText("生成结果")).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: "下载" })).toHaveLength(2);
+  });
+
+  it("shows recent tasks as labeled thumbnails and can enlarge a result", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ResultPreview
+        product={product}
+        tasks={[completedMultiResultTask, olderCompletedTask]}
+      />,
+    );
+
+    expect(screen.getByText("细节特写")).toBeInTheDocument();
+    expect(screen.getByText("首屏 KV")).toBeInTheDocument();
+    expect(screen.getByText("整体展示")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "下载本次任务全部图片" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "放大查看 首屏 KV" }));
+
+    expect(screen.getByRole("dialog", { name: "首屏 KV" })).toBeInTheDocument();
   });
 
   it("hides retry for unavailable upload source tasks", () => {

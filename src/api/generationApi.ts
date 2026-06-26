@@ -1,10 +1,12 @@
 import { type GenerateInput } from "../providers/generationProvider";
 import { GenerationProviderError } from "../providers/generationProvider";
 import { estimateGenerationCredits } from "../domain/creditCost";
+import { buildGenerationPrompt } from "../domain/promptBuilder";
 import type {
   DetailPageModuleId,
   GenerationConfig,
   GenerationResult,
+  GenerationResultAsset,
   GenerationTask,
   MainImageModuleId,
 } from "../domain/types";
@@ -98,6 +100,7 @@ export async function resumeGenerationTask(
 
   return {
     resultUrls: response.resultUrls,
+    resultAssets: buildResultAssets(task.config, response.resultUrls),
     creditCost: response.creditCost,
   };
 }
@@ -106,8 +109,9 @@ export async function generateAsset(
   input: GenerateInput,
   options: GenerationApiOptions = {},
 ): Promise<GenerationResult> {
+  const expandedInputs = expandGenerationInputs(input);
   const responses = await Promise.all(
-    expandGenerationInputs(input).map((generationInput) =>
+    expandedInputs.map((generationInput) =>
       createGenerationTask(generationInput, options),
     ),
   );
@@ -120,10 +124,28 @@ export async function generateAsset(
     );
   }
 
+  const resultAssets = responses.flatMap((item, index) =>
+    buildResultAssets(expandedInputs[index].config, item.resultUrls),
+  );
+
   return {
     resultUrls: responses.flatMap((item) => item.resultUrls),
+    resultAssets,
     creditCost: estimateGenerationCredits(input.config),
   };
+}
+
+function buildResultAssets(
+  config: GenerationConfig,
+  resultUrls: string[],
+): GenerationResultAsset[] {
+  const labels = buildGenerationPrompt(config).modules.map((module) => module.title);
+  const fallbackLabel = labels[0] ?? "生成结果";
+
+  return resultUrls.map((url, index) => ({
+    url,
+    label: labels[index] ?? fallbackLabel,
+  }));
 }
 
 function expandGenerationInputs(input: GenerateInput): GenerateInput[] {

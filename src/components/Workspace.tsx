@@ -108,14 +108,9 @@ export function Workspace({
   const hasLoadedTasksRef = useRef(true);
   const taskRunTokensRef = useRef<Record<string, number>>({});
   const latestTask = tasks[0];
-  const activePreviewTask =
-    activePreviewTaskId === undefined
-      ? latestTask
-      : activePreviewTaskId === null
-        ? undefined
-        : tasks.find((task) => task.id === activePreviewTaskId);
   const hasRunningLatestTask =
-    latestTask?.status === "queued" || latestTask?.status === "processing";
+    tasks.some((task) => task.status === "queued" || task.status === "processing");
+  const previewTasks = tasks.slice(0, 8);
   const estimatedCreditCost = estimateGenerationCredits(config);
   const isOutOfCredits = accountBalance < estimatedCreditCost;
 
@@ -206,6 +201,7 @@ export function Workspace({
 
         const completedTask = completeTask(currentProcessingTask, {
           resultUrls: result.resultUrls,
+          resultAssets: result.resultAssets,
           creditCost: result.creditCost,
           completedAt: new Date().toISOString(),
         });
@@ -335,17 +331,12 @@ export function Workspace({
   }, [isVisible]);
 
   useEffect(() => {
-    const didChangeModule = activeModuleRef.current !== activeModule;
-
     setConfig((currentConfig) => ({
       ...currentConfig,
       ...getModuleDefaults(activeModule),
     }));
 
-    if (didChangeModule) {
-      setActivePreviewTaskId(null);
-      activeModuleRef.current = activeModule;
-    }
+    activeModuleRef.current = activeModule;
   }, [activeModule]);
 
   useEffect(() => {
@@ -373,7 +364,8 @@ export function Workspace({
         <section className="studio-preview" aria-label="生成预览">
           <ResultPreview
             product={product}
-            latestTask={activePreviewTask}
+            latestTask={activePreviewTaskId ? tasks.find((task) => task.id === activePreviewTaskId) : latestTask}
+            tasks={previewTasks}
             onCancelTask={handleCancelTask}
             onRetryTask={handleRetryTask}
           />

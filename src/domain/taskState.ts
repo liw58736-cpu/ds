@@ -1,5 +1,6 @@
 import type {
   GenerationConfig,
+  GenerationResultAsset,
   GenerationTask,
   ProductInput,
   TaskStatus,
@@ -64,7 +65,12 @@ export function updateTaskProgress(
 
 export function completeTask(
   task: GenerationTask,
-  input: { resultUrls: string[]; completedAt: string; creditCost: number },
+  input: {
+    resultUrls: string[];
+    resultAssets?: GenerationResultAsset[];
+    completedAt: string;
+    creditCost: number;
+  },
 ): GenerationTask {
   assertStatus(task, "processing", "complete");
 
@@ -79,6 +85,7 @@ export function completeTask(
     ...rest,
     status: "completed",
     resultUrls: input.resultUrls,
+    ...(input.resultAssets ? { resultAssets: input.resultAssets } : {}),
     completedAt: input.completedAt,
     creditCost: input.creditCost,
   };
@@ -89,9 +96,10 @@ export function failTask(
   input: { errorCode: string; errorMessage: string; completedAt: string },
 ): GenerationTask {
   assertStatus(task, "processing", "fail");
+  const { resultAssets: _resultAssets, ...rest } = task;
 
   return {
-    ...task,
+    ...rest,
     status: "failed",
     resultUrls: [],
     errorCode: input.errorCode,
@@ -111,6 +119,7 @@ export function retryTask(task: GenerationTask, now: string): GenerationTask {
     progress: _progress,
     completedAt: _completedAt,
     backendTaskId: _backendTaskId,
+    resultAssets: _resultAssets,
     ...rest
   } = task;
 

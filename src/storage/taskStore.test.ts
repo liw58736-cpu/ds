@@ -103,6 +103,26 @@ describe("taskStore", () => {
     });
   });
 
+  it("round trips labeled result assets on stored task snapshots", () => {
+    saveTasks([
+      {
+        ...task,
+        resultUrls: ["/mock/hero.png", "/mock/overall.png"],
+        resultAssets: [
+          { url: "/mock/hero.png", label: "首屏 KV" },
+          { url: "/mock/overall.png", label: "整体展示" },
+        ],
+      },
+    ]);
+
+    expect(loadTasks()[0]).toMatchObject({
+      resultAssets: [
+        { url: "/mock/hero.png", label: "首屏 KV" },
+        { url: "/mock/overall.png", label: "整体展示" },
+      ],
+    });
+  });
+
   it("round trips ecommerce aspect ratios and output language", () => {
     const localizedTask: GenerationTask = {
       ...task,
