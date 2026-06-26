@@ -359,12 +359,18 @@ describe("Workspace", () => {
       .forEach((button) => fireEvent.click(button));
   });
 
-  it("stops new submissions when the local concurrent task limit is full", async () => {
+  it("allows new submissions when three local tasks are already running", async () => {
     vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => new Promise<Response>(() => undefined)),
-    );
+    const createdTasks: Array<{ resolve: (response: Response) => void }> = [];
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const requestUrl = String(input);
+      if (requestUrl.endsWith("/image/generate")) {
+        return new Promise<Response>((resolve) => {
+          createdTasks.push({ resolve });
+        });
+      }
+      return new Promise<Response>(() => undefined);
+    }));
     const runningTasks = Array.from({ length: 3 }, (_, index) =>
       createStoredTask({
         id: `task-running-${index + 1}`,
@@ -383,9 +389,16 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     fireEvent.click(screen.getByRole("button", { name: "使用示例商品" }));
+    fireEvent.click(screen.getByText("首屏 KV"));
 
-    expect(await screen.findByRole("button", { name: "任务已满" })).toBeDisabled();
-    expect(screen.getByText(/当前进行中 3\/3/)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "生成商品主图" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "生成商品主图" }));
+
+    await waitFor(() => {
+      expect(createdTasks).toHaveLength(1);
+    });
+    expect(screen.queryByRole("button", { name: "任务已满" })).not.toBeInTheDocument();
   });
 
   it("does not render inline recent tasks in the workspace settings column", async () => {
