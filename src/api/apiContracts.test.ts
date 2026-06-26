@@ -71,7 +71,7 @@ describe("apiContracts", () => {
     );
   });
 
-  it("marks white-background 1K jobs as edit tool requests", () => {
+  it("routes AI tool 1K jobs through the standard provider chain", () => {
     const request = buildGenerationTaskRequest({
       ...input,
       config: {
@@ -81,9 +81,12 @@ describe("apiContracts", () => {
       },
     });
 
-    expect(request.body.routeMode).toBe("edit_tool");
+    expect(request.body.routeMode).toBe("standard");
     expect(request.body.route.providers).toEqual([
+      { provider: "rightcode", tier: "standard" },
+      { provider: "wuyinkeji", tier: "standard" },
       { provider: "packyapi", tier: "standard" },
+      { provider: "gptsapi", tier: "standard" },
     ]);
   });
 

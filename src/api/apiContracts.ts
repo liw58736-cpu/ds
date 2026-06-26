@@ -164,10 +164,6 @@ function getRouteMode(
     return "hd";
   }
 
-  if (config.module === "white_background") {
-    return "edit_tool";
-  }
-
   if (config.module === "detail_page") {
     return "template";
   }

@@ -76,7 +76,7 @@ describe("kromaGenerationAdapter", () => {
     expect(buildKromaGenerateRequest(request)).not.toHaveProperty("image_url");
   });
 
-  it("maps white-background 1K work to the edit-tool backend path", () => {
+  it("maps AI tool 1K work to the standard ecommerce backend path", () => {
     const request = buildGenerationTaskRequest({
       ...baseInput,
       config: {
@@ -88,12 +88,12 @@ describe("kromaGenerationAdapter", () => {
     });
 
     expect(buildKromaGenerateRequest(request)).toMatchObject({
-      task_type: "image_edit",
+      task_type: "ecommerce",
       image_url: "https://cdn.example.com/product.png",
       size: "1024x1024",
       quality: "standard",
       use_template_mode: false,
-      style: "white_background:edit_tool",
+      style: "white_background:pure_white:standard",
     });
   });
 

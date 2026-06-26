@@ -41,10 +41,6 @@ const hdRouteCandidates: ProviderRouteStep[] = [
   { provider: "packyapi", tier: "hd" },
 ];
 
-const editToolRouteCandidates: ProviderRouteStep[] = [
-  { provider: "packyapi", tier: "standard" },
-];
-
 export function getQualityForResolution(
   resolution: GenerationResolution = "1K",
 ): GenerationQuality {
@@ -62,9 +58,7 @@ export function getQualityForResolution(
 export function selectGenerationRoute(config: GenerationConfig): GenerationRoute {
   const quality = getQualityForResolution(config.resolution);
   const providers =
-    config.module === "white_background" && quality === "standard"
-      ? editToolRouteCandidates
-      : quality === "standard"
+    quality === "standard"
         ? templateRouteCandidates
         : hdRouteCandidates;
 

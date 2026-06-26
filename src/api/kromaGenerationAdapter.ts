@@ -56,18 +56,28 @@ export function buildKromaGenerateRequest(
   ),
 ): KromaGenerateRequest {
   const { config, prompt, routeMode, route } = request.body;
-  const isWhiteBackground = config.module === "white_background";
 
   return {
     prompt: prompt.finalPrompt,
-    task_type: isWhiteBackground ? "image_edit" : "ecommerce",
-    style: `${config.module}:${routeMode}`,
+    task_type: "ecommerce",
+    style: buildKromaStyle(config, routeMode),
     ...imageInput,
     size: getKromaSize(config.aspectRatio, config.resolution),
     quality: route.quality,
     use_template_mode: false,
     keep_user_outfit_pose: false,
   };
+}
+
+function buildKromaStyle(
+  config: GenerationTaskCreateRequest["body"]["config"],
+  routeMode: GenerationTaskCreateRequest["body"]["routeMode"],
+): string {
+  if (config.module === "white_background") {
+    return `${config.module}:${config.whiteBackgroundMode ?? "white_background"}:${routeMode}`;
+  }
+
+  return `${config.module}:${routeMode}`;
 }
 
 export async function submitKromaGenerationTask(

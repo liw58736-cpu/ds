@@ -139,7 +139,7 @@ The frontend generation request shape remains:
 Route rules:
 
 - Standard / template 1K: `RightCode -> Wuyinkeji -> PackyAPI -> GPTsAPI`
-- Edit tool mode: `PackyAPI`
+- AI tools 1K: `RightCode -> Wuyinkeji -> PackyAPI -> GPTsAPI`
 - HD / 2K / 4K: `Wuyinkeji HD -> RightCode HD -> GPTsAPI -> PackyAPI HD`
 
 Failed generation responses must return `creditCost: 0`.

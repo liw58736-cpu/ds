@@ -46,7 +46,7 @@ describe("selectGenerationRoute", () => {
     ]);
   });
 
-  it("routes edit tool mode through PackyAPI only", () => {
+  it("routes AI tool mode through the available standard provider chain", () => {
     const route = selectGenerationRoute({
       ...baseConfig,
       module: "white_background",
@@ -56,7 +56,10 @@ describe("selectGenerationRoute", () => {
     expect(route.quality).toBe("standard");
     expect(route.fallbackStrategy).toBe("sequential");
     expect(route.providers).toEqual([
+      { provider: "rightcode", tier: "standard" },
+      { provider: "wuyinkeji", tier: "standard" },
       { provider: "packyapi", tier: "standard" },
+      { provider: "gptsapi", tier: "standard" },
     ]);
   });
 
