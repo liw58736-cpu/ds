@@ -41,7 +41,14 @@ WEB_AUTH_EMAIL_FROM=kroma <no-reply@i18.pro>
 WEB_RESEND_API_KEY=<resend-api-key>
 WEB_PADDLE_WEBHOOK_SECRET=<paddle-webhook-secret>
 WEB_PADDLE_PRICE_CREDITS_JSON=<price-id-to-credit-json>
-WEB_IMAGE_API_BASE_URL=https://kroma-api.onrender.com/api/v1
+RIGHTCODE_BASE_URL=<rightcode-openai-compatible-base-url>
+RIGHTCODE_KEY_1=<rightcode-key>
+WUYINKEJI_BASE_URL=<wuyinkeji-base-url>
+WUYINKEJI_KEY_1=<wuyinkeji-key>
+PACKYAPI_BASE_URL=<packyapi-openai-compatible-base-url>
+PACKYAPI_KEY_1=<packyapi-key>
+GPTSAPI_BASE_URL=<gptsapi-openai-compatible-base-url>
+GPTSAPI_KEY_1=<gptsapi-key>
 ```
 
 Optional:
@@ -49,7 +56,13 @@ Optional:
 ```text
 WEB_AUTH_CODE_SECRET=<random-auth-code-hmac-secret>
 WEB_INTERNAL_BILLING_KEY=<server-to-server-billing-secret>
-WEB_IMAGE_API_KEY=<dedicated-image-upstream-key-if-required>
+RIGHTCODE_CONCURRENT=10
+WUYINKEJI_CONCURRENT=10
+PACKYAPI_CONCURRENT=10
+GPTSAPI_CONCURRENT=10
+PACKYAPI_IMAGE_MODEL=gpt-image-2
+WEB_IMAGE_API_BASE_URL=<legacy-image-upstream-url>
+WEB_IMAGE_API_KEY=<legacy-image-upstream-key-if-required>
 ```
 
 `WEB_AUTH_CODE_SECRET` is used to hash public 6 digit email codes before storing
@@ -124,10 +137,17 @@ VITE_PADDLE_PRICE_YEARLY_SUBSCRIPTION=<paddle-price-id>
 ```
 
 `VITE_KROMA_API_BASE_URL` should point at the standalone web backend. The web
-backend proxies `/image/*` calls to `WEB_IMAGE_API_BASE_URL`, so the browser
-never calls the mobile app backend directly. The current production setup reuses
-the mobile app image router at `https://kroma-api.onrender.com/api/v1` only for
-generation routing. Web auth, credits, billing, and Supabase remain isolated in
-`kroma-web-api`; the proxy does not forward the web user's bearer token to the
-app backend. `WEB_IMAGE_API_KEY` is only needed if the chosen image upstream
-requires its own server-to-server key.
+backend owns `/image/*` routing when any provider key is configured. Route order:
+
+- Template mode and standard generation:
+  `RightCode -> Wuyinkeji -> PackyAPI -> GPTsAPI`
+- Edit tools:
+  `PackyAPI`
+- HD / 2K / 4K:
+  `Wuyinkeji HD -> RightCode HD -> GPTsAPI -> PackyAPI HD`
+
+Provider concurrency is controlled per provider with `*_CONCURRENT`; the default
+is 10 per configured provider key. `WEB_IMAGE_API_BASE_URL` is kept only as a
+legacy fallback for environments that have not yet configured the standalone web
+provider pool. Do not point it at the mobile app backend for production web
+generation.

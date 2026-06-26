@@ -1,4 +1,8 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import {
+  createImageRouter,
+  hasConfiguredImageProviders,
+} from "./image-router.mjs";
 
 const defaultFreeCredits = 5;
 const defaultSender = "kroma <no-reply@i18.pro>";
@@ -7,8 +11,9 @@ export function createWebBackend({
   env = process.env,
   fetch: fetchImpl = globalThis.fetch,
 } = {}) {
+  const imageRouter = createImageRouter({ env, fetch: fetchImpl });
   return {
-    handle: (request) => handleRequest(request, env, fetchImpl),
+    handle: (request) => handleRequest(request, env, fetchImpl, imageRouter),
   };
 }
 
@@ -30,7 +35,7 @@ export function isAllowedAuthRedirect(value, env = process.env) {
   return allowed.has(parsed.origin);
 }
 
-async function handleRequest(request, env, fetchImpl) {
+async function handleRequest(request, env, fetchImpl, imageRouter) {
   if (request.method === "OPTIONS") {
     return emptyResponse(204);
   }
@@ -83,6 +88,9 @@ async function handleRequest(request, env, fetchImpl) {
     }
 
     if (url.pathname === "/api/v1/image/generate" && request.method === "POST") {
+      if (imageRouter.hasProviders()) {
+        return await handleImageGenerate(request, env, fetchImpl, imageRouter);
+      }
       return await handleImageProxy(request, env, fetchImpl, "/image/generate", "POST");
     }
 
@@ -94,6 +102,10 @@ async function handleRequest(request, env, fetchImpl) {
       const taskId = url.pathname
         .replace("/api/v1/image/task/", "")
         .replace(/\/cancel$/, "");
+      if (imageRouter.get(taskId)) {
+        await requireAuthUser(request, env, fetchImpl);
+        return jsonResponse({ canceled: imageRouter.cancel(taskId) });
+      }
       return await handleImageProxy(
         request,
         env,
@@ -105,6 +117,11 @@ async function handleRequest(request, env, fetchImpl) {
 
     if (url.pathname.startsWith("/api/v1/image/task/") && request.method === "GET") {
       const taskId = url.pathname.replace("/api/v1/image/task/", "");
+      const task = imageRouter.get(taskId);
+      if (task) {
+        await requireAuthUser(request, env, fetchImpl);
+        return jsonResponse(imageRouter.response(task));
+      }
       return await handleImageProxy(
         request,
         env,
@@ -121,6 +138,12 @@ async function handleRequest(request, env, fetchImpl) {
     }
     return jsonResponse({ detail: error?.message ?? "Internal Server Error" }, 500);
   }
+}
+
+async function handleImageGenerate(request, env, fetchImpl, imageRouter) {
+  const authUser = await requireAuthUser(request, env, fetchImpl);
+  const body = await readJsonBody(request);
+  return jsonResponse(await imageRouter.submit(body, authUser));
 }
 
 async function handleSignup(request, env, fetchImpl) {
@@ -1050,6 +1073,7 @@ async function buildHealthResponse(env, fetchImpl) {
   const usesMobileAppImageRouter = isMobileAppImageRouter(
     env.WEB_IMAGE_API_BASE_URL,
   );
+  const hasImageProviders = hasConfiguredImageProviders(env);
   const config = {
     supabaseUrl: Boolean(env.WEB_SUPABASE_URL),
     supabaseAnonKey: Boolean(env.WEB_SUPABASE_ANON_KEY),
@@ -1062,8 +1086,8 @@ async function buildHealthResponse(env, fetchImpl) {
     internalBillingKey: Boolean(env.WEB_INTERNAL_BILLING_KEY),
     paddleWebhookSecret: Boolean(env.WEB_PADDLE_WEBHOOK_SECRET),
     paddlePriceCredits: hasValidPaddlePriceCreditMap(env),
-    imageApiBaseUrl: Boolean(env.WEB_IMAGE_API_BASE_URL),
-    imageApiKey: Boolean(env.WEB_IMAGE_API_KEY) || usesMobileAppImageRouter,
+    imageApiBaseUrl: Boolean(env.WEB_IMAGE_API_BASE_URL) || hasImageProviders,
+    imageApiKey: Boolean(env.WEB_IMAGE_API_KEY) || usesMobileAppImageRouter || hasImageProviders,
   };
   const missing = Object.entries(config)
     .filter(([key, configured]) => !configured && !optionalConfigKeys.has(key))

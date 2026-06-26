@@ -936,6 +936,83 @@ test("image generation proxy can use the mobile app image router without mixing 
   assert.equal(calls[1].url, "https://kroma-api.onrender.com/api/v1/image/generate");
 });
 
+test("image generation uses the web backend provider router instead of forwarding to the app backend", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_IMAGE_API_BASE_URL: "https://kroma-api.onrender.com/api/v1",
+      RIGHTCODE_BASE_URL: "https://rightcode.example.com/v1",
+      RIGHTCODE_KEY_1: "rightcode-key",
+      RIGHTCODE_CONCURRENT: "2",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://rightcode.example.com/v1/images/generations") {
+        assert.equal(init.method, "POST");
+        assert.equal(init.headers.Authorization, "Bearer rightcode-key");
+        assert.deepEqual(JSON.parse(init.body), {
+          model: "gpt-image-2",
+          prompt: "product hero",
+          n: 1,
+          size: "1024x1024",
+          quality: "medium",
+          response_format: "url",
+          image: "https://cdn.example.com/product.png",
+        });
+        return jsonResponse({
+          data: [{ url: "https://cdn.example.com/result.png" }],
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "product hero",
+        image_url: "https://cdn.example.com/product.png",
+        quality: "standard",
+        size: "1024x1024",
+        task_type: "ecommerce",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  assert.match(body.task_id, /^web-img-/);
+  assert.equal(body.status, "processing");
+  assert.equal(calls.some((call) => call.url === "https://kroma-api.onrender.com/api/v1/image/generate"), false);
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+
+  assert.equal(task.status, 200);
+  assert.deepEqual(await readJson(task), {
+    task_id: body.task_id,
+    status: "done",
+    image_url: "https://cdn.example.com/result.png",
+    image_base64: null,
+    channel_used: "rightcode",
+    error: null,
+    progress: "完成",
+  });
+});
+
 test("image generation proxy forwards cancel requests without requiring a JSON body", async () => {
   const app = createWebBackend({
     env: {
