@@ -164,22 +164,31 @@ const detailPrompts: Record<
   },
 };
 
-const whiteBackgroundCopy: Record<WhiteBackgroundMode, string> = {
-  white_background: "clean marketplace white-background product image with precise cutout edges and platform-ready lighting",
-  ghost_model: "ghost mannequin product image that preserves garment shape, volume, seams, and fit without a visible model",
-  ai_background: "AI-generated commercial background that matches product category, realistic scale, and premium ecommerce tone",
-  retouch: "high-end product retouching with cleaner surface, corrected lighting, dust removal, and preserved product identity",
-  outfit_change: "outfit try-on transformation with realistic fabric drape, body fit, and unchanged garment design details",
-  product_showcase: "premium product showcase composition with refined studio setup, depth, props only when useful, and clear product focus",
-  pure_white: "clean pure white background",
-  transparent: "transparent-background cutout look with clean edges",
-  light_gray: "soft light gray inspection background",
-};
-
 const shadowCopy: Record<ShadowMode, string> = {
   natural: "natural soft studio shadow",
   none: "no shadow, crisp ecommerce cutout",
   contact_shadow: "subtle contact shadow",
+};
+
+const aiToolPromptCopy: Record<WhiteBackgroundMode, string> = {
+  white_background:
+    "Create a clean marketplace white-background product image. Preserve the original product geometry, material, proportions, camera angle, color, seams, buttons, edges, and silhouette. Remove distracting background, keep a pure white or near-white platform-ready background, add only a natural contact shadow, and do not change the product design.",
+  ghost_model:
+    "Create a ghost mannequin image for the garment. Remove the visible model body while preserving the garment shape, collar, sleeve volume, pocket, button placement, fabric folds, seams, and fit structure. The output should look like the shirt is worn by an invisible mannequin, not a flat lay.",
+  ai_background:
+    "Keep the product or worn garment identity unchanged, then place it into a premium AI-generated commercial background. Use a realistic ecommerce scene with tasteful depth, soft daylight, lifestyle context, and restrained props that match the product category. The background must be visibly different from a plain white cutout.",
+  retouch:
+    "Retouch the uploaded product image while keeping the same product, pose, framing, and identity. Improve fabric cleanliness, wrinkles, lighting balance, edge clarity, color consistency, and commercial polish. Do not redesign the product, do not change the model pose, and do not add a new scene.",
+  outfit_change:
+    "Create a visible outfit styling variation around the uploaded garment. Preserve the main garment's color, collar, pocket, buttons, fabric texture, and silhouette, but change the surrounding outfit styling such as pants, layering, shoes, accessories, and presentation context. The result should clearly look like a new styled look, not the same plain cutout.",
+  product_showcase:
+    "Create a premium product showcase composition for ecommerce. Preserve the product identity, then stage it with refined studio lighting, a pedestal, hanger, folded detail, tasteful props, depth, and a polished retail display setup. The result must look like a designed product showcase, not a plain white-background cutout.",
+  pure_white:
+    "Create a strict pure white background product image with preserved product geometry, clean edges, and only minimal natural contact shadow.",
+  transparent:
+    "Create a transparent-background cutout look with crisp edges, preserved product geometry, and no surrounding scene.",
+  light_gray:
+    "Create a light gray inspection-background product image with preserved product geometry and neutral catalog lighting.",
 };
 
 export function buildGenerationPrompt(
@@ -225,7 +234,7 @@ function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
       {
         id: backgroundMode,
         title: toolTitles[backgroundMode],
-        prompt: `preserve the original product geometry, material, proportions, and edges; place it on a ${whiteBackgroundCopy[backgroundMode]}; apply ${shadowCopy[shadowMode]}; platform-ready ecommerce cutout, no extra props.`,
+        prompt: `${aiToolPromptCopy[backgroundMode]} Apply ${shadowCopy[shadowMode]} where appropriate. Avoid fake tiny unreadable text, distorted logos, extra limbs, changed garment details, and mismatched product colors.`,
       },
     ];
   }

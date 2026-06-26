@@ -54,10 +54,31 @@ describe("buildGenerationPrompt", () => {
 
     expect(prompt.modules).toHaveLength(1);
     expect(prompt.modules[0].prompt).toContain(
-      "preserve the original product geometry",
+      "preserved product geometry",
     );
-    expect(prompt.modules[0].prompt).toContain("clean pure white background");
+    expect(prompt.modules[0].prompt).toContain("strict pure white background");
     expect(prompt.modules[0].prompt).toContain("subtle contact shadow");
+  });
+
+  it("creates distinct AI tool prompts for scene and showcase modes", () => {
+    const backgroundPrompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "white_background",
+      whiteBackgroundMode: "ai_background",
+    });
+    const showcasePrompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "white_background",
+      whiteBackgroundMode: "product_showcase",
+    });
+
+    expect(backgroundPrompt.modules[0].prompt).toContain(
+      "visibly different from a plain white cutout",
+    );
+    expect(showcasePrompt.modules[0].prompt).toContain(
+      "pedestal, hanger, folded detail",
+    );
+    expect(showcasePrompt.modules[0].prompt).not.toContain("no extra props");
   });
 
   it("includes the selected output language in the final prompt", () => {
