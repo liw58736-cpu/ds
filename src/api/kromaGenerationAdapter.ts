@@ -2,6 +2,7 @@ import type { GenerationTaskResponse } from "./mockBackendClient";
 import type { GenerationTaskCreateRequest } from "./apiContracts";
 import type { AspectRatio, GenerationResolution } from "../domain/types";
 import { getAccountAccessToken } from "../storage/accountStore";
+import { refreshKromaSession } from "./accountApi";
 
 export interface KromaGenerateRequest {
   prompt: string;
@@ -90,15 +91,15 @@ export async function submitKromaGenerationTask(
     throw new Error("Kroma image backend URL is not configured.");
   }
 
-  const response = await fetch(`${baseUrl}/image/generate`, {
-    method: "POST",
-    headers: buildKromaHeaders(),
-    body: JSON.stringify(
-      buildKromaGenerateRequest(
-        request,
-        await resolveKromaImageInput(request.body.product.imageUrl),
-      ),
+  const body = JSON.stringify(
+    buildKromaGenerateRequest(
+      request,
+      await resolveKromaImageInput(request.body.product.imageUrl),
     ),
+  );
+  const response = await fetchKromaWithAuthRefresh(`${baseUrl}/image/generate`, {
+    method: "POST",
+    body,
   });
 
   if (!response.ok) {
@@ -148,9 +149,9 @@ export async function cancelKromaGenerationTask(
   }
 
   try {
-    const response = await fetch(
+    const response = await fetchKromaWithAuthRefresh(
       `${baseUrl}/image/task/${backendTaskId}/cancel`,
-      { method: "POST", headers: buildKromaHeaders() },
+      { method: "POST" },
     );
 
     return response.ok;
@@ -228,10 +229,12 @@ async function fetchKromaTask(
   | { status: "ok"; task: KromaTaskResponse }
   | { status: "failed"; task: GenerationTaskResponse }
 > {
-  const pollResponse = await fetch(`${baseUrl}/image/task/${taskId}`, {
-    method: "GET",
-    headers: buildKromaHeaders(),
-  });
+  const pollResponse = await fetchKromaWithAuthRefresh(
+    `${baseUrl}/image/task/${taskId}`,
+    {
+      method: "GET",
+    },
+  );
 
   if (!pollResponse.ok) {
     const text = await pollResponse.text();
@@ -416,12 +419,51 @@ function createKromaTaskId(): string {
   return `kroma-sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function buildKromaHeaders(): Record<string, string> {
+async function fetchKromaWithAuthRefresh(
+  url: string,
+  init: Omit<RequestInit, "headers">,
+): Promise<Response> {
+  const response = await fetch(url, buildKromaRequestInit(init));
+
+  if (!isExpiredAuthResponse(response)) {
+    return response;
+  }
+
+  await response.text();
+  const freshToken = await refreshKromaSession();
+
+  if (!freshToken) {
+    return new Response(
+      JSON.stringify({ detail: "登录已过期，请重新登录。" }),
+      {
+        status: response.status,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  return fetch(url, buildKromaRequestInit(init, freshToken));
+}
+
+function buildKromaRequestInit(
+  init: Omit<RequestInit, "headers">,
+  accessToken = getAccountAccessToken(),
+): RequestInit {
+  return {
+    ...init,
+    headers: buildKromaHeaders(accessToken),
+  };
+}
+
+function isExpiredAuthResponse(response: Response): boolean {
+  return response.status === 401 || response.status === 403;
+}
+
+function buildKromaHeaders(accessToken: string | null): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "X-Kroma-Client": "web",
   };
-  const accessToken = getAccountAccessToken();
 
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;

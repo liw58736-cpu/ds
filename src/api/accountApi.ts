@@ -219,6 +219,49 @@ export async function verifySignupCode(
   });
 }
 
+export async function refreshKromaSession(): Promise<string | null> {
+  const baseUrl = getConfiguredWebAccountApiBaseUrl();
+  const current = getAccountSnapshot();
+  const session = current.session;
+  const refreshToken = session?.refreshToken;
+
+  if (!baseUrl || !session || session.provider !== "kroma" || !refreshToken) {
+    return null;
+  }
+
+  try {
+    const auth = await requestKromaJson<KromaAuthResponse>(`${baseUrl}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+      }),
+    });
+
+    if (!auth.access_token || !auth.refresh_token) {
+      return null;
+    }
+
+    const updatedSession: AccountSession = {
+      ...session,
+      accessToken: auth.access_token,
+      refreshToken: auth.refresh_token,
+      userId: auth.user_id || session.userId,
+    };
+
+    replaceAccountSnapshot({
+      ...getAccountSnapshot(),
+      session: updatedSession,
+    });
+
+    return auth.access_token;
+  } catch {
+    return null;
+  }
+}
+
 async function loginOrRegisterWithKroma(
   session: AccountSession,
 ): Promise<AccountSnapshot> {
@@ -334,14 +377,18 @@ async function fetchKromaCredits(
   accessToken: string,
 ): Promise<KromaCreditsResponse | null> {
   try {
-    const payload = await requestKromaJson<KromaCreditsResponse>(`${baseUrl}/user/credits`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Kroma-Client": "web",
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    const payload = await requestKromaJsonWithAuthRefresh<KromaCreditsResponse>(
+      `${baseUrl}/user/credits`,
+      (token) => ({
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Kroma-Client": "web",
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+      accessToken,
+    );
 
     return typeof payload.credits === "number" ? payload : null;
   } catch {
@@ -360,16 +407,17 @@ async function consumeKromaCredits(
     return null;
   }
 
-  const response = await requestKromaJson<KromaDeductCreditsResponse>(
+  const response = await requestKromaJsonWithAuthRefresh<KromaDeductCreditsResponse>(
     `${baseUrl}/user/credits/deduct?amount=${encodeURIComponent(String(amount))}&task_status=completed&charge_policy=success_only`,
-    {
+    (token) => ({
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Kroma-Client": "web",
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${token}`,
       },
-    },
+    }),
+    accessToken,
   );
 
   return recordCreditSpend({
@@ -377,6 +425,43 @@ async function consumeKromaCredits(
     balanceAfter: response.credits_remaining,
     label: input.label,
   });
+}
+
+async function requestKromaJsonWithAuthRefresh<Payload>(
+  url: string,
+  buildInit: (accessToken: string) => RequestInit,
+  accessToken: string,
+): Promise<Payload> {
+  try {
+    return await requestKromaJson<Payload>(url, buildInit(accessToken));
+  } catch (error) {
+    if (!isExpiredAuthError(error)) {
+      throw error;
+    }
+  }
+
+  const freshToken = await refreshKromaSession();
+
+  if (!freshToken) {
+    throw new Error("登录已过期，请重新登录。");
+  }
+
+  return requestKromaJson<Payload>(url, buildInit(freshToken));
+}
+
+function isExpiredAuthError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+
+  return (
+    (message.includes(" 401 ") || message.includes(" 403 ")) &&
+    (message.includes("expired") ||
+      message.includes("invalid jwt") ||
+      message.includes("token"))
+  );
 }
 
 async function requestKromaJson<Payload>(

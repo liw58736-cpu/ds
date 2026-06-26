@@ -724,6 +724,98 @@ describe("accountApi", () => {
     );
   });
 
+  it("refreshes an expired saved token before retrying Kroma credit deduction", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const session: AccountSession = {
+      identifier: "seller@example.com",
+      authView: "login",
+      mode: "password",
+      storeName: "",
+      inviteCode: "",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      provider: "kroma",
+      userId: "user-1",
+      accessToken: "expired-access-token",
+      refreshToken: "refresh-token-1",
+    };
+    localStorage.setItem(
+      "commerce-studio-account-v1",
+      JSON.stringify({
+        balance: 12,
+        session,
+        transactions: [],
+      }),
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              detail:
+                "invalid JWT: unable to parse or verify signature, token has invalid claims: token is expired",
+            }),
+          ),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: "fresh-access-token",
+            refresh_token: "fresh-refresh-token",
+            user_id: "user-1",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            credits_remaining: 9,
+          }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const account = await consumeCredits({
+      amount: 3,
+      label: "生成商品素材",
+    });
+
+    expect(account.balance).toBe(9);
+    expect(account.session).toMatchObject({
+      accessToken: "fresh-access-token",
+      refreshToken: "fresh-refresh-token",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://127.0.0.1:8000/api/v1/user/credits/deduct?amount=3&task_status=completed&charge_policy=success_only",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer expired-access-token",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://127.0.0.1:8000/api/v1/auth/refresh",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ refresh_token: "refresh-token-1" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://127.0.0.1:8000/api/v1/user/credits/deduct?amount=3&task_status=completed&charge_policy=success_only",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer fresh-access-token",
+        }),
+      }),
+    );
+  });
+
   it("consumes credits only through the success-only account API", async () => {
     const account = await consumeCredits({
       amount: 1,

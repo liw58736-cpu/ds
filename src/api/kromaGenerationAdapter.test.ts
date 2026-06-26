@@ -221,6 +221,92 @@ describe("kromaGenerationAdapter", () => {
     expect(onTaskStarted).toHaveBeenCalledWith("kroma-task-1");
   });
 
+  it("refreshes an expired saved token and retries generation once", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1/");
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1/");
+    initializeSession({
+      identifier: "seller@example.com",
+      authView: "login",
+      mode: "password",
+      storeName: "",
+      inviteCode: "",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      provider: "kroma",
+      userId: "user-1",
+      accessToken: "expired-access-token",
+      refreshToken: "refresh-token-1",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              detail:
+                "invalid JWT: unable to parse or verify signature, token has invalid claims: token is expired",
+            }),
+          ),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            access_token: "fresh-access-token",
+            refresh_token: "fresh-refresh-token",
+            user_id: "user-1",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            task_id: "kroma-task-fresh",
+            status: "done",
+            image_url: "https://cdn.example.com/fresh.png",
+          }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      submitKromaGenerationTask(buildGenerationTaskRequest(baseInput), {
+        pollIntervalMs: 0,
+      }),
+    ).resolves.toMatchObject({
+      taskId: "kroma-task-fresh",
+      status: "completed",
+      resultUrls: ["https://cdn.example.com/fresh.png"],
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://127.0.0.1:8000/api/v1/image/generate",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer expired-access-token",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://127.0.0.1:8000/api/v1/auth/refresh",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ refresh_token: "refresh-token-1" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://127.0.0.1:8000/api/v1/image/generate",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer fresh-access-token",
+        }),
+      }),
+    );
+  });
+
   it("resumes polling an existing reference backend task by task id", async () => {
     vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const onProgress = vi.fn();
