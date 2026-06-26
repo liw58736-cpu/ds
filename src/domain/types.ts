@@ -111,6 +111,7 @@ export interface GenerationTask {
   errorMessage?: string;
   progress?: string;
   backendTaskId?: string;
+  backendTaskIds?: string[];
   creditCost: number;
   createdAt: string;
   completedAt?: string;

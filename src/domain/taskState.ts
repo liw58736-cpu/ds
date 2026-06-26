@@ -119,6 +119,7 @@ export function retryTask(task: GenerationTask, now: string): GenerationTask {
     progress: _progress,
     completedAt: _completedAt,
     backendTaskId: _backendTaskId,
+    backendTaskIds: _backendTaskIds,
     resultAssets: _resultAssets,
     ...rest
   } = task;

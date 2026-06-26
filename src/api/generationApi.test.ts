@@ -4,6 +4,7 @@ import {
   generateAsset,
   getGenerationTaskSnapshot,
   listGenerationTasks,
+  resumeGenerationTask,
   saveGenerationTasks,
 } from "./generationApi";
 import type { GenerateInput } from "../providers/generationProvider";
@@ -191,6 +192,168 @@ describe("generationApi", () => {
       { url: result.resultUrls[1], label: "整体展示" },
     ]);
     expect(result.creditCost).toBe(4);
+  });
+
+  it("generates one result per selected detail page module count", async () => {
+    const result = await generateAsset({
+      ...input,
+      config: {
+        ...input.config,
+        module: "detail_page",
+        aspectRatio: "long_page",
+        resolution: "1K",
+        generationVersion: "standard",
+        detailModuleCounts: {
+          blogger_outfit: 2,
+          main_display: 1,
+          brand_intro: 2,
+        },
+      },
+    });
+
+    expect(result.resultUrls).toHaveLength(5);
+    expect(result.resultAssets).toEqual([
+      { url: result.resultUrls[0], label: "博主穿搭" },
+      { url: result.resultUrls[1], label: "博主穿搭" },
+      { url: result.resultUrls[2], label: "主图展示" },
+      { url: result.resultUrls[3], label: "品牌介绍" },
+      { url: result.resultUrls[4], label: "品牌介绍" },
+    ]);
+    expect(result.creditCost).toBe(5);
+  });
+
+  it("submits one Kroma backend task per selected detail page image", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    let submittedCount = 0;
+    const fetchMock = vi.fn((url: RequestInfo | URL) => {
+      const requestUrl = String(url);
+
+      if (requestUrl === "/sample/product.png") {
+        return Promise.resolve({
+          ok: true,
+          headers: new Headers({ "Content-Type": "image/png" }),
+          arrayBuffer: () => Promise.resolve(new Uint8Array([137, 80]).buffer),
+        } as Response);
+      }
+
+      if (requestUrl.endsWith("/image/generate")) {
+        submittedCount += 1;
+        const taskIndex = submittedCount;
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              task_id: `kroma-detail-${taskIndex}`,
+              status: "done",
+              image_url: `https://cdn.example.com/detail-${taskIndex}.png`,
+              channel_used: "rightcode",
+            }),
+        } as Response);
+      }
+
+      return Promise.reject(new Error(`Unexpected request: ${requestUrl}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await generateAsset({
+      ...input,
+      config: {
+        ...input.config,
+        module: "detail_page",
+        aspectRatio: "long_page",
+        resolution: "1K",
+        generationVersion: "standard",
+        detailModuleCounts: {
+          blogger_outfit: 2,
+          main_display: 1,
+          brand_intro: 2,
+        },
+      },
+    });
+
+    expect(result.resultUrls).toEqual([
+      "https://cdn.example.com/detail-1.png",
+      "https://cdn.example.com/detail-2.png",
+      "https://cdn.example.com/detail-3.png",
+      "https://cdn.example.com/detail-4.png",
+      "https://cdn.example.com/detail-5.png",
+    ]);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/image/generate")),
+    ).toHaveLength(5);
+  });
+
+  it("resumes every backend task for a multi-image detail page task", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const task: GenerationTask = {
+      id: "detail-task-resume",
+      productInput: input.product,
+      config: {
+        ...input.config,
+        module: "detail_page",
+        aspectRatio: "long_page",
+        resolution: "1K",
+        generationVersion: "standard",
+        detailModuleCounts: {
+          blogger_outfit: 2,
+          main_display: 1,
+          brand_intro: 2,
+        },
+      },
+      status: "processing",
+      backendTaskId: "kroma-detail-5",
+      backendTaskIds: [
+        "kroma-detail-1",
+        "kroma-detail-2",
+        "kroma-detail-3",
+        "kroma-detail-4",
+        "kroma-detail-5",
+      ],
+      resultUrls: [],
+      creditCost: 0,
+      createdAt: "2026-06-17T00:00:00.000Z",
+      attempt: 1,
+    };
+    const fetchMock = vi.fn((url: RequestInfo | URL) => {
+      const requestUrl = String(url);
+      const taskId = requestUrl.split("/").pop() ?? "";
+
+      if (requestUrl.includes("/image/task/")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              task_id: taskId,
+              status: "done",
+              image_url: `https://cdn.example.com/${taskId}.png`,
+              channel_used: "rightcode",
+            }),
+        } as Response);
+      }
+
+      return Promise.reject(new Error(`Unexpected request: ${requestUrl}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await resumeGenerationTask(task);
+
+    expect(result.resultUrls).toEqual([
+      "https://cdn.example.com/kroma-detail-1.png",
+      "https://cdn.example.com/kroma-detail-2.png",
+      "https://cdn.example.com/kroma-detail-3.png",
+      "https://cdn.example.com/kroma-detail-4.png",
+      "https://cdn.example.com/kroma-detail-5.png",
+    ]);
+    expect(result.resultAssets).toEqual([
+      { url: result.resultUrls[0], label: "博主穿搭" },
+      { url: result.resultUrls[1], label: "博主穿搭" },
+      { url: result.resultUrls[2], label: "主图展示" },
+      { url: result.resultUrls[3], label: "品牌介绍" },
+      { url: result.resultUrls[4], label: "品牌介绍" },
+    ]);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).includes("/image/task/")),
+    ).toHaveLength(5);
   });
 
   it("forwards generation failures without consuming credits in this layer", async () => {

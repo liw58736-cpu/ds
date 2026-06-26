@@ -125,6 +125,16 @@ function readOptionalString(value: unknown): string | undefined {
   return isString(value) ? value : undefined;
 }
 
+function readOptionalStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const strings = value.filter(isString);
+
+  return strings.length > 0 ? strings : undefined;
+}
+
 function parseSelectedMainModules(value: unknown): MainImageModuleId[] {
   if (!Array.isArray(value)) {
     return [];
@@ -294,6 +304,7 @@ function parseTask(value: unknown): GenerationTask | null {
   const completedAt = readOptionalString(value.completedAt);
   const progress = readOptionalString(value.progress);
   const backendTaskId = readOptionalString(value.backendTaskId);
+  const backendTaskIds = readOptionalStringArray(value.backendTaskIds);
   const resultAssets = parseResultAssets(value.resultAssets);
 
   return {
@@ -310,6 +321,7 @@ function parseTask(value: unknown): GenerationTask | null {
     ...(completedAt ? { completedAt } : {}),
     ...(progress ? { progress } : {}),
     ...(backendTaskId ? { backendTaskId } : {}),
+    ...(backendTaskIds ? { backendTaskIds } : {}),
     ...(resultAssets ? { resultAssets } : {}),
   };
 }
@@ -351,7 +363,7 @@ function normalizeTask(
   if (
     options.keepResumableTasks === true &&
     task.status === "processing" &&
-    task.backendTaskId
+    (task.backendTaskId || (task.backendTaskIds && task.backendTaskIds.length > 0))
   ) {
     return task;
   }

@@ -167,19 +167,44 @@ export function Workspace({
               ),
             );
           },
-          onTaskStarted: (backendTaskId: string) => {
+          onTaskStarted: (
+            backendTaskId: string,
+            index = 0,
+            total = 1,
+          ) => {
             if (!isTaskRunCurrent(processingTask.id, runToken)) {
               return;
             }
 
+            const backendTaskIds =
+              total > 1
+                ? Array.from(
+                    {
+                      length: Math.max(
+                        total,
+                        currentProcessingTask.backendTaskIds?.length ?? 0,
+                      ),
+                    },
+                    (_, taskIndex) =>
+                      taskIndex === index
+                        ? backendTaskId
+                        : currentProcessingTask.backendTaskIds?.[taskIndex] ?? "",
+                  )
+                : undefined;
+
             currentProcessingTask = {
               ...currentProcessingTask,
               backendTaskId,
+              ...(backendTaskIds ? { backendTaskIds } : {}),
             };
             setTasks((currentTasks) =>
               currentTasks.map((task) =>
                 task.id === processingTask.id && task.status === "processing"
-                  ? { ...task, backendTaskId }
+                  ? {
+                      ...task,
+                      backendTaskId,
+                      ...(backendTaskIds ? { backendTaskIds } : {}),
+                    }
                   : task,
               ),
             );
@@ -311,7 +336,12 @@ export function Workspace({
       setTasks(storedTasks);
       storedTasks
         .filter(
-          (task) => task.status === "processing" && Boolean(task.backendTaskId),
+          (task) =>
+            task.status === "processing" &&
+            Boolean(
+              task.backendTaskId ||
+                (task.backendTaskIds && task.backendTaskIds.length > 0),
+            ),
         )
         .forEach((task) => {
           void runProcessingTask(task, startTaskRun(task.id), "resume");
