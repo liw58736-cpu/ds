@@ -4,6 +4,7 @@ import type {
   GenerationConfig,
   GenerationResolution,
   GenerationModule,
+  ModuleReferenceAsset,
   GenerationResultAsset,
   MainImageModuleId,
   GenerationTask,
@@ -170,6 +171,43 @@ function parseDetailModuleCounts(
   );
 }
 
+function parseModuleReferenceAssets(
+  value: unknown,
+): Partial<Record<string, ModuleReferenceAsset[]>> {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<Partial<Record<string, ModuleReferenceAsset[]>>>(
+    (assetsByModule, [moduleId, assets]) => {
+      if (!Array.isArray(assets)) {
+        return assetsByModule;
+      }
+
+      const parsedAssets = assets.filter(
+        (asset): asset is ModuleReferenceAsset =>
+          isRecord(asset) &&
+          isString(asset.id) &&
+          isString(asset.fileName) &&
+          isString(asset.imageUrl) &&
+          (!("note" in asset) || asset.note === undefined || isString(asset.note)),
+      );
+
+      if (parsedAssets.length > 0) {
+        assetsByModule[moduleId] = parsedAssets.map((asset) => ({
+          id: asset.id,
+          fileName: asset.fileName,
+          imageUrl: asset.imageUrl,
+          ...(asset.note ? { note: asset.note } : {}),
+        }));
+      }
+
+      return assetsByModule;
+    },
+    {},
+  );
+}
+
 function parseProductInput(value: unknown): ProductInput | null {
   if (!isRecord(value)) {
     return null;
@@ -227,6 +265,7 @@ function parseConfig(value: unknown): GenerationConfig | null {
     resolution,
     selectedMainModules,
     detailModuleCounts,
+    moduleReferenceAssets,
     whiteBackgroundMode,
     shadowMode,
   } = value;
@@ -248,6 +287,9 @@ function parseConfig(value: unknown): GenerationConfig | null {
     return null;
   }
 
+  const parsedModuleReferenceAssets =
+    parseModuleReferenceAssets(moduleReferenceAssets);
+
   return {
     module: module as GenerationModule,
     platform: platform as Platform,
@@ -263,6 +305,9 @@ function parseConfig(value: unknown): GenerationConfig | null {
         : "1K",
     selectedMainModules: parseSelectedMainModules(selectedMainModules),
     detailModuleCounts: parseDetailModuleCounts(detailModuleCounts),
+    ...(Object.keys(parsedModuleReferenceAssets).length > 0
+      ? { moduleReferenceAssets: parsedModuleReferenceAssets }
+      : {}),
     whiteBackgroundMode:
       isString(whiteBackgroundMode) &&
       whiteBackgroundModes.has(whiteBackgroundMode as WhiteBackgroundMode)

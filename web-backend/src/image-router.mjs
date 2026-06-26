@@ -267,7 +267,13 @@ function imageInputsFromRequest(requestBody) {
     requestBody.image_url,
     requestBody.image_base64,
     requestBody.template_image_base64,
-  ].filter(Boolean).map(String);
+    ...(Array.isArray(requestBody.template_image_base64s)
+      ? requestBody.template_image_base64s
+      : []),
+  ]
+    .filter(Boolean)
+    .map(String)
+    .filter((image, index, images) => images.indexOf(image) === index);
 }
 
 async function requestGptsapi({ key, requestBody, fetchImpl }) {
@@ -366,6 +372,7 @@ async function requestWuyinkeji({ key, requestBody, fetchImpl }) {
       prompt: String(requestBody.prompt ?? ""),
       size: sizeToRatio(requestBody.size),
       urls: [requestBody.image_url, requestBody.image_base64, requestBody.template_image_base64]
+        .concat(Array.isArray(requestBody.template_image_base64s) ? requestBody.template_image_base64s : [])
         .filter(Boolean),
     }),
   });

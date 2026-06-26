@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { type ChangeEvent, useMemo, useState } from "react";
 import {
   brandVersionExtraCredits,
   estimateGenerationCredits,
@@ -14,6 +14,7 @@ import type {
   GenerationResolution,
   GenerationVersion,
   MainImageModuleId,
+  ModuleReferenceAsset,
   WhiteBackgroundMode,
 } from "../domain/types";
 
@@ -103,6 +104,7 @@ const versionOptions: Array<{
 ];
 
 const maxDetailModuleCount = 9;
+const maxModuleReferenceAssets = 3;
 
 const mainImageModules: Array<{
   id: MainImageModuleId;
@@ -169,10 +171,19 @@ export function ParameterPanel({
   const [outputLanguage, setOutputLanguage] = useState(
     config.outputLanguage ?? outputLanguages[0],
   );
+  const [editingReferenceModule, setEditingReferenceModule] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  const [draftReferenceAssets, setDraftReferenceAssets] = useState<
+    ModuleReferenceAsset[]
+  >([]);
+  const [draftReferenceNote, setDraftReferenceNote] = useState("");
   const resolution = config.resolution ?? "1K";
   const generationVersion = config.generationVersion ?? "brand";
   const selectedMainModules = config.selectedMainModules ?? [];
   const detailCounts = config.detailModuleCounts ?? {};
+  const moduleReferenceAssets = config.moduleReferenceAssets ?? {};
   const whiteBackgroundMode = config.whiteBackgroundMode ?? "white_background";
   const meta = pageMeta[activeModule];
   const normalizedConfig = { ...config, resolution, generationVersion };
@@ -229,6 +240,105 @@ export function ParameterPanel({
     setDetailModuleCount(moduleId, (detailCounts[moduleId] ?? 0) + 1);
   };
 
+  const getReferenceAssets = (moduleId: string): ModuleReferenceAsset[] =>
+    moduleReferenceAssets[moduleId] ?? [];
+
+  const openReferenceEditor = (moduleId: string, title: string) => {
+    const assets = getReferenceAssets(moduleId);
+    const notes = assets
+      .map((asset) => asset.note?.trim() ?? "")
+      .filter((note) => note.length > 0);
+
+    setEditingReferenceModule({ id: moduleId, title });
+    setDraftReferenceAssets(assets);
+    setDraftReferenceNote([...new Set(notes)].join("\n"));
+  };
+
+  const readReferenceFiles = async (
+    files: FileList | null,
+  ): Promise<ModuleReferenceAsset[]> => {
+    if (!files) {
+      return [];
+    }
+
+    const remainingSlots = Math.max(
+      0,
+      maxModuleReferenceAssets - draftReferenceAssets.length,
+    );
+    const selectedFiles = Array.from(files).slice(0, remainingSlots);
+
+    return Promise.all(
+      selectedFiles.map(
+        (file) =>
+          new Promise<ModuleReferenceAsset>((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = () => {
+              resolve({
+                id: `module-ref-${Date.now().toString(36)}-${Math.random()
+                  .toString(36)
+                  .slice(2, 8)}`,
+                fileName: file.name,
+                imageUrl: String(reader.result ?? ""),
+                ...(draftReferenceNote.trim()
+                  ? { note: draftReferenceNote.trim() }
+                  : {}),
+              });
+            };
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+          }),
+      ),
+    );
+  };
+
+  const handleReferenceFilesChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const assets = await readReferenceFiles(event.target.files);
+
+    setDraftReferenceAssets((currentAssets) =>
+      [...currentAssets, ...assets].slice(0, maxModuleReferenceAssets),
+    );
+    event.target.value = "";
+  };
+
+  const saveReferenceAssets = () => {
+    if (!editingReferenceModule) {
+      return;
+    }
+
+    const note = draftReferenceNote.trim();
+    const nextReferenceAssets = { ...moduleReferenceAssets };
+    const savedAssets = draftReferenceAssets.map((asset) => ({
+      ...asset,
+      ...(note ? { note } : {}),
+    }));
+
+    if (savedAssets.length > 0) {
+      nextReferenceAssets[editingReferenceModule.id] = savedAssets;
+    } else {
+      delete nextReferenceAssets[editingReferenceModule.id];
+    }
+
+    onChange({
+      ...config,
+      moduleReferenceAssets:
+        Object.keys(nextReferenceAssets).length > 0
+          ? nextReferenceAssets
+          : undefined,
+    });
+    setEditingReferenceModule(null);
+    setDraftReferenceAssets([]);
+    setDraftReferenceNote("");
+  };
+
+  const removeDraftReferenceAsset = (assetId: string) => {
+    setDraftReferenceAssets((currentAssets) =>
+      currentAssets.filter((asset) => asset.id !== assetId),
+    );
+  };
+
   return (
     <aside className="panel parameter-panel" aria-labelledby="parameters-title">
       <div className="panel-heading">
@@ -257,18 +367,47 @@ export function ParameterPanel({
           <div className="module-card-grid">
             {mainImageModules.map((module) => {
               const isActive = selectedMainModules.includes(module.id);
+              const referenceCount = getReferenceAssets(module.id).length;
 
               return (
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   key={module.id}
                   className={`module-card-button${isActive ? " is-active" : ""}`}
+                  aria-label={`${module.title} ${module.description}`}
                   aria-pressed={isActive}
                   onClick={() => toggleMainModule(module.id)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") {
+                      return;
+                    }
+                    event.preventDefault();
+                    toggleMainModule(module.id);
+                  }}
                 >
-                  <strong>{module.title}</strong>
+                  <div className="module-card-topline">
+                    <strong>{module.title}</strong>
+                    <button
+                      type="button"
+                      className="module-reference-button"
+                      aria-label="添加素材"
+                      title={`为${module.title}添加素材`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openReferenceEditor(module.id, module.title);
+                      }}
+                    >
+                      素材
+                    </button>
+                  </div>
                   <span>{module.description}</span>
-                </button>
+                  {referenceCount > 0 ? (
+                    <em className="module-reference-count">
+                      已加 {referenceCount} 张素材
+                    </em>
+                  ) : null}
+                </div>
               );
             })}
           </div>
@@ -286,6 +425,7 @@ export function ParameterPanel({
             {detailContentModules.map((module) => {
               const count = detailCounts[module.id] ?? 0;
               const isActive = count > 0;
+              const referenceCount = getReferenceAssets(module.id).length;
 
               return (
                 <div
@@ -310,7 +450,21 @@ export function ParameterPanel({
                     }
                   }}
                 >
-                  <strong>{module.title}</strong>
+                  <div className="module-card-topline">
+                    <strong>{module.title}</strong>
+                    <button
+                      type="button"
+                      className="module-reference-button"
+                      aria-label="添加素材"
+                      title={`为${module.title}添加素材`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openReferenceEditor(module.id, module.title);
+                      }}
+                    >
+                      素材
+                    </button>
+                  </div>
                   <span>{module.description}</span>
                   <div
                     className="detail-module-stepper"
@@ -335,6 +489,11 @@ export function ParameterPanel({
                     </button>
                   </div>
                   <em>{isActive ? "已加入，可继续加图" : "点击添加"}</em>
+                  {referenceCount > 0 ? (
+                    <em className="module-reference-count">
+                      已加 {referenceCount} 张素材
+                    </em>
+                  ) : null}
                 </div>
               );
             })}
@@ -525,6 +684,90 @@ export function ParameterPanel({
           {`预计消耗 ${estimatedCredits} 积分（${estimatedImageCount} 张 × ${resolution} 每张 ${resolutionCreditCost} 分${generationVersion === "brand" ? ` + 品牌版 ${brandVersionExtraCredits} 分` : ""}），失败不扣点。当前进行中 ${runningTaskCount}。${isOutOfCredits ? "当前余额不足，请购买积分后继续生成。" : ""}`}
         </p>
       </div>
+      {editingReferenceModule ? (
+        <div
+          className="module-reference-modal-backdrop"
+          role="presentation"
+          onClick={() => setEditingReferenceModule(null)}
+        >
+          <section
+            className="module-reference-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="module-reference-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="module-reference-modal-heading">
+              <div>
+                <p className="eyebrow">Module Material</p>
+                <h3 id="module-reference-title">
+                  {editingReferenceModule.title}素材
+                </h3>
+              </div>
+              <button
+                type="button"
+                aria-label="关闭素材弹窗"
+                onClick={() => setEditingReferenceModule(null)}
+              >
+                ×
+              </button>
+            </div>
+            <label className="module-reference-upload">
+              <span>上传模块参考图</span>
+              <small>最多 {maxModuleReferenceAssets} 张，作为 Image 2 参考素材</small>
+              <input
+                aria-label="上传模块参考图"
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleReferenceFilesChange}
+              />
+            </label>
+            {draftReferenceAssets.length > 0 ? (
+              <div className="module-reference-list">
+                {draftReferenceAssets.map((asset) => (
+                  <div className="module-reference-item" key={asset.id}>
+                    <img src={asset.imageUrl} alt={asset.fileName} />
+                    <span>{asset.fileName}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeDraftReferenceAsset(asset.id)}
+                    >
+                      删除
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="field">
+              <label htmlFor="module-reference-note">素材备注</label>
+              <textarea
+                id="module-reference-note"
+                rows={4}
+                value={draftReferenceNote}
+                onChange={(event) => setDraftReferenceNote(event.target.value)}
+                placeholder="例如：这是我的包装盒，请在包装展示中使用；这是红色和蓝色款，请用于多色套装。"
+              />
+            </div>
+            <div className="module-reference-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setEditingReferenceModule(null)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={saveReferenceAssets}
+              >
+                保存素材
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </aside>
   );
 }

@@ -96,8 +96,16 @@ export interface GenerationConfig {
   generationVersion?: GenerationVersion;
   selectedMainModules?: MainImageModuleId[];
   detailModuleCounts?: Partial<Record<DetailPageModuleId, number>>;
+  moduleReferenceAssets?: Partial<Record<string, ModuleReferenceAsset[]>>;
   whiteBackgroundMode?: WhiteBackgroundMode;
   shadowMode?: ShadowMode;
+}
+
+export interface ModuleReferenceAsset {
+  id: string;
+  fileName: string;
+  imageUrl: string;
+  note?: string;
 }
 
 export interface GenerationTask {

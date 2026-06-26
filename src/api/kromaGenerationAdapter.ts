@@ -10,6 +10,8 @@ export interface KromaGenerateRequest {
   style: string;
   image_url?: string;
   image_base64?: string;
+  template_image_base64?: string;
+  template_image_base64s?: string[];
   size: string;
   quality: "standard" | "2k" | "4k";
   use_template_mode: boolean;
@@ -63,10 +65,31 @@ export function buildKromaGenerateRequest(
     task_type: "ecommerce",
     style: buildKromaStyle(config, routeMode),
     ...imageInput,
+    ...getModuleReferenceImageInput(request),
     size: getKromaSize(config.aspectRatio, config.resolution),
     quality: route.quality,
     use_template_mode: false,
     keep_user_outfit_pose: false,
+  };
+}
+
+function getModuleReferenceImageInput(
+  request: GenerationTaskCreateRequest,
+): Pick<KromaGenerateRequest, "template_image_base64" | "template_image_base64s"> {
+  const moduleId = request.body.prompt.modules[0]?.id;
+  const imageUrls = moduleId
+    ? (request.body.config.moduleReferenceAssets?.[moduleId] ?? [])
+        .map((asset) => asset.imageUrl.trim())
+        .filter(Boolean)
+    : [];
+
+  if (imageUrls.length === 0) {
+    return {};
+  }
+
+  return {
+    template_image_base64: imageUrls[0],
+    template_image_base64s: imageUrls,
   };
 }
 

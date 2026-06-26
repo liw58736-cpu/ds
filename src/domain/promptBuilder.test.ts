@@ -116,4 +116,46 @@ describe("buildGenerationPrompt", () => {
     expect(prompt.modules[3].prompt).toContain("care icon strip");
     expect(prompt.finalPrompt).toContain("French vintage silk dress");
   });
+
+  it("adds module-specific uploaded asset notes to the matching module prompt", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "main_image",
+      selectedMainModules: ["packaging", "color_set"],
+      moduleReferenceAssets: {
+        packaging: [
+          {
+            id: "ref-packaging-1",
+            fileName: "box.png",
+            imageUrl: "data:image/png;base64,box",
+            note: "Use this exact gift box and ribbon structure.",
+          },
+        ],
+        color_set: [
+          {
+            id: "ref-color-1",
+            fileName: "red.png",
+            imageUrl: "data:image/png;base64,red",
+            note: "This is the red colorway.",
+          },
+          {
+            id: "ref-color-2",
+            fileName: "blue.png",
+            imageUrl: "data:image/png;base64,blue",
+            note: "This is the blue colorway.",
+          },
+        ],
+      },
+    });
+
+    expect(prompt.modules[0]).toMatchObject({ id: "packaging" });
+    expect(prompt.modules[0].prompt).toContain("Image 2 reference assets");
+    expect(prompt.modules[0].prompt).toContain(
+      "Use this exact gift box and ribbon structure.",
+    );
+    expect(prompt.modules[0].prompt).not.toContain("This is the red colorway.");
+    expect(prompt.modules[1]).toMatchObject({ id: "color_set" });
+    expect(prompt.modules[1].prompt).toContain("This is the red colorway.");
+    expect(prompt.modules[1].prompt).toContain("This is the blue colorway.");
+  });
 });

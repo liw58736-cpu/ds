@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GenerationTask } from "../domain/types";
@@ -152,6 +152,28 @@ describe("Workspace", () => {
 
     expect(screen.getByText("已选 1")).toBeInTheDocument();
     expect(screen.getByText(/预计消耗 3 积分/)).toBeInTheDocument();
+  });
+
+  it("lets users add reference images and notes to a module card", async () => {
+    const user = userEvent.setup();
+    render(<Workspace />);
+
+    const packagingCard = screen.getByRole("button", {
+      name: "包装展示 礼盒、配件与开箱细节",
+    });
+
+    await user.click(within(packagingCard).getByRole("button", { name: "添加素材" }));
+    await user.upload(
+      screen.getByLabelText("上传模块参考图"),
+      new File(["box"], "box.png", { type: "image/png" }),
+    );
+    await user.type(
+      screen.getByLabelText("素材备注"),
+      "Use this exact package box.",
+    );
+    await user.click(screen.getByRole("button", { name: "保存素材" }));
+
+    expect(screen.getByText("已加 1 张素材")).toBeInTheDocument();
   });
 
   it("shows AI tool controls without copy fields on the AI tools page", () => {

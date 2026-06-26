@@ -123,6 +123,42 @@ describe("taskStore", () => {
     });
   });
 
+  it("round trips module reference assets on stored task snapshots", () => {
+    saveTasks([
+      {
+        ...task,
+        config: {
+          ...task.config,
+          selectedMainModules: ["packaging"],
+          moduleReferenceAssets: {
+            packaging: [
+              {
+                id: "packaging-ref-1",
+                fileName: "box.png",
+                imageUrl: "data:image/png;base64,box",
+                note: "Use this box.",
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    expect(loadTasks()[0]?.config).toMatchObject({
+      selectedMainModules: ["packaging"],
+      moduleReferenceAssets: {
+        packaging: [
+          {
+            id: "packaging-ref-1",
+            fileName: "box.png",
+            imageUrl: "data:image/png;base64,box",
+            note: "Use this box.",
+          },
+        ],
+      },
+    });
+  });
+
   it("round trips ecommerce aspect ratios and output language", () => {
     const localizedTask: GenerationTask = {
       ...task,

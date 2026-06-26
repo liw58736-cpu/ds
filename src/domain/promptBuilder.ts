@@ -2,6 +2,7 @@ import type {
   DetailPageModuleId,
   GenerationConfig,
   MainImageModuleId,
+  ModuleReferenceAsset,
   ShadowMode,
   WhiteBackgroundMode,
 } from "./types";
@@ -234,7 +235,11 @@ function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
       {
         id: backgroundMode,
         title: toolTitles[backgroundMode],
-        prompt: `${aiToolPromptCopy[backgroundMode]} Apply ${shadowCopy[shadowMode]} where appropriate. Avoid fake tiny unreadable text, distorted logos, extra limbs, changed garment details, and mismatched product colors.`,
+        prompt: withModuleReferencePrompt(
+          `${aiToolPromptCopy[backgroundMode]} Apply ${shadowCopy[shadowMode]} where appropriate. Avoid fake tiny unreadable text, distorted logos, extra limbs, changed garment details, and mismatched product colors.`,
+          backgroundMode,
+          config,
+        ),
       },
     ];
   }
@@ -253,7 +258,7 @@ function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
     return moduleIds.map((id) => ({
         id,
         title: detailPrompts[id].title,
-        prompt: detailPrompts[id].prompt,
+        prompt: withModuleReferencePrompt(detailPrompts[id].prompt, id, config),
       }));
   }
 
@@ -265,6 +270,38 @@ function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
   return selectedMainModules.map((id) => ({
     id,
     title: mainImagePrompts[id].title,
-    prompt: mainImagePrompts[id].prompt,
+    prompt: withModuleReferencePrompt(mainImagePrompts[id].prompt, id, config),
   }));
+}
+
+function withModuleReferencePrompt(
+  prompt: string,
+  moduleId: string,
+  config: GenerationConfig,
+): string {
+  const assets = getModuleReferenceAssets(config, moduleId);
+
+  if (assets.length === 0) {
+    return prompt;
+  }
+
+  const notes = assets
+    .map((asset, index) => {
+      const note = asset.note?.trim();
+      const label = `Image 2 reference asset ${index + 1}`;
+
+      return note ? `${label}: ${note}` : `${label}: ${asset.fileName}`;
+    })
+    .join(" ");
+
+  return `${prompt} Image 2 reference assets are user-uploaded materials for this module only. Use them as visual references without replacing Image 1 product identity. ${notes}`;
+}
+
+function getModuleReferenceAssets(
+  config: GenerationConfig,
+  moduleId: string,
+): ModuleReferenceAsset[] {
+  return (config.moduleReferenceAssets?.[moduleId] ?? []).filter(
+    (asset) => asset.imageUrl.trim().length > 0,
+  );
 }

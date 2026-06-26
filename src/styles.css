@@ -1050,6 +1050,41 @@ button {
   line-height: 1.35;
 }
 
+.module-card-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.module-reference-button {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 0.72rem;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.module-reference-button:hover {
+  color: #ffffff;
+  background: var(--ink);
+}
+
+.module-reference-count {
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 5px;
+  color: #ffffff;
+  background: var(--ink);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 760;
+}
+
 .module-card-button:hover,
 .module-card-button.is-active {
   border-color: var(--ink);
@@ -1165,6 +1200,111 @@ button {
 .detail-module-button.is-active em {
   color: #ffffff;
   background: var(--ink);
+}
+
+.detail-module-button .module-reference-count {
+  color: #ffffff;
+  background: var(--ink);
+}
+
+.module-reference-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(17, 24, 39, 0.42);
+}
+
+.module-reference-modal {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 20px 60px rgba(17, 24, 39, 0.18);
+}
+
+.module-reference-modal-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.module-reference-modal-heading h3 {
+  margin: 0;
+}
+
+.module-reference-modal-heading > button {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+
+.module-reference-upload {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+
+.module-reference-upload small {
+  color: var(--ink-subtle);
+  font-size: 0.78rem;
+}
+
+.module-reference-upload input {
+  margin-top: 8px;
+}
+
+.module-reference-list {
+  display: grid;
+  gap: 8px;
+}
+
+.module-reference-item {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+}
+
+.module-reference-item img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.module-reference-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.module-reference-item button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+
+.module-reference-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .module-button {

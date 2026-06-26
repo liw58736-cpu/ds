@@ -76,6 +76,43 @@ describe("kromaGenerationAdapter", () => {
     expect(buildKromaGenerateRequest(request)).not.toHaveProperty("image_url");
   });
 
+  it("maps selected module reference uploads to image2 fields", () => {
+    const request = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        selectedMainModules: ["packaging"],
+        moduleReferenceAssets: {
+          packaging: [
+            {
+              id: "packaging-ref-1",
+              fileName: "box.png",
+              imageUrl: "data:image/png;base64,box",
+              note: "Use this exact box.",
+            },
+            {
+              id: "packaging-ref-2",
+              fileName: "ribbon.png",
+              imageUrl: "data:image/png;base64,ribbon",
+              note: "Use this ribbon style.",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(buildKromaGenerateRequest(request)).toMatchObject({
+      template_image_base64: "data:image/png;base64,box",
+      template_image_base64s: [
+        "data:image/png;base64,box",
+        "data:image/png;base64,ribbon",
+      ],
+    });
+    expect(buildKromaGenerateRequest(request).prompt).toContain(
+      "Use this exact box.",
+    );
+  });
+
   it("maps AI tool 1K work to the standard ecommerce backend path", () => {
     const request = buildGenerationTaskRequest({
       ...baseInput,
