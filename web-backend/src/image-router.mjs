@@ -198,6 +198,10 @@ function isEditToolRequest(requestBody) {
 }
 
 async function tryProvider({ key, requestBody, env, fetchImpl }) {
+  if (key.provider === "gptsapi") {
+    return requestGptsapi({ key, requestBody, fetchImpl });
+  }
+
   if (key.provider === "wuyinkeji") {
     return requestWuyinkeji({ key, requestBody, fetchImpl });
   }
@@ -236,12 +240,13 @@ function buildOpenAICompatiblePayload(provider, requestBody, env) {
     prompt: String(requestBody.prompt ?? ""),
     n: 1,
     size: normalizeSize(requestBody.size),
-    quality: isHdRequest(requestBody) ? "high" : "medium",
-    response_format: "url",
   };
-  const imageInput = requestBody.image_url || requestBody.image_base64;
-  if (imageInput) {
-    payload.image = imageInput;
+  if (supportsResponseFormat(provider, model)) {
+    payload.response_format = "url";
+  }
+  const images = imageInputsFromRequest(requestBody);
+  if (images.length > 0) {
+    payload.image = images;
   }
   if (requestBody.template_image_base64) {
     payload.image2 = requestBody.template_image_base64;
@@ -253,8 +258,103 @@ function buildOpenAICompatiblePayload(provider, requestBody, env) {
   return payload;
 }
 
+function supportsResponseFormat(provider, model) {
+  return !(provider === "packyapi" && model === "gpt-image-2");
+}
+
+function imageInputsFromRequest(requestBody) {
+  return [
+    requestBody.image_url,
+    requestBody.image_base64,
+    requestBody.template_image_base64,
+  ].filter(Boolean).map(String);
+}
+
+async function requestGptsapi({ key, requestBody, fetchImpl }) {
+  const baseUrl = gptsapiBaseUrl(key.baseUrl);
+  const response = await fetchImpl(`${baseUrl}/gpt-image-2/text-to-image`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(buildGptsapiPayload(requestBody)),
+  });
+  const created = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    return { error: providerError(response.status, created) };
+  }
+
+  const pollUrl = created?.data?.urls?.get ?? created?.urls?.get ?? "";
+  if (!pollUrl) {
+    return { error: "gptsapi_missing_poll_url" };
+  }
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const poll = await fetchImpl(pollUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${key.apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+    const pollData = await parseJsonResponse(poll);
+
+    if (!poll.ok) {
+      if (attempt < 59) {
+        await wait(5000);
+        continue;
+      }
+      return { error: providerError(poll.status, pollData) };
+    }
+
+    const status = pollData?.data?.status ?? pollData?.status ?? "";
+    if (status === "completed") {
+      const outputs = pollData?.data?.outputs ?? pollData?.outputs ?? [];
+      const image = Array.isArray(outputs) ? outputs[0] : outputs;
+      return normalizeGptsapiResult(image);
+    }
+
+    if (status === "failed" || status === "canceled") {
+      return { error: `gptsapi_status_${status}` };
+    }
+
+    await wait(5000);
+  }
+
+  return { error: "gptsapi_timeout" };
+}
+
+function buildGptsapiPayload(requestBody) {
+  const images = imageInputsFromRequest(requestBody);
+  const payload = {
+    prompt: String(requestBody.prompt ?? ""),
+    aspect_ratio: sizeToSupportedGptsapiRatio(requestBody.size),
+    output_format: "png",
+  };
+
+  if (images.length === 1) {
+    payload.image = images[0];
+  } else if (images.length > 1) {
+    payload.image = images;
+  }
+
+  return payload;
+}
+
+function normalizeGptsapiResult(image) {
+  if (!image) {
+    return { error: "gptsapi_missing_image_result" };
+  }
+
+  return String(image).startsWith("http")
+    ? { image_url: String(image) }
+    : { image_base64: String(image).startsWith("data:") ? String(image) : `data:image/png;base64,${image}` };
+}
+
 async function requestWuyinkeji({ key, requestBody, fetchImpl }) {
-  const createUrl = wuyinkejiCreateUrl(key.baseUrl);
+  const createUrl = wuyinkejiCreateUrl(key.baseUrl, requestBody);
   const detailUrl = wuyinkejiDetailUrl(key.baseUrl);
   const response = await fetchImpl(createUrl, {
     method: "POST",
@@ -281,7 +381,6 @@ async function requestWuyinkeji({ key, requestBody, fetchImpl }) {
   }
 
   for (let attempt = 0; attempt < 36; attempt += 1) {
-    await wait(5000);
     const poll = await fetchImpl(`${detailUrl}?id=${encodeURIComponent(providerTaskId)}`, {
       method: "GET",
       headers: { Authorization: key.apiKey },
@@ -296,6 +395,8 @@ async function requestWuyinkeji({ key, requestBody, fetchImpl }) {
     if (taskData.status === 3) {
       return { error: taskData.message || "wuyinkeji_failed" };
     }
+
+    await wait(5000);
   }
 
   return { error: "wuyinkeji_timeout" };
@@ -492,6 +593,57 @@ function sizeToRatio(size) {
   return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`;
 }
 
+function gptsapiBaseUrl(baseUrl) {
+  const normalized = String(baseUrl || "https://api.gptsapi.net/api/v3/openai")
+    .trim()
+    .replace(/\/+$/, "");
+
+  if (/\/gpt-image-2\/text-to-image$/i.test(normalized)) {
+    return normalized.replace(/\/gpt-image-2\/text-to-image$/i, "");
+  }
+
+  if (/\/images\/generations$/i.test(normalized)) {
+    return normalized.replace(/\/images\/generations$/i, "");
+  }
+
+  return normalized;
+}
+
+function sizeToSupportedGptsapiRatio(size) {
+  const supported = [
+    [1, 1],
+    [4, 5],
+    [5, 4],
+    [3, 4],
+    [4, 3],
+    [2, 3],
+    [3, 2],
+    [9, 16],
+    [16, 9],
+    [1, 2],
+    [2, 1],
+    [9, 21],
+    [21, 9],
+  ];
+  const value = normalizeSize(size);
+  const [width, height] = value.split("x").map((part) => Number.parseInt(part, 10));
+
+  if (!width || !height) {
+    return "1:1";
+  }
+
+  const ratio = width / height;
+  const nearest = supported
+    .map(([left, right]) => ({
+      left,
+      right,
+      distance: Math.abs(Math.log(ratio / (left / right))),
+    }))
+    .sort((a, b) => a.distance - b.distance)[0];
+
+  return `${nearest.left}:${nearest.right}`;
+}
+
 function gcd(left, right) {
   let a = Math.abs(left);
   let b = Math.abs(right);
@@ -501,14 +653,37 @@ function gcd(left, right) {
   return a || 1;
 }
 
-function wuyinkejiCreateUrl(baseUrl) {
-  const root = baseUrl.replace(/\/api\/async\/?$/, "");
-  return `${root}/api/async/image_gpt`;
+function wuyinkejiCreateUrl(baseUrl, requestBody) {
+  const normalized = baseUrl.replace(/\/+$/, "");
+  const endpoint = isHdRequest(requestBody) ? "image_nanoBanana2" : "image_gpt";
+
+  if (/\/api\/async\/(image_gpt|image_nanoBanana2)$/i.test(normalized)) {
+    return normalized.replace(/\/api\/async\/(image_gpt|image_nanoBanana2)$/i, `/api/async/${endpoint}`);
+  }
+
+  if (/\/api\/async\/detail$/i.test(normalized)) {
+    return normalized.replace(/\/api\/async\/detail$/i, `/api/async/${endpoint}`);
+  }
+
+  if (/\/api\/async$/i.test(normalized)) {
+    return `${normalized}/${endpoint}`;
+  }
+
+  return `${normalized}/api/async/${endpoint}`;
 }
 
 function wuyinkejiDetailUrl(baseUrl) {
-  const root = baseUrl.replace(/\/api\/async\/?$/, "");
-  return `${root}/api/async/detail`;
+  const normalized = baseUrl.replace(/\/+$/, "");
+
+  if (/\/api\/async\/(image_gpt|image_nanoBanana2|detail)$/i.test(normalized)) {
+    return normalized.replace(/\/api\/async\/(image_gpt|image_nanoBanana2|detail)$/i, "/api/async/detail");
+  }
+
+  if (/\/api\/async$/i.test(normalized)) {
+    return `${normalized}/detail`;
+  }
+
+  return `${normalized}/api/async/detail`;
 }
 
 function toTaskResponse(task) {

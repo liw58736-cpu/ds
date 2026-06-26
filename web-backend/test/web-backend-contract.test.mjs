@@ -961,9 +961,8 @@ test("image generation uses the web backend provider router instead of forwardin
           prompt: "product hero",
           n: 1,
           size: "1024x1024",
-          quality: "medium",
           response_format: "url",
-          image: "https://cdn.example.com/product.png",
+          image: ["https://cdn.example.com/product.png"],
         });
         return jsonResponse({
           data: [{ url: "https://cdn.example.com/result.png" }],
@@ -1011,6 +1010,199 @@ test("image generation uses the web backend provider router instead of forwardin
     error: null,
     progress: "完成",
   });
+});
+
+test("PackyAPI gpt-image-2 payload omits unsupported response_format", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      PACKYAPI_BASE_URL: "https://packyapi.example.com/v1",
+      PACKYAPI_KEY_1: "packy-key",
+      PACKYAPI_IMAGE_MODEL: "gpt-image-2",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://packyapi.example.com/v1/images/generations") {
+        const payload = JSON.parse(init.body);
+        assert.equal(payload.model, "gpt-image-2");
+        assert.equal(payload.response_format, undefined);
+        assert.deepEqual(payload.image, ["https://cdn.example.com/product.png"]);
+        return jsonResponse({
+          data: [{ url: "https://cdn.example.com/packy.png" }],
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "product hero",
+        image_url: "https://cdn.example.com/product.png",
+        quality: "standard",
+        size: "1024x1024",
+        task_type: "image_edit",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+
+  assert.equal(task.status, 200);
+  assert.equal((await readJson(task)).image_url, "https://cdn.example.com/packy.png");
+  assert.equal(calls.some((call) => call.url.includes("/images/generations")), true);
+});
+
+test("GPTsAPI uses the app-compatible v3 async image endpoint", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      GPTSAPI_BASE_URL: "https://api.gptsapi.net/api/v3/openai",
+      GPTSAPI_KEY_1: "gpts-key",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://api.gptsapi.net/api/v3/openai/gpt-image-2/text-to-image") {
+        assert.equal(init.headers.Authorization, "Bearer gpts-key");
+        assert.deepEqual(JSON.parse(init.body), {
+          prompt: "product hero",
+          aspect_ratio: "1:1",
+          output_format: "png",
+          image: "https://cdn.example.com/product.png",
+        });
+        return jsonResponse({
+          data: { urls: { get: "https://api.gptsapi.net/poll/task-1" } },
+        });
+      }
+      if (url === "https://api.gptsapi.net/poll/task-1") {
+        return jsonResponse({
+          data: {
+            status: "completed",
+            outputs: ["https://cdn.example.com/gpts.png"],
+          },
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "product hero",
+        image_url: "https://cdn.example.com/product.png",
+        quality: "standard",
+        size: "1024x1024",
+        task_type: "ecommerce",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+
+  const taskBody = await readJson(task);
+  assert.equal(taskBody.status, "done");
+  assert.equal(taskBody.channel_used, "gptsapi");
+  assert.equal(taskBody.image_url, "https://cdn.example.com/gpts.png");
+  assert.equal(calls.some((call) => call.url.endsWith("/images/generations")), false);
+});
+
+test("Wuyinkeji accepts a full image_gpt create URL without double-appending the path", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WUYINKEJI_BASE_URL: "https://api.wuyinkeji.com/api/async/image_gpt",
+      WUYINKEJI_KEY_1: "wuyin-key",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://api.wuyinkeji.com/api/async/image_gpt") {
+        assert.equal(init.headers.Authorization, "wuyin-key");
+        assert.deepEqual(JSON.parse(init.body), {
+          prompt: "product hero",
+          size: "1:1",
+          urls: ["https://cdn.example.com/product.png"],
+        });
+        return jsonResponse({ code: 200, data: { id: "wuyin-task-1" } });
+      }
+      if (url === "https://api.wuyinkeji.com/api/async/detail?id=wuyin-task-1") {
+        return jsonResponse({
+          code: 200,
+          data: { status: 2, result: ["https://cdn.example.com/wuyin.png"] },
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "product hero",
+        image_url: "https://cdn.example.com/product.png",
+        quality: "standard",
+        size: "1024x1024",
+        task_type: "ecommerce",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+
+  const taskBody = await readJson(task);
+  assert.equal(taskBody.status, "done");
+  assert.equal(taskBody.channel_used, "wuyinkeji");
+  assert.equal(taskBody.image_url, "https://cdn.example.com/wuyin.png");
+  assert.equal(calls.some((call) => call.url.includes("image_gpt/api/async")), false);
 });
 
 test("image generation proxy forwards cancel requests without requiring a JSON body", async () => {
