@@ -1,4 +1,5 @@
 import { type ChangeEvent, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   brandVersionExtraCredits,
   estimateGenerationCredits,
@@ -340,6 +341,7 @@ export function ParameterPanel({
   };
 
   return (
+    <>
     <aside className="panel parameter-panel" aria-labelledby="parameters-title">
       <div className="panel-heading">
         <p className="eyebrow">{meta.eyebrow}</p>
@@ -684,7 +686,8 @@ export function ParameterPanel({
           {`预计消耗 ${estimatedCredits} 积分（${estimatedImageCount} 张 × ${resolution} 每张 ${resolutionCreditCost} 分${generationVersion === "brand" ? ` + 品牌版 ${brandVersionExtraCredits} 分` : ""}），失败不扣点。当前进行中 ${runningTaskCount}。${isOutOfCredits ? "当前余额不足，请购买积分后继续生成。" : ""}`}
         </p>
       </div>
-      {editingReferenceModule ? (
+    </aside>
+      {editingReferenceModule ? createPortal(
         <div
           className="module-reference-modal-backdrop"
           role="presentation"
@@ -766,8 +769,9 @@ export function ParameterPanel({
               </button>
             </div>
           </section>
-        </div>
+        </div>,
+        document.body,
       ) : null}
-    </aside>
+    </>
   );
 }

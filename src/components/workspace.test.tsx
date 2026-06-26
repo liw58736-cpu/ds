@@ -176,6 +176,23 @@ describe("Workspace", () => {
     expect(screen.getByText("已加 1 张素材")).toBeInTheDocument();
   });
 
+  it("renders the module material dialog outside the parameter panel", async () => {
+    const user = userEvent.setup();
+    render(<Workspace />);
+
+    const packagingCard = screen.getByRole("button", {
+      name: "包装展示 礼盒、配件与开箱细节",
+    });
+
+    await user.click(within(packagingCard).getByRole("button", { name: "添加素材" }));
+
+    const dialog = screen.getByRole("dialog", { name: "包装展示素材" });
+    const parameterPanel = document.querySelector(".parameter-panel");
+
+    expect(parameterPanel).not.toContainElement(dialog);
+    expect(document.body).toContainElement(dialog);
+  });
+
   it("shows AI tool controls without copy fields on the AI tools page", () => {
     render(<Workspace activeModule="white_background" />);
 
