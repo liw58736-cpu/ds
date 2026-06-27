@@ -46,14 +46,22 @@ export function getTaskDownloadName(
   return `kroma-${label}-${index + 1}.${extension}`;
 }
 
+export function downloadTaskAsset(
+  task: GenerationTask,
+  asset: GenerationResultAsset,
+  index: number,
+): void {
+  const anchor = document.createElement("a");
+  anchor.href = asset.url;
+  anchor.download = getTaskDownloadName(task, asset, index);
+  anchor.rel = "noreferrer";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
 export function downloadTaskAssets(task: GenerationTask): void {
   getTaskResultAssets(task).forEach((asset, index) => {
-    const anchor = document.createElement("a");
-    anchor.href = asset.url;
-    anchor.download = getTaskDownloadName(task, asset, index);
-    anchor.rel = "noreferrer";
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
+    downloadTaskAsset(task, asset, index);
   });
 }

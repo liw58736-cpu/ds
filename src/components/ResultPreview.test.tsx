@@ -120,7 +120,7 @@ describe("ResultPreview", () => {
     expect(onRetryTask).toHaveBeenCalledWith(failedTask);
   });
 
-  it("shows every generated image with a download link", () => {
+  it("shows every generated image with a download button", () => {
     render(
       <ResultPreview
         product={product}
@@ -129,7 +129,7 @@ describe("ResultPreview", () => {
     );
 
     expect(screen.getAllByAltText("生成结果")).toHaveLength(2);
-    expect(screen.getAllByRole("link", { name: "下载" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "下载" })).toHaveLength(2);
   });
 
   it("shows recent tasks as labeled thumbnails and can enlarge a result", async () => {

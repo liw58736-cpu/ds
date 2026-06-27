@@ -64,7 +64,7 @@ describe("HistoryPage", () => {
     expect(await screen.findByText("首屏 KV")).toBeInTheDocument();
     expect(screen.getByText("整体展示")).toBeInTheDocument();
     expect(screen.getAllByAltText("生成结果缩略图")).toHaveLength(2);
-    expect(screen.getAllByRole("link", { name: "下载" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "下载" })).toHaveLength(2);
     expect(
       screen.getByRole("button", { name: "下载本次任务全部图片" }),
     ).toBeInTheDocument();

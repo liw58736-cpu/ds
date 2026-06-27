@@ -4,8 +4,8 @@ import {
   listGenerationTasks,
 } from "../api/generationApi";
 import {
+  downloadTaskAsset,
   downloadTaskAssets,
-  getTaskDownloadName,
   getTaskResultAssets,
 } from "../domain/resultAssets";
 import { describeTaskFunction } from "../domain/taskDisplay";
@@ -157,14 +157,16 @@ export function HistoryPage() {
                         >
                           <img src={asset.url} alt="生成结果缩略图" />
                           <figcaption>{asset.label}</figcaption>
-                          <a
+                          <button
+                            type="button"
                             className="ghost-action-button"
-                            href={asset.url}
-                            download={getTaskDownloadName(task, asset, index)}
-                            onClick={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              downloadTaskAsset(task, asset, index);
+                            }}
                           >
                             下载
-                          </a>
+                          </button>
                         </figure>
                       ))}
                     </div>
@@ -195,13 +197,13 @@ export function HistoryPage() {
               </button>
             </div>
             <img src={lightbox.asset.url} alt={lightbox.asset.label} />
-            <a
+            <button
+              type="button"
               className="ghost-action-button"
-              href={lightbox.asset.url}
-              download={getTaskDownloadName(lightbox.task, lightbox.asset, lightbox.index)}
+              onClick={() => downloadTaskAsset(lightbox.task, lightbox.asset, lightbox.index)}
             >
               下载
-            </a>
+            </button>
           </div>
         </div>
       ) : null}
