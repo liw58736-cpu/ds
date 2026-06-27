@@ -1201,13 +1201,13 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "企业采购" })).not.toBeInTheDocument();
 
     for (const item of pages) {
-      await user.click(screen.getByRole("button", { name: item.button }));
+      await user.click(screen.getByRole("link", { name: item.button }));
 
       expect(screen.getByRole("heading", { name: item.title })).toBeInTheDocument();
       expect(
         screen.getByText((content) => content.includes(item.text)),
       ).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: item.button })).toHaveAttribute(
+      expect(screen.getByRole("link", { name: item.button })).toHaveAttribute(
         "aria-current",
         "page",
       );

@@ -44,6 +44,10 @@ const legalLinks = [
   { page: "about", label: "关于我们" },
 ] satisfies Array<{ page: AppPage; label: string }>;
 
+function getPageHref(page: AppPage): string {
+  return `/${page}`;
+}
+
 const privatePages = new Set<AppPage>(["history", "account"]);
 
 export function AppShell({
@@ -87,14 +91,17 @@ export function AppShell({
         <p>© 2026 kroma. All rights reserved.</p>
         <nav aria-label="法律与支持">
           {legalLinks.map((item) => (
-            <button
-              type="button"
+            <a
+              href={getPageHref(item.page)}
               key={item.page}
-              onClick={() => onPageChange(item.page)}
+              onClick={(event) => {
+                event.preventDefault();
+                onPageChange(item.page);
+              }}
               aria-current={page === item.page ? "page" : undefined}
             >
               {item.label}
-            </button>
+            </a>
           ))}
         </nav>
       </footer>
