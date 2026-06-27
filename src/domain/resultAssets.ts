@@ -46,22 +46,30 @@ export function getTaskDownloadName(
   return `kroma-${label}-${index + 1}.${extension}`;
 }
 
-export function downloadTaskAsset(
+export async function downloadTaskAsset(
   task: GenerationTask,
   asset: GenerationResultAsset,
   index: number,
-): void {
+): Promise<void> {
+  const response = await fetch(asset.url);
+  if (!response.ok) {
+    throw new Error(`Failed to download asset: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-  anchor.href = asset.url;
+  anchor.href = objectUrl;
   anchor.download = getTaskDownloadName(task, asset, index);
   anchor.rel = "noreferrer";
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
-export function downloadTaskAssets(task: GenerationTask): void {
-  getTaskResultAssets(task).forEach((asset, index) => {
-    downloadTaskAsset(task, asset, index);
-  });
+export async function downloadTaskAssets(task: GenerationTask): Promise<void> {
+  for (const [index, asset] of getTaskResultAssets(task).entries()) {
+    await downloadTaskAsset(task, asset, index);
+  }
 }

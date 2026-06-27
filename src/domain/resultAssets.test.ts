@@ -35,10 +35,15 @@ afterEach(() => {
 });
 
 describe("result asset downloads", () => {
-  it("downloads a single result through a temporary anchor without navigating", () => {
+  it("downloads a single result through a blob URL instead of navigating to the image URL", async () => {
     const click = vi.fn();
     const remove = vi.fn();
+    const revokeObjectURL = vi.fn();
     const append = vi.spyOn(document.body, "append");
+    const blob = new Blob(["image"], { type: "image/png" });
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(blob));
     const createElement = vi
       .spyOn(document, "createElement")
       .mockReturnValue({
@@ -48,12 +53,20 @@ describe("result asset downloads", () => {
         download: "",
         rel: "",
       } as unknown as HTMLAnchorElement);
+    const createObjectURL = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:kroma-result");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(revokeObjectURL);
 
-    downloadTaskAsset(task, task.resultAssets![0], 0);
+    await downloadTaskAsset(task, task.resultAssets![0], 0);
 
+    expect(fetch).toHaveBeenCalledWith("https://cdn.example.com/result.png");
+    expect(createObjectURL).toHaveBeenCalledWith(blob);
     expect(createElement).toHaveBeenCalledWith("a");
     expect(append).toHaveBeenCalledOnce();
+    expect(createElement.mock.results[0].value.href).toBe("blob:kroma-result");
     expect(click).toHaveBeenCalledOnce();
     expect(remove).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:kroma-result");
   });
 });
