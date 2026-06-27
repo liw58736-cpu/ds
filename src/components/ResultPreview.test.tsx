@@ -154,6 +154,36 @@ describe("ResultPreview", () => {
     expect(screen.getByRole("dialog", { name: "首屏 KV" })).toBeInTheDocument();
   });
 
+  it("scrolls the preview feed to the newest task when a new generation starts", () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    const { rerender } = render(
+      <ResultPreview
+        product={product}
+        latestTask={olderCompletedTask}
+        tasks={[olderCompletedTask]}
+      />,
+    );
+
+    scrollIntoView.mockClear();
+    rerender(
+      <ResultPreview
+        product={product}
+        latestTask={processingTask}
+        tasks={[olderCompletedTask, processingTask]}
+      />,
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      block: "end",
+      behavior: "smooth",
+    });
+  });
+
   it("hides retry for unavailable upload source tasks", () => {
     render(
       <ResultPreview

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   downloadTaskAsset,
   downloadTaskAssets,
@@ -56,11 +56,28 @@ export function ResultPreview({
   onRetryTask,
 }: ResultPreviewProps) {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
+  const newestTaskRef = useRef<HTMLDivElement | null>(null);
   const displayTasks = useMemo(
     () => getDisplayTasks(tasks, latestTask),
     [latestTask, tasks],
   );
   const hasTasks = displayTasks.length > 0;
+  const newestTaskId = displayTasks[displayTasks.length - 1]?.id;
+
+  useEffect(() => {
+    if (!newestTaskId) {
+      return;
+    }
+
+    if (typeof newestTaskRef.current?.scrollIntoView !== "function") {
+      return;
+    }
+
+    newestTaskRef.current.scrollIntoView({
+      block: "end",
+      behavior: "smooth",
+    });
+  }, [newestTaskId]);
 
   return (
     <section className="panel result-panel" aria-labelledby="result-title">
@@ -87,6 +104,7 @@ export function ResultPreview({
               onOpenImage={(asset, index) => setLightbox({ asset, task, index })}
             />
           ))}
+          <div ref={newestTaskRef} aria-hidden="true" />
         </div>
       ) : (
         <div className="preview-grid preview-grid-single">
