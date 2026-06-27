@@ -86,17 +86,17 @@ const detailPrompts: Record<
   fabric_craft: {
     title: "面料工艺",
     prompt:
-      "Combine a worn main image with fabric and craft closeups, highlighting texture, stitching, lace, buttons, and handfeel.",
+      "Combine a worn main image with fabric and craft closeups. Strictly derive fabric and craft details from Image 1 and the product requirements: texture, stitching, lace, buttons, seams, weave, finish, and handfeel must match the source product. Do not invent a different material or decoration.",
   },
   cutting: {
     title: "版型剪裁",
     prompt:
-      "Use natural movement poses to show silhouette, drape, waistline, shoulder line, hem behavior, and tailoring structure.",
+      "Use natural movement poses to show the same garment cut and silhouette from Image 1, including drape, waistline, shoulder line, hem behavior, sleeve shape, collar, and tailoring structure. Do not change the pattern, fit, length, or product category.",
   },
   color_size: {
     title: "颜色尺码",
     prompt:
-      "Show the worn subject with tasteful color swatches and a clean size-card area, avoiding unreadable fake text.",
+      "Show the worn subject with tasteful color swatches and a clean size-card area. Preserve the Image 1 product and display this exact size information from the user's specifications when provided; do not add unavailable sizes or fake unreadable text.",
   },
   multi_color: {
     title: "多色组合",
@@ -106,12 +106,12 @@ const detailPrompts: Record<
   promotion: {
     title: "价格优惠",
     prompt:
-      "Design a restrained promotion card with premium spacing, discount emphasis, campaign mood, and no loud domestic poster style.",
+      "Design a restrained promotion card with premium spacing, discount emphasis, campaign mood, and no loud domestic poster style. Preserve the Image 1 product and display this exact promotion text from the user's specifications when provided.",
   },
   specs: {
     title: "规格参数",
     prompt:
-      "Show a worn subject with clean callout lines and specification-card zones for measurements, structure, and material notes.",
+      "Show a worn subject with clean callout lines and specification-card zones for measurements, structure, and material notes. Use only the user-provided product specifications; render important size, material, discount, and availability text exactly when provided.",
   },
   care: {
     title: "洗护说明",
@@ -131,7 +131,7 @@ const detailPrompts: Record<
   buyer_show: {
     title: "买家秀",
     prompt:
-      "Create UGC-like lifestyle imagery with natural home, street, or cafe context while keeping the product commercially polished.",
+      "Create UGC-like lifestyle imagery with natural home, street, or cafe context while keeping the product commercially polished. Preserve Image 1 product identity, garment details, colors, fabric, and fit. If Image 2 reference assets are provided, must use Image 2 reference assets as the buyer-show model, pose, scene, styling, or user material source for this module.",
   },
   outfit_recommend: {
     title: "搭配推荐",
@@ -196,6 +196,7 @@ export function buildGenerationPrompt(
   config: GenerationConfig,
 ): BuiltGenerationPrompt {
   const modules = getModulePrompts(config);
+  const exactTextInstruction = getExactTextInstruction(config);
   const sharedContext = [
     "premium overseas ecommerce image generation",
     `page type: ${config.module}`,
@@ -204,7 +205,9 @@ export function buildGenerationPrompt(
     `output language: ${config.outputLanguage ?? "中文"}`,
     config.sellingPoints ? `product requirements: ${config.sellingPoints}` : "",
     config.specifications ? `promotion information: ${config.specifications}` : "",
-    "avoid loud domestic promotional poster aesthetics, fake tiny unreadable text, distorted logos, and changed product identity",
+    "Preserve Image 1 product identity: same product category, garment shape, material, color, seams, lace, buttons, logos, packaging, camera-facing details, and recognisable design. Do not replace it with a different product.",
+    exactTextInstruction,
+    "avoid loud domestic promotional poster aesthetics, fake tiny unreadable text, distorted logos, changed product identity, invented discounts, invented sizes, and invented materials",
   ].filter(Boolean);
 
   return {
@@ -294,7 +297,17 @@ function withModuleReferencePrompt(
     })
     .join(" ");
 
-  return `${prompt} Image 2 reference assets are user-uploaded materials for this module only. Use them as visual references without replacing Image 1 product identity. ${notes}`;
+  return `${prompt} Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. ${notes}`;
+}
+
+function getExactTextInstruction(config: GenerationConfig): string {
+  const specifications = config.specifications.trim();
+
+  if (!specifications) {
+    return "";
+  }
+
+  return `When the image contains text, render user-provided text exactly and legibly from this source: ${specifications}. Do not rewrite numbers, discounts, size labels, availability, or promotional wording.`;
 }
 
 function getModuleReferenceAssets(

@@ -113,6 +113,72 @@ describe("kromaGenerationAdapter", () => {
     );
   });
 
+  it("maps detail-page buyer-show uploads and notes to image2 fields", () => {
+    const request = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        module: "detail_page",
+        aspectRatio: "long_page",
+        detailModuleCounts: { buyer_show: 1 },
+        moduleReferenceAssets: {
+          buyer_show: [
+            {
+              id: "buyer-show-ref-1",
+              fileName: "buyer-show.png",
+              imageUrl: "data:image/png;base64,buyer-show",
+              note: "Use this uploaded buyer-show photo as the model and scene reference.",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(buildKromaGenerateRequest(request)).toMatchObject({
+      template_image_base64: "data:image/png;base64,buyer-show",
+      template_image_base64s: ["data:image/png;base64,buyer-show"],
+    });
+    expect(buildKromaGenerateRequest(request).prompt).toContain(
+      "Use this uploaded buyer-show photo as the model and scene reference.",
+    );
+    expect(buildKromaGenerateRequest(request).prompt).toContain(
+      "must use Image 2 reference assets",
+    );
+  });
+
+  it("does not drop later module reference uploads when a request contains multiple modules", () => {
+    const request = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        selectedMainModules: ["packaging", "color_set"],
+        moduleReferenceAssets: {
+          packaging: [
+            {
+              id: "packaging-ref-1",
+              fileName: "box.png",
+              imageUrl: "data:image/png;base64,box",
+            },
+          ],
+          color_set: [
+            {
+              id: "color-ref-1",
+              fileName: "blue.png",
+              imageUrl: "data:image/png;base64,blue",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(buildKromaGenerateRequest(request)).toMatchObject({
+      template_image_base64s: [
+        "data:image/png;base64,box",
+        "data:image/png;base64,blue",
+      ],
+    });
+  });
+
   it("maps AI tool 1K work to the standard ecommerce backend path", () => {
     const request = buildGenerationTaskRequest({
       ...baseInput,

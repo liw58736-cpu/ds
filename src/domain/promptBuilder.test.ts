@@ -158,4 +158,56 @@ describe("buildGenerationPrompt", () => {
     expect(prompt.modules[1].prompt).toContain("This is the red colorway.");
     expect(prompt.modules[1].prompt).toContain("This is the blue colorway.");
   });
+
+  it("keeps detail-page modules tied to the source product, uploaded module assets, and exact user text", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "detail_page",
+      aspectRatio: "long_page",
+      sellingPoints:
+        "Black French vintage dress, visible lace cuffs, pearl buttons, fitted waist, soft satin fabric",
+      specifications: "限时4折；仅有 X / L 码",
+      detailModuleCounts: {
+        fabric_craft: 1,
+        cutting: 1,
+        buyer_show: 1,
+        promotion: 1,
+        color_size: 1,
+      },
+      moduleReferenceAssets: {
+        buyer_show: [
+          {
+            id: "buyer-show-ref-1",
+            fileName: "buyer-show.png",
+            imageUrl: "data:image/png;base64,buyer",
+            note: "Use my uploaded buyer-show model/photo as the lifestyle source.",
+          },
+        ],
+      },
+    });
+
+    expect(prompt.finalPrompt).toContain("Preserve Image 1 product identity");
+    expect(prompt.finalPrompt).toContain("render user-provided text exactly");
+    expect(prompt.finalPrompt).toContain("限时4折；仅有 X / L 码");
+    expect(prompt.modules.find((module) => module.id === "fabric_craft")?.prompt).toContain(
+      "derive fabric and craft details from Image 1",
+    );
+    expect(prompt.modules.find((module) => module.id === "cutting")?.prompt).toContain(
+      "same garment cut and silhouette from Image 1",
+    );
+    const buyerShowPrompt = prompt.modules.find(
+      (module) => module.id === "buyer_show",
+    )?.prompt;
+
+    expect(buyerShowPrompt).toContain("must use Image 2 reference assets");
+    expect(buyerShowPrompt).toContain(
+      "Use my uploaded buyer-show model/photo as the lifestyle source.",
+    );
+    expect(prompt.modules.find((module) => module.id === "promotion")?.prompt).toContain(
+      "display this exact promotion text",
+    );
+    expect(prompt.modules.find((module) => module.id === "color_size")?.prompt).toContain(
+      "display this exact size information",
+    );
+  });
 });

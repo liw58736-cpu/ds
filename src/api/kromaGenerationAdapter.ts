@@ -76,12 +76,13 @@ export function buildKromaGenerateRequest(
 function getModuleReferenceImageInput(
   request: GenerationTaskCreateRequest,
 ): Pick<KromaGenerateRequest, "template_image_base64" | "template_image_base64s"> {
-  const moduleId = request.body.prompt.modules[0]?.id;
-  const imageUrls = moduleId
-    ? (request.body.config.moduleReferenceAssets?.[moduleId] ?? [])
+  const moduleIds = request.body.prompt.modules.map((module) => module.id);
+  const imageUrls = moduleIds
+    .flatMap((moduleId) =>
+      (request.body.config.moduleReferenceAssets?.[moduleId] ?? [])
         .map((asset) => asset.imageUrl.trim())
-        .filter(Boolean)
-    : [];
+        .filter(Boolean),
+    );
 
   if (imageUrls.length === 0) {
     return {};
