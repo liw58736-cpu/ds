@@ -9,7 +9,13 @@ import {
   getTaskResultAssets,
 } from "../domain/resultAssets";
 import { describeTaskFunction } from "../domain/taskDisplay";
-import type { GenerationTask, TaskStatus } from "../domain/types";
+import type { GenerationResultAsset, GenerationTask, TaskStatus } from "../domain/types";
+
+interface LightboxState {
+  asset: GenerationResultAsset;
+  task: GenerationTask;
+  index: number;
+}
 
 const statusLabels = {
   queued: "排队中",
@@ -41,6 +47,7 @@ export function HistoryPage() {
   const [tasks, setTasks] = useState<GenerationTask[]>(
     () => getGenerationTaskSnapshot(),
   );
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
   useEffect(() => {
     void listGenerationTasks().then(setTasks);
@@ -133,13 +140,28 @@ export function HistoryPage() {
                     </div>
                     <div className="history-result-grid">
                       {getTaskResultAssets(task).map((asset, index) => (
-                        <figure className="history-result-item" key={`${asset.url}-${index}`}>
+                        <figure
+                          className="history-result-item"
+                          key={`${asset.url}-${index}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`放大查看 ${asset.label}`}
+                          onClick={() => setLightbox({ asset, task, index })}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") {
+                              return;
+                            }
+                            event.preventDefault();
+                            setLightbox({ asset, task, index });
+                          }}
+                        >
                           <img src={asset.url} alt="生成结果缩略图" />
                           <figcaption>{asset.label}</figcaption>
                           <a
                             className="ghost-action-button"
                             href={asset.url}
                             download={getTaskDownloadName(task, asset, index)}
+                            onClick={(event) => event.stopPropagation()}
                           >
                             下载
                           </a>
@@ -153,6 +175,36 @@ export function HistoryPage() {
           </div>
         )}
       </section>
+      {lightbox ? (
+        <div
+          className="preview-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={lightbox.asset.label}
+          onClick={() => setLightbox(null)}
+        >
+          <div className="preview-lightbox-content" onClick={(event) => event.stopPropagation()}>
+            <div className="preview-lightbox-header">
+              <strong>{lightbox.asset.label}</strong>
+              <button
+                type="button"
+                className="ghost-action-button"
+                onClick={() => setLightbox(null)}
+              >
+                关闭
+              </button>
+            </div>
+            <img src={lightbox.asset.url} alt={lightbox.asset.label} />
+            <a
+              className="ghost-action-button"
+              href={lightbox.asset.url}
+              download={getTaskDownloadName(lightbox.task, lightbox.asset, lightbox.index)}
+            >
+              下载
+            </a>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

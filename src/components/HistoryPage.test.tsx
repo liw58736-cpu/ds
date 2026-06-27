@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { GenerationTask } from "../domain/types";
 import { saveTasks } from "../storage/taskStore";
@@ -67,5 +68,22 @@ describe("HistoryPage", () => {
     expect(
       screen.getByRole("button", { name: "下载本次任务全部图片" }),
     ).toBeInTheDocument();
+  });
+
+  it("opens a large preview from a historical result image", async () => {
+    const user = userEvent.setup();
+    saveTasks([task]);
+
+    render(<HistoryPage />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "放大查看 首屏 KV" }),
+    );
+
+    expect(screen.getByRole("dialog", { name: "首屏 KV" })).toBeInTheDocument();
+    expect(screen.getByAltText("首屏 KV")).toHaveAttribute(
+      "src",
+      "data:image/png;base64,result-one",
+    );
   });
 });

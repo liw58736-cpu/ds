@@ -113,6 +113,15 @@
   min-width: 0;
 }
 
+.history-result-item[role="button"] {
+  cursor: zoom-in;
+}
+
+.history-result-item[role="button"]:focus-visible img {
+  outline: 3px solid rgba(193, 251, 212, 0.9);
+  outline-offset: 2px;
+}
+
 .preview-thumbnail-button {
   padding: 0;
   border: 1px solid var(--hairline);
