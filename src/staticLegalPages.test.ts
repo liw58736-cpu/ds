@@ -6,9 +6,9 @@ import termsHtml from "../public/terms/index.html?raw";
 
 describe("static legal pages", () => {
   it("exposes legal links in the raw homepage HTML for payment review crawlers", () => {
-    expect(homepageHtml).toContain('href="/terms/"');
-    expect(homepageHtml).toContain('href="/privacy/"');
-    expect(homepageHtml).toContain('href="/refund/"');
+    expect(homepageHtml).toContain('href="/terms/index.html"');
+    expect(homepageHtml).toContain('href="/privacy/index.html"');
+    expect(homepageHtml).toContain('href="/refund/index.html"');
     expect(homepageHtml).toContain("Terms of Service");
     expect(homepageHtml).toContain("Privacy Policy");
     expect(homepageHtml).toContain("Refund Policy");
@@ -36,9 +36,9 @@ describe("static legal pages", () => {
     pages.forEach((page) => {
       expect(page.html).toContain(page.title);
       expect(page.html).toContain(page.content);
-      expect(page.html).toContain('href="/terms/"');
-      expect(page.html).toContain('href="/privacy/"');
-      expect(page.html).toContain('href="/refund/"');
+      expect(page.html).toContain('href="/terms/index.html"');
+      expect(page.html).toContain('href="/privacy/index.html"');
+      expect(page.html).toContain('href="/refund/index.html"');
       expect(page.html).toContain("liw58736@gmail.com");
     });
   });

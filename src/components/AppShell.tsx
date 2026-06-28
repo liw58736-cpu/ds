@@ -46,7 +46,7 @@ const legalLinks = [
 
 function getPageHref(page: AppPage): string {
   if (legalLinks.some((item) => item.page === page)) {
-    return `/${page}/`;
+    return `/${page}/index.html`;
   }
 
   return `/${page}`;
