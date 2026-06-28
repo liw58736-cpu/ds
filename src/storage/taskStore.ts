@@ -378,11 +378,29 @@ function hasUnavailableUploadSource(task: GenerationTask): boolean {
   );
 }
 
+function hasReturnedResults(task: GenerationTask): boolean {
+  return task.resultUrls.length > 0;
+}
+
 function normalizeTask(
   task: GenerationTask,
   now: string,
   options: LoadTasksOptions,
 ): GenerationTask {
+  if (
+    (task.status === "queued" || task.status === "processing") &&
+    hasReturnedResults(task)
+  ) {
+    return {
+      ...task,
+      status: "completed",
+      errorCode: undefined,
+      errorMessage: undefined,
+      progress: undefined,
+      completedAt: task.completedAt ?? now,
+    };
+  }
+
   if (hasUnavailableUploadSource(task)) {
     if (task.status === "completed") {
       return {

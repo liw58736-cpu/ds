@@ -566,7 +566,7 @@ describe("Workspace", () => {
       JSON.stringify([
         createStoredTask({
           status: "processing",
-          resultUrls: ["/stale-result.png"],
+          resultUrls: [],
           creditCost: 1,
           completedAt: undefined,
         }),
@@ -653,6 +653,69 @@ describe("Workspace", () => {
     });
   });
 
+  it("shows returned images from stored processing tasks without polling expired backend tasks", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "");
+    vi.stubEnv("VITE_API_BASE_URL", "");
+    const storedTask = createStoredTask({
+      id: "task-resume-with-results-ui",
+      status: "processing",
+      backendTaskId: "expired-backend-task",
+      progress: "Waiting for backend...",
+      resultUrls: ["https://cdn.example.com/already-returned.png"],
+      resultAssets: [
+        {
+          url: "https://cdn.example.com/already-returned.png",
+          label: "涓诲浘灞曠ず",
+        },
+      ],
+      creditCost: 5,
+      completedAt: undefined,
+      productInput: {
+        id: "remote-product",
+        imageUrl: "https://cdn.example.com/product.png",
+        fileName: "product.png",
+        createdAt: "2026-06-15T00:00:00.000Z",
+        source: "upload",
+      },
+    });
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([storedTask]),
+    );
+    const fetchMock = vi.fn(() =>
+      Promise.reject(new Error("Expired backend task should not be polled")),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Workspace />);
+
+    expect(await screen.findByAltText("生成结果")).toHaveAttribute(
+      "src",
+      "https://cdn.example.com/already-returned.png",
+    );
+    await waitFor(() => {
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        expect.stringContaining("/image/task/expired-backend-task"),
+        expect.anything(),
+      );
+    });
+    const storedTasks = JSON.parse(
+      localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+    ) as GenerationTask[];
+    expect(storedTasks[0]).toMatchObject({
+      id: "task-resume-with-results-ui",
+      status: "completed",
+      resultUrls: ["https://cdn.example.com/already-returned.png"],
+      resultAssets: [
+        {
+          url: "https://cdn.example.com/already-returned.png",
+          label: "涓诲浘灞曠ず",
+        },
+      ],
+    });
+  });
+
   it("treats persisted uploaded blob tasks as result-only after reload", () => {
     localStorage.setItem(
       "commerce-studio-tasks-v1",
@@ -721,7 +784,7 @@ describe("Workspace", () => {
             createdAt: "2026-06-15T00:00:00.000Z",
             source: "upload",
           },
-          resultUrls: ["/stale-processing-result.png"],
+          resultUrls: [],
           creditCost: 1,
           completedAt: undefined,
         }),

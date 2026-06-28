@@ -203,7 +203,7 @@ describe("taskStore", () => {
       ...task,
       id: "task-processing",
       status: "processing",
-      resultUrls: ["/stale-result.png"],
+      resultUrls: [],
       creditCost: 1,
       completedAt: undefined,
     };
@@ -249,6 +249,36 @@ describe("taskStore", () => {
       {
         ...processingTask,
         config: taskWithHydratedConfig.config,
+      },
+    ]);
+  });
+
+  it("recovers persisted processing tasks with returned images as completed results", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T04:00:00.000Z"));
+    const processingTask: GenerationTask = {
+      ...task,
+      id: "task-processing-with-results",
+      status: "processing",
+      backendTaskId: "expired-backend-task",
+      resultUrls: ["/already-returned.png"],
+      resultAssets: [{ url: "/already-returned.png", label: "涓诲浘灞曠ず" }],
+      progress: "Polling backend task...",
+      creditCost: 5,
+      completedAt: undefined,
+    };
+    localStorage.setItem(
+      "commerce-studio-tasks-v1",
+      JSON.stringify([processingTask]),
+    );
+
+    expect(loadTasks({ keepResumableTasks: true })).toEqual([
+      {
+        ...processingTask,
+        config: taskWithHydratedConfig.config,
+        status: "completed",
+        completedAt: "2026-06-15T04:00:00.000Z",
+        progress: undefined,
       },
     ]);
   });
@@ -365,7 +395,7 @@ describe("taskStore", () => {
         source: "upload",
       },
       status: "processing",
-      resultUrls: ["/stale-result.png"],
+      resultUrls: [],
       creditCost: 1,
       completedAt: undefined,
     };
