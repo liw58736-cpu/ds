@@ -59,16 +59,20 @@ export function buildKromaGenerateRequest(
   ),
 ): KromaGenerateRequest {
   const { config, prompt, routeMode, route } = request.body;
+  const moduleReferenceImageInput = getModuleReferenceImageInput(request);
+  const hasModuleReferenceImages =
+    Boolean(moduleReferenceImageInput.template_image_base64) ||
+    Boolean(moduleReferenceImageInput.template_image_base64s?.length);
 
   return {
     prompt: prompt.finalPrompt,
     task_type: "ecommerce",
     style: buildKromaStyle(config, routeMode),
     ...imageInput,
-    ...getModuleReferenceImageInput(request),
+    ...moduleReferenceImageInput,
     size: getKromaSize(config.aspectRatio, config.resolution),
     quality: route.quality,
-    use_template_mode: false,
+    use_template_mode: hasModuleReferenceImages,
     keep_user_outfit_pose: false,
   };
 }

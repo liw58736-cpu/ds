@@ -210,4 +210,34 @@ describe("buildGenerationPrompt", () => {
       "display this exact size information",
     );
   });
+
+  it("treats module reference notes as exact visible copy for the matching module", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "detail_page",
+      aspectRatio: "long_page",
+      detailModuleCounts: {
+        color_size: 1,
+      },
+      moduleReferenceAssets: {
+        color_size: [
+          {
+            id: "size-ref-1",
+            fileName: "size-card.png",
+            imageUrl: "data:image/png;base64,size",
+            note: "只有X\\L码",
+          },
+        ],
+      },
+    });
+    const colorSizePrompt = prompt.modules.find(
+      (module) => module.id === "color_size",
+    )?.prompt;
+
+    expect(prompt.finalPrompt).toContain("只有X\\L码");
+    expect(prompt.finalPrompt).toContain("module reference note text exactly");
+    expect(colorSizePrompt).toContain("只有X\\L码");
+    expect(colorSizePrompt).toContain("render module reference note text exactly");
+    expect(colorSizePrompt).toContain("must use Image 2 reference assets");
+  });
 });

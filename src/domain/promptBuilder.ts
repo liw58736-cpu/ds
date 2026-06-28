@@ -197,6 +197,7 @@ export function buildGenerationPrompt(
 ): BuiltGenerationPrompt {
   const modules = getModulePrompts(config);
   const exactTextInstruction = getExactTextInstruction(config);
+  const moduleReferenceTextInstruction = getModuleReferenceTextInstruction(config);
   const sharedContext = [
     "premium overseas ecommerce image generation",
     `page type: ${config.module}`,
@@ -207,6 +208,7 @@ export function buildGenerationPrompt(
     config.specifications ? `promotion information: ${config.specifications}` : "",
     "Preserve Image 1 product identity: same product category, garment shape, material, color, seams, lace, buttons, logos, packaging, camera-facing details, and recognisable design. Do not replace it with a different product.",
     exactTextInstruction,
+    moduleReferenceTextInstruction,
     "avoid loud domestic promotional poster aesthetics, fake tiny unreadable text, distorted logos, changed product identity, invented discounts, invented sizes, and invented materials",
   ].filter(Boolean);
 
@@ -297,7 +299,7 @@ function withModuleReferencePrompt(
     })
     .join(" ");
 
-  return `${prompt} Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. ${notes}`;
+  return `${prompt} Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. If the note contains copy, sizes, discounts, availability, colors, or packaging instructions, render module reference note text exactly and legibly in this module when visually relevant. ${notes}`;
 }
 
 function getExactTextInstruction(config: GenerationConfig): string {
@@ -308,6 +310,19 @@ function getExactTextInstruction(config: GenerationConfig): string {
   }
 
   return `When the image contains text, render user-provided text exactly and legibly from this source: ${specifications}. Do not rewrite numbers, discounts, size labels, availability, or promotional wording.`;
+}
+
+function getModuleReferenceTextInstruction(config: GenerationConfig): string {
+  const notes = Object.values(config.moduleReferenceAssets ?? {})
+    .flatMap((assets) => assets ?? [])
+    .map((asset) => asset.note?.trim() ?? "")
+    .filter((note) => note.length > 0);
+
+  if (notes.length === 0) {
+    return "";
+  }
+
+  return `When module reference notes contain visible copy, render module reference note text exactly and legibly: ${[...new Set(notes)].join(" | ")}. Do not rewrite slashes, size labels, discounts, availability, colors, or packaging wording.`;
 }
 
 function getModuleReferenceAssets(

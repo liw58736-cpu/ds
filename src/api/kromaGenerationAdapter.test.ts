@@ -107,6 +107,7 @@ describe("kromaGenerationAdapter", () => {
         "data:image/png;base64,box",
         "data:image/png;base64,ribbon",
       ],
+      use_template_mode: true,
     });
     expect(buildKromaGenerateRequest(request).prompt).toContain(
       "Use this exact box.",
@@ -137,6 +138,7 @@ describe("kromaGenerationAdapter", () => {
     expect(buildKromaGenerateRequest(request)).toMatchObject({
       template_image_base64: "data:image/png;base64,buyer-show",
       template_image_base64s: ["data:image/png;base64,buyer-show"],
+      use_template_mode: true,
     });
     expect(buildKromaGenerateRequest(request).prompt).toContain(
       "Use this uploaded buyer-show photo as the model and scene reference.",
