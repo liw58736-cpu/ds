@@ -1,44 +1,56 @@
 import { describe, expect, it } from "vitest";
 import homepageHtml from "../index.html?raw";
 import privacyHtml from "../public/privacy/index.html?raw";
+import privacyDirectHtml from "../public/privacy.html?raw";
 import refundHtml from "../public/refund/index.html?raw";
+import refundDirectHtml from "../public/refund.html?raw";
 import termsHtml from "../public/terms/index.html?raw";
+import termsDirectHtml from "../public/terms.html?raw";
 
 describe("static legal pages", () => {
-  it("exposes legal links in the raw homepage HTML for payment review crawlers", () => {
-    expect(homepageHtml).toContain('href="/terms/index.html"');
-    expect(homepageHtml).toContain('href="/privacy/index.html"');
-    expect(homepageHtml).toContain('href="/refund/index.html"');
+  it("exposes direct legal links in the raw homepage HTML for payment review crawlers", () => {
+    expect(homepageHtml).toContain('href="/terms.html"');
+    expect(homepageHtml).toContain('href="/privacy.html"');
+    expect(homepageHtml).toContain('href="/refund.html"');
+    expect(homepageHtml).toContain('href="/support.html"');
     expect(homepageHtml).toContain("Terms of Service");
     expect(homepageHtml).toContain("Privacy Policy");
     expect(homepageHtml).toContain("Refund Policy");
   });
 
-  it("publishes crawlable static terms, privacy, and refund pages", () => {
+  it("publishes crawlable static pages on directory and direct html paths", () => {
     const pages = [
       {
         html: termsHtml,
         title: "Terms of Service",
-        content: "积分、套餐与支付",
+      },
+      {
+        html: termsDirectHtml,
+        title: "Terms of Service",
       },
       {
         html: privacyHtml,
         title: "Privacy Policy",
-        content: "图片与生成内容",
+      },
+      {
+        html: privacyDirectHtml,
+        title: "Privacy Policy",
       },
       {
         html: refundHtml,
         title: "Refund Policy",
-        content: "可申请处理的情况",
+      },
+      {
+        html: refundDirectHtml,
+        title: "Refund Policy",
       },
     ];
 
     pages.forEach((page) => {
       expect(page.html).toContain(page.title);
-      expect(page.html).toContain(page.content);
-      expect(page.html).toContain('href="/terms/index.html"');
-      expect(page.html).toContain('href="/privacy/index.html"');
-      expect(page.html).toContain('href="/refund/index.html"');
+      expect(page.html).toContain('href="/terms.html"');
+      expect(page.html).toContain('href="/privacy.html"');
+      expect(page.html).toContain('href="/refund.html"');
       expect(page.html).toContain("liw58736@gmail.com");
     });
   });
