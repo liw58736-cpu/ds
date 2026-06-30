@@ -497,15 +497,12 @@ async function handleSaveGeneration(request, env, fetchImpl) {
   );
   const row = buildGenerationHistoryRow(durableTask, user.id);
 
-  const savedRows = await restFetch(
+  const savedRows = await saveGenerationHistoryRow(
     fetchImpl,
     env,
-    "/web_generations?on_conflict=user_id,task_id",
-    {
-      method: "POST",
-      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-      body: row,
-    },
+    row,
+    durableTask,
+    user.id,
   );
 
   return jsonResponse({
@@ -520,14 +517,55 @@ async function handleListGenerations(request, url, env, fetchImpl) {
   const authUser = await requireAuthUser(request, env, fetchImpl);
   const user = await getOrCreateWebUser(fetchImpl, env, authUser);
   const limit = clampHistoryLimit(url.searchParams.get("limit"));
-  const rows = await restFetch(
-    fetchImpl,
-    env,
-    `/web_generations?user_id=eq.${encodeURIComponent(user.id)}&select=task,task_id,status,product,config,result_urls,result_assets,credits_cost,error_message,created_at,completed_at,attempt,backend_task_id,backend_task_ids,input_image_url,result_image_url,module&order=created_at.desc&limit=${limit}`,
-  );
+  const rows = await listGenerationHistoryRows(fetchImpl, env, user.id, limit);
 
   return jsonResponse(
     Array.isArray(rows) ? rows.map(normalizeGenerationHistoryRow) : [],
+  );
+}
+
+async function saveGenerationHistoryRow(fetchImpl, env, row, task, userId) {
+  try {
+    return await restFetch(
+      fetchImpl,
+      env,
+      "/web_generations?on_conflict=user_id,task_id",
+      {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+        body: row,
+      },
+    );
+  } catch (error) {
+    if (!isSupabaseSchemaDrift(error)) {
+      throw error;
+    }
+  }
+
+  return restFetch(fetchImpl, env, "/web_generations", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: buildLegacyGenerationHistoryRow(task, userId),
+  });
+}
+
+async function listGenerationHistoryRows(fetchImpl, env, userId, limit) {
+  try {
+    return await restFetch(
+      fetchImpl,
+      env,
+      `/web_generations?user_id=eq.${encodeURIComponent(userId)}&select=task,task_id,status,product,config,result_urls,result_assets,credits_cost,error_message,created_at,completed_at,attempt,backend_task_id,backend_task_ids,input_image_url,result_image_url,module&order=created_at.desc&limit=${limit}`,
+    );
+  } catch (error) {
+    if (!isSupabaseSchemaDrift(error)) {
+      throw error;
+    }
+  }
+
+  return restFetch(
+    fetchImpl,
+    env,
+    `/web_generations?user_id=eq.${encodeURIComponent(userId)}&select=id,status,module,prompt,input_image_url,result_image_url,credits_cost,error_message,created_at,updated_at&order=created_at.desc&limit=${limit}`,
   );
 }
 
@@ -578,9 +616,31 @@ function buildGenerationHistoryRow(task, userId) {
   };
 }
 
+function buildLegacyGenerationHistoryRow(task, userId) {
+  const resultUrls = Array.isArray(task.resultUrls) ? task.resultUrls : [];
+
+  return {
+    user_id: userId,
+    status: String(task.status ?? "completed"),
+    module: stringOrNull(task.config?.module),
+    prompt: JSON.stringify(task),
+    input_image_url: stringOrNull(task.productInput?.imageUrl),
+    result_image_url: stringOrNull(resultUrls[0]),
+    credits_cost: numberOrZero(task.creditCost),
+    error_message: stringOrNull(task.errorMessage),
+    created_at: stringOrNull(task.createdAt) ?? new Date().toISOString(),
+  };
+}
+
 function normalizeGenerationHistoryRow(row) {
   if (row?.task && typeof row.task === "object" && !Array.isArray(row.task)) {
     return row.task;
+  }
+
+  const legacyTask = parseLegacyGenerationTask(row?.prompt);
+
+  if (legacyTask) {
+    return legacyTask;
   }
 
   const resultUrls = Array.isArray(row?.result_urls)
@@ -640,6 +700,22 @@ function normalizeGenerationHistoryRow(row) {
   };
 }
 
+function parseLegacyGenerationTask(value) {
+  if (typeof value !== "string" || !value.trim().startsWith("{")) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function stringOrNull(value) {
   return typeof value === "string" && value ? value : null;
 }
@@ -660,11 +736,13 @@ function clampHistoryLimit(value) {
 }
 
 async function persistGenerationResultImages(fetchImpl, env, task, userId) {
-  const bucket = env.WEB_GENERATION_STORAGE_BUCKET?.trim();
+  const bucket = env.WEB_GENERATION_STORAGE_BUCKET?.trim() || "web-generation-results";
 
   if (!bucket || !Array.isArray(task.resultUrls) || task.resultUrls.length === 0) {
     return task;
   }
+
+  await ensureGenerationStorageBucket(fetchImpl, env, bucket);
 
   const copiedUrls = await Promise.all(
     task.resultUrls.map((url, index) =>
@@ -697,6 +775,36 @@ async function persistGenerationResultImages(fetchImpl, env, task, userId) {
     resultUrls: copiedUrls,
     ...(resultAssets ? { resultAssets } : {}),
   };
+}
+
+async function ensureGenerationStorageBucket(fetchImpl, env, bucket) {
+  try {
+    const response = await fetchImpl(`${supabaseUrl(env)}/storage/v1/bucket`, {
+      method: "POST",
+      headers: {
+        apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: bucket,
+        name: bucket,
+        public: true,
+        file_size_limit: 20 * 1024 * 1024,
+        allowed_mime_types: ["image/png", "image/jpeg", "image/webp"],
+      }),
+    });
+
+    if (response.status === 409) {
+      await response.text();
+      return;
+    }
+
+    await parseSupabaseResponse(response);
+  } catch {
+    // If the bucket already exists or creation is temporarily unavailable, the
+    // upload attempt below can still succeed. Otherwise we keep the provider URL.
+  }
 }
 
 async function copyGenerationResultImage(fetchImpl, env, input) {
@@ -810,6 +918,21 @@ function sanitizeStoragePathSegment(value) {
 function isSupabasePublicStorageUrl(env, bucket, url) {
   return String(url).startsWith(
     `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/`,
+  );
+}
+
+function isSupabaseSchemaDrift(error) {
+  if (!(error instanceof HttpError)) {
+    return false;
+  }
+
+  const detail = String(error.body?.detail ?? error.message ?? "").toLowerCase();
+
+  return (
+    (error.status === 400 || error.status === 404) &&
+    (detail.includes("could not find") ||
+      detail.includes("column") ||
+      detail.includes("schema cache"))
   );
 }
 

@@ -1731,6 +1731,7 @@ test("generation history stores a completed task for the authenticated web user"
 test("generation history can copy result images into web storage before saving", async () => {
   const storedRows = [];
   const storageUploads = [];
+  const bucketCreates = [];
   const app = createWebBackend({
     env: {
       WEB_SUPABASE_URL: "https://web-project.supabase.co",
@@ -1754,6 +1755,11 @@ test("generation history can copy result images into web storage before saving",
           status: 200,
           headers: { "Content-Type": "image/png" },
         });
+      }
+
+      if (url === "https://web-project.supabase.co/storage/v1/bucket") {
+        bucketCreates.push(JSON.parse(init.body));
+        return jsonResponse({ name: "web-generation-results" });
       }
 
       if (
@@ -1821,6 +1827,15 @@ test("generation history can copy result images into web storage before saving",
     "https://web-project.supabase.co/storage/v1/object/public/web-generation-results/web-user-1/task-cloud-durable/1.png";
 
   assert.equal(response.status, 200);
+  assert.deepEqual(bucketCreates, [
+    {
+      id: "web-generation-results",
+      name: "web-generation-results",
+      public: true,
+      file_size_limit: 20971520,
+      allowed_mime_types: ["image/png", "image/jpeg", "image/webp"],
+    },
+  ]);
   assert.equal(storageUploads.length, 1);
   assert.equal(storageUploads[0].headers["x-upsert"], "true");
   assert.equal(storageUploads[0].headers["Content-Type"], "image/png");
@@ -1828,6 +1843,179 @@ test("generation history can copy result images into web storage before saving",
   assert.deepEqual(storedRows[0].result_urls, [durableUrl]);
   assert.deepEqual(storedRows[0].result_assets, [{ url: durableUrl, label: "Hero KV" }]);
   assert.deepEqual((await readJson(response)).task.resultUrls, [durableUrl]);
+});
+
+test("generation history falls back to the legacy schema when rich columns are not deployed yet", async () => {
+  const legacyRows = [];
+  const task = {
+    id: "task-legacy-1",
+    productInput: {
+      id: "product-legacy",
+      imageUrl: "https://cdn.example.com/product.png",
+      fileName: "product.png",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      source: "sample",
+    },
+    config: {
+      module: "main_image",
+      platform: "shopify",
+      aspectRatio: "1:1",
+      style: "premium",
+      outputFormat: "png",
+      sellingPoints: "Legacy schema",
+      specifications: "Fallback",
+      resolution: "1K",
+      selectedMainModules: ["hero_kv", "overall_show"],
+    },
+    status: "completed",
+    resultUrls: [
+      "https://cdn.example.com/legacy-hero.png",
+      "https://cdn.example.com/legacy-overall.png",
+    ],
+    resultAssets: [
+      { url: "https://cdn.example.com/legacy-hero.png", label: "Hero KV" },
+      { url: "https://cdn.example.com/legacy-overall.png", label: "Overall" },
+    ],
+    creditCost: 2,
+    createdAt: "2026-06-17T00:01:00.000Z",
+    completedAt: "2026-06-17T00:02:00.000Z",
+    attempt: 1,
+  };
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+    },
+    fetch: async (url, init = {}) => {
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+
+      if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
+        return jsonResponse([
+          { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+        ]);
+      }
+
+      if (url.endsWith("/rest/v1/web_generations?on_conflict=user_id,task_id")) {
+        return jsonResponse({ message: "Could not find the 'task_id' column" }, 400);
+      }
+
+      if (url.endsWith("/rest/v1/web_generations")) {
+        const body = JSON.parse(init.body);
+        legacyRows.push(body);
+        return jsonResponse([{ ...body, id: "legacy-row-1" }]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/generations", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer web-access-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(task),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), { saved: true, task });
+  assert.equal(legacyRows.length, 1);
+  assert.equal(legacyRows[0].prompt, JSON.stringify(task));
+  assert.equal(legacyRows[0].result_image_url, "https://cdn.example.com/legacy-hero.png");
+  assert.equal(legacyRows[0].credits_cost, 2);
+});
+
+test("generation history reads task JSON from legacy rows when rich columns are missing", async () => {
+  const task = {
+    id: "task-legacy-list",
+    productInput: {
+      id: "product-legacy",
+      imageUrl: "https://cdn.example.com/product.png",
+      fileName: "product.png",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      source: "sample",
+    },
+    config: {
+      module: "detail_page",
+      platform: "shopify",
+      aspectRatio: "long_page",
+      style: "premium",
+      outputFormat: "jpg",
+      sellingPoints: "Legacy list",
+      specifications: "Fallback",
+      resolution: "1K",
+      detailModuleCounts: { main_display: 1 },
+    },
+    status: "completed",
+    resultUrls: ["https://cdn.example.com/legacy-detail.png"],
+    resultAssets: [{ url: "https://cdn.example.com/legacy-detail.png", label: "Main" }],
+    creditCost: 1,
+    createdAt: "2026-06-17T00:01:00.000Z",
+    completedAt: "2026-06-17T00:02:00.000Z",
+    attempt: 1,
+  };
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+    },
+    fetch: async (url) => {
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+
+      if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
+        return jsonResponse([
+          { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+        ]);
+      }
+
+      if (
+        url.includes("/rest/v1/web_generations?user_id=eq.web-user-1") &&
+        url.includes("select=task,")
+      ) {
+        return jsonResponse({ message: "Could not find the 'task' column" }, 400);
+      }
+
+      if (
+        url.includes("/rest/v1/web_generations?user_id=eq.web-user-1") &&
+        url.includes("select=id,status,module,prompt")
+      ) {
+        return jsonResponse([
+          {
+            id: "legacy-row-1",
+            status: "completed",
+            module: "detail_page",
+            prompt: JSON.stringify(task),
+            input_image_url: task.productInput.imageUrl,
+            result_image_url: task.resultUrls[0],
+            credits_cost: 1,
+            error_message: null,
+            created_at: task.createdAt,
+            updated_at: task.completedAt,
+          },
+        ]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/generations", {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), [task]);
 });
 
 test("generation history lists only rows for the authenticated web user", async () => {
