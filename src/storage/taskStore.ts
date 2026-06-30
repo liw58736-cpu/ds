@@ -242,10 +242,21 @@ function parseResultAssets(value: unknown): GenerationResultAsset[] | undefined 
 
   const resultAssets = value.filter(
     (asset): asset is GenerationResultAsset =>
-      isRecord(asset) && isString(asset.url) && isString(asset.label),
+      isRecord(asset) &&
+      isString(asset.url) &&
+      isString(asset.label) &&
+      (!("channelUsed" in asset) ||
+        asset.channelUsed === undefined ||
+        isString(asset.channelUsed)),
   );
 
-  return resultAssets.length > 0 ? resultAssets : undefined;
+  return resultAssets.length > 0
+    ? resultAssets.map((asset) => ({
+        url: asset.url,
+        label: asset.label,
+        ...(asset.channelUsed ? { channelUsed: asset.channelUsed } : {}),
+      }))
+    : undefined;
 }
 
 function parseConfig(value: unknown): GenerationConfig | null {
@@ -351,6 +362,8 @@ function parseTask(value: unknown): GenerationTask | null {
   const backendTaskId = readOptionalString(value.backendTaskId);
   const backendTaskIds = readOptionalStringArray(value.backendTaskIds);
   const resultAssets = parseResultAssets(value.resultAssets);
+  const channelUsed = readOptionalString(value.channelUsed);
+  const channelUsedByAsset = readOptionalStringArray(value.channelUsedByAsset);
 
   return {
     id,
@@ -368,6 +381,8 @@ function parseTask(value: unknown): GenerationTask | null {
     ...(backendTaskId ? { backendTaskId } : {}),
     ...(backendTaskIds ? { backendTaskIds } : {}),
     ...(resultAssets ? { resultAssets } : {}),
+    ...(channelUsed ? { channelUsed } : {}),
+    ...(channelUsedByAsset ? { channelUsedByAsset } : {}),
   };
 }
 

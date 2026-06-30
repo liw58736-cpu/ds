@@ -201,7 +201,7 @@ describe("buildGenerationPrompt", () => {
 
     expect(buyerShowPrompt).toContain("must use Image 2 reference assets");
     expect(buyerShowPrompt).toContain(
-      "Use my uploaded buyer-show model/photo as the lifestyle source.",
+      "use this uploaded reference asset as the buyer-show visual source",
     );
     expect(prompt.modules.find((module) => module.id === "promotion")?.prompt).toContain(
       "display this exact promotion text",
@@ -239,5 +239,91 @@ describe("buildGenerationPrompt", () => {
     expect(colorSizePrompt).toContain("只有X\\L码");
     expect(colorSizePrompt).toContain("render module reference note text exactly");
     expect(colorSizePrompt).toContain("must use Image 2 reference assets");
+  });
+
+  it("treats buyer-show reference notes as instructions instead of visible copy", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "detail_page",
+      aspectRatio: "long_page",
+      detailModuleCounts: {
+        buyer_show: 1,
+      },
+      moduleReferenceAssets: {
+        buyer_show: [
+          {
+            id: "buyer-show-ref-1",
+            fileName: "buyer-show.png",
+            imageUrl: "data:image/png;base64,buyer",
+            note: "\u4f7f\u7528\u8fd9\u5f20\u7167\u7247\u4e3a\u4e70\u5bb6\u79c0",
+          },
+        ],
+      },
+    });
+    const buyerShowPrompt = prompt.modules.find(
+      (module) => module.id === "buyer_show",
+    )?.prompt;
+
+    expect(buyerShowPrompt).toContain("must use Image 2 reference assets");
+    expect(buyerShowPrompt).toContain("Do not render the module reference note itself");
+    expect(buyerShowPrompt).not.toContain("\u4f7f\u7528\u8fd9\u5f20\u7167\u7247\u4e3a\u4e70\u5bb6\u79c0");
+    expect(prompt.finalPrompt).toContain(
+      "Module reference notes can be instructions or constraints",
+    );
+    expect(prompt.finalPrompt).not.toContain(
+      "render module reference note text exactly and legibly: \u4f7f\u7528\u8fd9\u5f20\u7167\u7247\u4e3a\u4e70\u5bb6\u79c0",
+    );
+  });
+
+  it("turns user color limits into hard constraints for multi-color modules", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "main_image",
+      selectedMainModules: ["color_set"],
+      moduleReferenceAssets: {
+        color_set: [
+          {
+            id: "color-note-1",
+            fileName: "color-note.png",
+            imageUrl: "data:image/png;base64,color",
+            note: "\u53ea\u6709\u5f53\u524d\u7d2b\u8272\u548c\u9ed1\u8272\u4e24\u79cd\u6b3e\u5f0f",
+          },
+        ],
+      },
+    });
+    const colorPrompt = prompt.modules.find((module) => module.id === "color_set")
+      ?.prompt;
+
+    expect(colorPrompt).toContain("exactly the user-specified colorways");
+    expect(colorPrompt).toContain("Do not add extra colors");
+    expect(colorPrompt).toContain("\u53ea\u6709\u5f53\u524d\u7d2b\u8272\u548c\u9ed1\u8272\u4e24\u79cd\u6b3e\u5f0f");
+  });
+
+  it("keeps color-size module notes as exact availability copy and constraints", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "detail_page",
+      aspectRatio: "long_page",
+      detailModuleCounts: {
+        color_size: 1,
+      },
+      moduleReferenceAssets: {
+        color_size: [
+          {
+            id: "size-ref-1",
+            fileName: "size-card.png",
+            imageUrl: "data:image/png;base64,size",
+            note: "\u53ea\u6709 X/L \u4e24\u79cd\u5c3a\u7801",
+          },
+        ],
+      },
+    });
+    const colorSizePrompt = prompt.modules.find(
+      (module) => module.id === "color_size",
+    )?.prompt;
+
+    expect(colorSizePrompt).toContain("Render only this size or availability copy");
+    expect(colorSizePrompt).toContain("Do not invent unavailable sizes");
+    expect(colorSizePrompt).toContain("\u53ea\u6709 X/L \u4e24\u79cd\u5c3a\u7801");
   });
 });

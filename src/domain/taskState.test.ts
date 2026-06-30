@@ -112,6 +112,37 @@ describe("task lifecycle", () => {
     expect(completed.errorMessage).toBeUndefined();
   });
 
+  it("records provider channel metadata when a task completes", () => {
+    const task = markProcessing(
+      createTask({
+        product,
+        config,
+        now: "2026-06-15T01:00:00.000Z",
+      }),
+    );
+
+    const completed = completeTask(task, {
+      resultUrls: ["/mock/main-image.png"],
+      resultAssets: [
+        {
+          url: "/mock/main-image.png",
+          label: "Hero KV",
+          channelUsed: "rightcode",
+        },
+      ],
+      channelUsed: "rightcode",
+      channelUsedByAsset: ["rightcode"],
+      completedAt: "2026-06-15T01:00:02.000Z",
+      creditCost: 1,
+    });
+
+    expect(completed.channelUsed).toBe("rightcode");
+    expect(completed.channelUsedByAsset).toEqual(["rightcode"]);
+    expect(completed.resultAssets?.[0]).toMatchObject({
+      channelUsed: "rightcode",
+    });
+  });
+
   it("keeps failed tasks uncharged and retryable", () => {
     const processing = markProcessing(
       createTask({

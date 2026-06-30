@@ -141,7 +141,7 @@ describe("kromaGenerationAdapter", () => {
       use_template_mode: true,
     });
     expect(buildKromaGenerateRequest(request).prompt).toContain(
-      "Use this uploaded buyer-show photo as the model and scene reference.",
+      "use this uploaded reference asset as the buyer-show visual source",
     );
     expect(buildKromaGenerateRequest(request).prompt).toContain(
       "must use Image 2 reference assets",
@@ -304,6 +304,7 @@ describe("kromaGenerationAdapter", () => {
       resultUrls: ["https://cdn.example.com/result.png"],
       creditCost: 2,
       routeMode: "standard",
+      channelUsed: "wuyinkeji",
     });
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,

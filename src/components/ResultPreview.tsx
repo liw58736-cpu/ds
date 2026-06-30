@@ -183,6 +183,7 @@ function PreviewTaskCard({
         <>
           <div className="preview-task-actions">
             <span>{resultAssets.length} 张图片</span>
+            {task.channelUsed ? <span>Channel: {task.channelUsed}</span> : null}
             {resultAssets.length > 1 ? (
               <button
                 type="button"

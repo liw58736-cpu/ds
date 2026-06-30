@@ -9,6 +9,7 @@ export interface GenerationTaskResponse {
   resultUrls: string[];
   creditCost: number;
   routeMode: GenerationRouteMode;
+  channelUsed?: string;
   errorCode?: string;
   errorMessage?: string;
 }

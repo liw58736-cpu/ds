@@ -123,6 +123,35 @@ describe("taskStore", () => {
     });
   });
 
+  it("round trips provider channel metadata on stored task snapshots", () => {
+    saveTasks([
+      {
+        ...task,
+        channelUsed: "rightcode",
+        channelUsedByAsset: ["rightcode"],
+        resultAssets: [
+          {
+            url: "/mock/hero.png",
+            label: "Hero KV",
+            channelUsed: "rightcode",
+          },
+        ],
+      },
+    ]);
+
+    expect(loadTasks()[0]).toMatchObject({
+      channelUsed: "rightcode",
+      channelUsedByAsset: ["rightcode"],
+      resultAssets: [
+        {
+          url: "/mock/hero.png",
+          label: "Hero KV",
+          channelUsed: "rightcode",
+        },
+      ],
+    });
+  });
+
   it("round trips module reference assets on stored task snapshots", () => {
     saveTasks([
       {

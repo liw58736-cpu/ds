@@ -115,6 +115,8 @@ export interface GenerationTask {
   status: TaskStatus;
   resultUrls: string[];
   resultAssets?: GenerationResultAsset[];
+  channelUsed?: string;
+  channelUsedByAsset?: string[];
   errorCode?: string;
   errorMessage?: string;
   progress?: string;
@@ -129,10 +131,13 @@ export interface GenerationTask {
 export interface GenerationResultAsset {
   url: string;
   label: string;
+  channelUsed?: string;
 }
 
 export interface GenerationResult {
   resultUrls: string[];
   resultAssets?: GenerationResultAsset[];
+  channelUsed?: string;
+  channelUsedByAsset?: string[];
   creditCost: number;
 }

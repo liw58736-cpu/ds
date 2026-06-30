@@ -229,6 +229,8 @@ export function Workspace({
         const completedTask = completeTask(currentProcessingTask, {
           resultUrls: result.resultUrls,
           resultAssets: result.resultAssets,
+          channelUsed: result.channelUsed,
+          channelUsedByAsset: result.channelUsedByAsset,
           creditCost: result.creditCost,
           completedAt: new Date().toISOString(),
         });

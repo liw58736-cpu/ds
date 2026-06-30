@@ -456,11 +456,19 @@ describe("generationApi", () => {
       "https://cdn.example.com/kroma-detail-5.png",
     ]);
     expect(result.resultAssets).toEqual([
-      { url: result.resultUrls[0], label: "博主穿搭" },
-      { url: result.resultUrls[1], label: "博主穿搭" },
-      { url: result.resultUrls[2], label: "主图展示" },
-      { url: result.resultUrls[3], label: "品牌介绍" },
-      { url: result.resultUrls[4], label: "品牌介绍" },
+      { url: result.resultUrls[0], label: "博主穿搭", channelUsed: "rightcode" },
+      { url: result.resultUrls[1], label: "博主穿搭", channelUsed: "rightcode" },
+      { url: result.resultUrls[2], label: "主图展示", channelUsed: "rightcode" },
+      { url: result.resultUrls[3], label: "品牌介绍", channelUsed: "rightcode" },
+      { url: result.resultUrls[4], label: "品牌介绍", channelUsed: "rightcode" },
+    ]);
+    expect(result.channelUsed).toBe("rightcode");
+    expect(result.channelUsedByAsset).toEqual([
+      "rightcode",
+      "rightcode",
+      "rightcode",
+      "rightcode",
+      "rightcode",
     ]);
     expect(
       fetchMock.mock.calls.filter(([url]) => String(url).includes("/image/task/")),

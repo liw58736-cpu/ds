@@ -121,6 +121,12 @@ export function HistoryPage() {
                   <small>消耗</small>
                   <span>{task.creditCost} credits</span>
                 </div>
+                {task.channelUsed ? (
+                  <div>
+                    <small>Channel</small>
+                    <span>{task.channelUsed}</span>
+                  </div>
+                ) : null}
                 <span className={`task-status task-status-${task.status}`}>
                   {statusLabels[task.status]}
                 </span>

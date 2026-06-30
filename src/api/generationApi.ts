@@ -113,12 +113,16 @@ export async function resumeGenerationTask(
   }
 
   const resultAssets = responses.flatMap((item, index) =>
-    buildResultAssets(expandedInputs[index].config, item.resultUrls),
+    buildResultAssets(expandedInputs[index].config, item.resultUrls, item.channelUsed),
   );
+  const channelUsedByAsset = responses
+    .flatMap((item) => item.resultUrls.map(() => item.channelUsed ?? ""))
+    .filter((channel) => channel.length > 0);
 
   return {
     resultUrls: responses.flatMap((item) => item.resultUrls),
     resultAssets,
+    ...buildChannelMetadata(channelUsedByAsset),
     creditCost: estimateGenerationCredits(task.config),
   };
 }
@@ -148,12 +152,16 @@ export async function generateAsset(
   }
 
   const resultAssets = responses.flatMap((item, index) =>
-    buildResultAssets(expandedInputs[index].config, item.resultUrls),
+    buildResultAssets(expandedInputs[index].config, item.resultUrls, item.channelUsed),
   );
+  const channelUsedByAsset = responses
+    .flatMap((item) => item.resultUrls.map(() => item.channelUsed ?? ""))
+    .filter((channel) => channel.length > 0);
 
   return {
     resultUrls: responses.flatMap((item) => item.resultUrls),
     resultAssets,
+    ...buildChannelMetadata(channelUsedByAsset),
     creditCost: estimateGenerationCredits(input.config),
   };
 }
@@ -180,6 +188,7 @@ function getResumeBackendTaskIds(
 function buildResultAssets(
   config: GenerationConfig,
   resultUrls: string[],
+  channelUsed?: string,
 ): GenerationResultAsset[] {
   const labels = buildGenerationPrompt(config).modules.map((module) => module.title);
   const fallbackLabel = labels[0] ?? "\u751f\u6210\u7ed3\u679c";
@@ -187,7 +196,21 @@ function buildResultAssets(
   return resultUrls.map((url, index) => ({
     url,
     label: labels[index] ?? fallbackLabel,
+    ...(channelUsed ? { channelUsed } : {}),
   }));
+}
+
+function buildChannelMetadata(
+  channelUsedByAsset: string[],
+): Pick<GenerationResult, "channelUsed" | "channelUsedByAsset"> {
+  if (channelUsedByAsset.length === 0) {
+    return {};
+  }
+
+  return {
+    channelUsedByAsset,
+    channelUsed: [...new Set(channelUsedByAsset)].join(" / "),
+  };
 }
 
 function expandGenerationInputs(input: GenerateInput): GenerateInput[] {

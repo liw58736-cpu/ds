@@ -68,6 +68,8 @@ export function completeTask(
   input: {
     resultUrls: string[];
     resultAssets?: GenerationResultAsset[];
+    channelUsed?: string;
+    channelUsedByAsset?: string[];
     completedAt: string;
     creditCost: number;
   },
@@ -86,6 +88,10 @@ export function completeTask(
     status: "completed",
     resultUrls: input.resultUrls,
     ...(input.resultAssets ? { resultAssets: input.resultAssets } : {}),
+    ...(input.channelUsed ? { channelUsed: input.channelUsed } : {}),
+    ...(input.channelUsedByAsset && input.channelUsedByAsset.length > 0
+      ? { channelUsedByAsset: input.channelUsedByAsset }
+      : {}),
     completedAt: input.completedAt,
     creditCost: input.creditCost,
   };
@@ -96,7 +102,12 @@ export function failTask(
   input: { errorCode: string; errorMessage: string; completedAt: string },
 ): GenerationTask {
   assertStatus(task, "processing", "fail");
-  const { resultAssets: _resultAssets, ...rest } = task;
+  const {
+    resultAssets: _resultAssets,
+    channelUsed: _channelUsed,
+    channelUsedByAsset: _channelUsedByAsset,
+    ...rest
+  } = task;
 
   return {
     ...rest,
@@ -121,6 +132,8 @@ export function retryTask(task: GenerationTask, now: string): GenerationTask {
     backendTaskId: _backendTaskId,
     backendTaskIds: _backendTaskIds,
     resultAssets: _resultAssets,
+    channelUsed: _channelUsed,
+    channelUsedByAsset: _channelUsedByAsset,
     ...rest
   } = task;
 

@@ -192,6 +192,14 @@ const aiToolPromptCopy: Record<WhiteBackgroundMode, string> = {
     "Create a light gray inspection-background product image with preserved product geometry and neutral catalog lighting.",
 };
 
+const colorConstraintModules = new Set<string>([
+  "color_set",
+  "multi_color",
+  "color_size",
+]);
+
+const sizeAvailabilityModules = new Set<string>(["color_size", "specs"]);
+
 export function buildGenerationPrompt(
   config: GenerationConfig,
 ): BuiltGenerationPrompt {
@@ -290,16 +298,68 @@ function withModuleReferencePrompt(
     return prompt;
   }
 
-  const notes = assets
+  const notes = uniqueNotes(assets);
+  const visibleNotes = notes.filter(isProductFacingCopyNote);
+  const instructionOnlyNotes = notes.filter(
+    (note) => !isProductFacingCopyNote(note),
+  );
+  const assetDescriptions = assets
     .map((asset, index) => {
       const note = asset.note?.trim();
       const label = `Image 2 reference asset ${index + 1}`;
 
-      return note ? `${label}: ${note}` : `${label}: ${asset.fileName}`;
+      if (!note) {
+        return `${label}: ${asset.fileName}`;
+      }
+
+      if (shouldHideInstructionNoteText(moduleId, note)) {
+        return `${label}: use this uploaded reference asset as the buyer-show visual source; do not render the user note wording.`;
+      }
+
+      return `${label}: ${note}`;
     })
     .join(" ");
+  const promptParts = [
+    prompt,
+    "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
+  ];
 
-  return `${prompt} Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. If the note contains copy, sizes, discounts, availability, colors, or packaging instructions, render module reference note text exactly and legibly in this module when visually relevant. ${notes}`;
+  if (instructionOnlyNotes.length > 0) {
+    promptParts.push(
+      "Instruction-only module reference notes must be followed as directions, not rendered as text. Do not render the module reference note itself unless it contains product-facing copy.",
+    );
+  }
+
+  if (visibleNotes.length > 0) {
+    promptParts.push(
+      `Product-facing module reference copy or constraints: ${visibleNotes.join(" | ")}. Treat these as hard requirements; render module reference note text exactly and legibly only when text belongs in this module.`,
+    );
+  }
+
+  if (colorConstraintModules.has(moduleId) && notes.some(isColorConstraintNote)) {
+    promptParts.push(
+      `Use exactly the user-specified colorways from the module reference notes: ${notes.filter(isColorConstraintNote).join(" | ")}. Do not add extra colors, extra variants, or invented swatches.`,
+    );
+  }
+
+  if (
+    sizeAvailabilityModules.has(moduleId) &&
+    visibleNotes.some(isSizeAvailabilityNote)
+  ) {
+    promptParts.push(
+      `Render only this size or availability copy from the module reference notes: ${visibleNotes.filter(isSizeAvailabilityNote).join(" | ")}. Do not invent unavailable sizes, stock labels, or fake size ranges.`,
+    );
+  }
+
+  if (moduleId === "buyer_show") {
+    promptParts.push(
+      "For buyer-show, use Image 2 as the buyer/model/pose/scene source and preserve Image 1 product on that buyer or scene. Do not render the module reference note itself unless it contains product-facing copy.",
+    );
+  }
+
+  promptParts.push(assetDescriptions);
+
+  return promptParts.filter(Boolean).join(" ");
 }
 
 function getExactTextInstruction(config: GenerationConfig): string {
@@ -313,16 +373,139 @@ function getExactTextInstruction(config: GenerationConfig): string {
 }
 
 function getModuleReferenceTextInstruction(config: GenerationConfig): string {
-  const notes = Object.values(config.moduleReferenceAssets ?? {})
-    .flatMap((assets) => assets ?? [])
-    .map((asset) => asset.note?.trim() ?? "")
-    .filter((note) => note.length > 0);
+  const notes = uniqueNotes(
+    Object.values(config.moduleReferenceAssets ?? {}).flatMap(
+      (assets) => assets ?? [],
+    ),
+  );
+  const visibleNotes = notes.filter(isProductFacingCopyNote);
 
   if (notes.length === 0) {
     return "";
   }
 
-  return `When module reference notes contain visible copy, render module reference note text exactly and legibly: ${[...new Set(notes)].join(" | ")}. Do not rewrite slashes, size labels, discounts, availability, colors, or packaging wording.`;
+  const parts = [
+    "Module reference notes can be instructions or constraints. Follow instruction-only notes as directions for how to use uploaded materials, not as visible image text.",
+  ];
+
+  if (visibleNotes.length > 0) {
+    parts.push(
+      `When product-facing module reference notes contain visible copy or constraints, render module reference note text exactly and legibly: ${visibleNotes.join(" | ")}. Do not rewrite slashes, size labels, discounts, availability, colors, or packaging wording.`,
+    );
+  }
+
+  return parts.join(" ");
+}
+
+function uniqueNotes(assets: ModuleReferenceAsset[]): string[] {
+  return [
+    ...new Set(
+      assets
+        .map((asset) => asset.note?.trim() ?? "")
+        .filter((note) => note.length > 0),
+    ),
+  ];
+}
+
+function isProductFacingCopyNote(note: string): boolean {
+  return (
+    hasExplicitTextMarker(note) ||
+    isSizeAvailabilityNote(note) ||
+    isPromotionCopyNote(note) ||
+    isColorConstraintNote(note)
+  );
+}
+
+function hasExplicitTextMarker(note: string): boolean {
+  const lower = note.toLowerCase();
+
+  return (
+    [
+      "\u6587\u6848",
+      "\u6587\u5b57",
+      "\u5199\u4e0a",
+      "\u663e\u793a",
+      "\u6807\u6ce8",
+      "\u6807\u8bc6",
+      "\u6807\u7b7e",
+    ].some((marker) => note.includes(marker)) ||
+    /\b(copy|text|label|caption|badge|slogan)\b/i.test(lower)
+  );
+}
+
+function isSizeAvailabilityNote(note: string): boolean {
+  return (
+    /(^|[^a-z])(xs|s|m|l|xl|xxl|xxxl)([^a-z]|$)/i.test(note) ||
+    /[0-9]+\s*(cm|mm|\u7801)/i.test(note) ||
+    [
+      "\u5c3a\u7801",
+      "\u53ea\u6709",
+      "\u4ec5\u6709",
+      "\u53ea\u5269",
+      "\u73b0\u8d27",
+      "\u5e93\u5b58",
+      "\u7801",
+    ].some((marker) => note.includes(marker)) ||
+    /\b(size|sizes|available|availability|only|in stock)\b/i.test(note)
+  );
+}
+
+function isPromotionCopyNote(note: string): boolean {
+  return (
+    /[0-9]\s*\u6298/.test(note) ||
+    /%/.test(note) ||
+    [
+      "\u9650\u65f6",
+      "\u4f18\u60e0",
+      "\u6ee1\u51cf",
+      "\u5305\u90ae",
+      "\u4e70\u4e00",
+      "\u8d60",
+      "\u6298\u6263",
+    ].some((marker) => note.includes(marker)) ||
+    /\b(off|discount|sale|promo|promotion)\b/i.test(note)
+  );
+}
+
+function isColorConstraintNote(note: string): boolean {
+  return (
+    [
+      "\u989c\u8272",
+      "\u8272\u53f7",
+      "\u8272",
+      "\u7d2b",
+      "\u9ed1",
+      "\u767d",
+      "\u7ea2",
+      "\u84dd",
+      "\u7eff",
+      "\u9ec4",
+      "\u7070",
+      "\u7c89",
+      "\u68d5",
+      "\u5496",
+    ].some((marker) => note.includes(marker)) ||
+    /\b(color|colour|purple|black|white|red|blue|green|yellow|gray|grey|pink|brown|beige)\b/i.test(
+      note,
+    )
+  );
+}
+
+function shouldHideInstructionNoteText(moduleId: string, note: string): boolean {
+  if (moduleId !== "buyer_show" || isProductFacingCopyNote(note)) {
+    return false;
+  }
+
+  return (
+    [
+      "\u7167\u7247",
+      "\u56fe\u7247",
+      "\u8fd9\u5f20\u56fe",
+      "\u7d20\u6750",
+      "\u4e70\u5bb6\u79c0",
+    ].some((marker) => note.includes(marker)) ||
+    /\b(photo|image|picture|asset|buyer|model|scene|reference)\b/i.test(note)
+  );
 }
 
 function getModuleReferenceAssets(

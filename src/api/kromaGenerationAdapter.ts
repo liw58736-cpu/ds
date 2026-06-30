@@ -312,6 +312,7 @@ function completedKromaTask(
     resultUrls: [resultUrl],
     creditCost: request.body.billing.estimatedCreditCost,
     routeMode: request.body.routeMode,
+    ...(task.channel_used ? { channelUsed: task.channel_used } : {}),
   };
 }
 
