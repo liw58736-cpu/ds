@@ -325,7 +325,11 @@ describe("App", () => {
       "支付套餐未配置完成：VITE_PADDLE_PRICE_PRO_TOP_UP。",
     );
     expect(checkoutOpen).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url]) => !String(url).includes("/api/v1/generations"),
+      ),
+    ).toHaveLength(0);
   });
 
   it("does not block Paddle checkout when only the internal top-up key is missing", async () => {

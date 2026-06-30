@@ -83,6 +83,14 @@ async function handleRequest(request, env, fetchImpl, imageRouter) {
       return await handleAddCredits(request, url, env, fetchImpl);
     }
 
+    if (url.pathname === "/api/v1/generations" && request.method === "GET") {
+      return await handleListGenerations(request, url, env, fetchImpl);
+    }
+
+    if (url.pathname === "/api/v1/generations" && request.method === "POST") {
+      return await handleSaveGeneration(request, env, fetchImpl);
+    }
+
     if (url.pathname === "/api/v1/billing/paddle/webhook" && request.method === "POST") {
       return await handlePaddleWebhook(request, env, fetchImpl);
     }
@@ -474,6 +482,335 @@ async function handleAddCredits(request, url, env, fetchImpl) {
     success: true,
     credits_remaining: credits,
   });
+}
+
+async function handleSaveGeneration(request, env, fetchImpl) {
+  const authUser = await requireAuthUser(request, env, fetchImpl);
+  const user = await getOrCreateWebUser(fetchImpl, env, authUser);
+  const body = await readJsonBody(request);
+  const task = normalizeGenerationTaskInput(body?.task ?? body);
+  const durableTask = await persistGenerationResultImages(
+    fetchImpl,
+    env,
+    task,
+    user.id,
+  );
+  const row = buildGenerationHistoryRow(durableTask, user.id);
+
+  const savedRows = await restFetch(
+    fetchImpl,
+    env,
+    "/web_generations?on_conflict=user_id,task_id",
+    {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: row,
+    },
+  );
+
+  return jsonResponse({
+    saved: true,
+    task: normalizeGenerationHistoryRow(
+      Array.isArray(savedRows) && savedRows[0] ? savedRows[0] : { task: durableTask },
+    ),
+  });
+}
+
+async function handleListGenerations(request, url, env, fetchImpl) {
+  const authUser = await requireAuthUser(request, env, fetchImpl);
+  const user = await getOrCreateWebUser(fetchImpl, env, authUser);
+  const limit = clampHistoryLimit(url.searchParams.get("limit"));
+  const rows = await restFetch(
+    fetchImpl,
+    env,
+    `/web_generations?user_id=eq.${encodeURIComponent(user.id)}&select=task,task_id,status,product,config,result_urls,result_assets,credits_cost,error_message,created_at,completed_at,attempt,backend_task_id,backend_task_ids,input_image_url,result_image_url,module&order=created_at.desc&limit=${limit}`,
+  );
+
+  return jsonResponse(
+    Array.isArray(rows) ? rows.map(normalizeGenerationHistoryRow) : [],
+  );
+}
+
+function normalizeGenerationTaskInput(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpError(422, { detail: "Generation task body is required" });
+  }
+
+  if (!value.id || typeof value.id !== "string") {
+    throw new HttpError(422, { detail: "Generation task id is required" });
+  }
+
+  if (!value.productInput || typeof value.productInput !== "object") {
+    throw new HttpError(422, { detail: "Generation task productInput is required" });
+  }
+
+  if (!value.config || typeof value.config !== "object") {
+    throw new HttpError(422, { detail: "Generation task config is required" });
+  }
+
+  return value;
+}
+
+function buildGenerationHistoryRow(task, userId) {
+  const resultUrls = Array.isArray(task.resultUrls) ? task.resultUrls : [];
+  const resultAssets = Array.isArray(task.resultAssets) ? task.resultAssets : [];
+  const backendTaskIds = Array.isArray(task.backendTaskIds) ? task.backendTaskIds : [];
+
+  return {
+    task_id: task.id,
+    user_id: userId,
+    status: String(task.status ?? "completed"),
+    module: stringOrNull(task.config?.module),
+    input_image_url: stringOrNull(task.productInput?.imageUrl),
+    result_image_url: stringOrNull(resultUrls[0]),
+    credits_cost: numberOrZero(task.creditCost),
+    error_message: stringOrNull(task.errorMessage),
+    task,
+    product: task.productInput,
+    config: task.config,
+    result_urls: resultUrls,
+    result_assets: resultAssets,
+    backend_task_id: stringOrNull(task.backendTaskId),
+    backend_task_ids: backendTaskIds,
+    completed_at: stringOrNull(task.completedAt),
+    attempt: Number.isFinite(Number(task.attempt)) ? Number(task.attempt) : 1,
+    created_at: stringOrNull(task.createdAt) ?? new Date().toISOString(),
+  };
+}
+
+function normalizeGenerationHistoryRow(row) {
+  if (row?.task && typeof row.task === "object" && !Array.isArray(row.task)) {
+    return row.task;
+  }
+
+  const resultUrls = Array.isArray(row?.result_urls)
+    ? row.result_urls.filter((url) => typeof url === "string")
+    : row?.result_image_url
+      ? [String(row.result_image_url)]
+      : [];
+  const resultAssets = Array.isArray(row?.result_assets)
+    ? row.result_assets.filter(
+        (asset) =>
+          asset &&
+          typeof asset === "object" &&
+          typeof asset.url === "string" &&
+          typeof asset.label === "string",
+      )
+    : undefined;
+  const productInput =
+    row?.product && typeof row.product === "object" && !Array.isArray(row.product)
+      ? row.product
+      : {
+          id: `product-${row?.task_id ?? row?.id ?? "history"}`,
+          imageUrl: String(row?.input_image_url ?? ""),
+          fileName: "history-product.png",
+          createdAt: row?.created_at ?? new Date().toISOString(),
+          source: "upload",
+        };
+  const config =
+    row?.config && typeof row.config === "object" && !Array.isArray(row.config)
+      ? row.config
+      : {
+          module: String(row?.module ?? "main_image"),
+          platform: "shopify",
+          aspectRatio: "1:1",
+          style: "premium",
+          outputFormat: "png",
+          sellingPoints: "",
+          specifications: "",
+          resolution: "1K",
+        };
+
+  return {
+    id: String(row?.task_id ?? row?.id ?? `history-${Date.now()}`),
+    productInput,
+    config,
+    status: String(row?.status ?? "completed"),
+    resultUrls,
+    ...(resultAssets && resultAssets.length > 0 ? { resultAssets } : {}),
+    ...(row?.backend_task_id ? { backendTaskId: String(row.backend_task_id) } : {}),
+    ...(Array.isArray(row?.backend_task_ids) && row.backend_task_ids.length > 0
+      ? { backendTaskIds: row.backend_task_ids.filter((taskId) => typeof taskId === "string") }
+      : {}),
+    ...(row?.error_message ? { errorMessage: String(row.error_message) } : {}),
+    creditCost: numberOrZero(row?.credits_cost),
+    createdAt: String(row?.created_at ?? new Date().toISOString()),
+    ...(row?.completed_at ? { completedAt: String(row.completed_at) } : {}),
+    attempt: Number.isFinite(Number(row?.attempt)) ? Number(row.attempt) : 1,
+  };
+}
+
+function stringOrNull(value) {
+  return typeof value === "string" && value ? value : null;
+}
+
+function numberOrZero(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function clampHistoryLimit(value) {
+  const number = Number.parseInt(String(value ?? "100"), 10);
+
+  if (!Number.isFinite(number)) {
+    return 100;
+  }
+
+  return Math.min(200, Math.max(1, number));
+}
+
+async function persistGenerationResultImages(fetchImpl, env, task, userId) {
+  const bucket = env.WEB_GENERATION_STORAGE_BUCKET?.trim();
+
+  if (!bucket || !Array.isArray(task.resultUrls) || task.resultUrls.length === 0) {
+    return task;
+  }
+
+  const copiedUrls = await Promise.all(
+    task.resultUrls.map((url, index) =>
+      copyGenerationResultImage(fetchImpl, env, {
+        bucket,
+        userId,
+        taskId: task.id,
+        index,
+        url,
+      }),
+    ),
+  );
+
+  if (copiedUrls.every((url, index) => url === task.resultUrls[index])) {
+    return task;
+  }
+
+  const replacements = new Map(
+    task.resultUrls.map((url, index) => [url, copiedUrls[index]]),
+  );
+  const resultAssets = Array.isArray(task.resultAssets)
+    ? task.resultAssets.map((asset) => ({
+        ...asset,
+        url: replacements.get(asset.url) ?? asset.url,
+      }))
+    : undefined;
+
+  return {
+    ...task,
+    resultUrls: copiedUrls,
+    ...(resultAssets ? { resultAssets } : {}),
+  };
+}
+
+async function copyGenerationResultImage(fetchImpl, env, input) {
+  if (isSupabasePublicStorageUrl(env, input.bucket, input.url)) {
+    return input.url;
+  }
+
+  try {
+    const image = await readImageForStorage(fetchImpl, input.url);
+    const objectPath = [
+      sanitizeStoragePathSegment(input.userId),
+      sanitizeStoragePathSegment(input.taskId),
+      `${input.index + 1}.${image.extension}`,
+    ].join("/");
+    const response = await fetchImpl(
+      `${supabaseUrl(env)}/storage/v1/object/${encodeURIComponent(input.bucket)}/${objectPath}`,
+      {
+        method: "PUT",
+        headers: {
+          apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": image.contentType,
+          "x-upsert": "true",
+        },
+        body: new Blob([image.buffer], { type: image.contentType }),
+      },
+    );
+
+    await parseSupabaseResponse(response);
+
+    return `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(input.bucket)}/${objectPath}`;
+  } catch {
+    return input.url;
+  }
+}
+
+async function readImageForStorage(fetchImpl, url) {
+  if (url.startsWith("data:")) {
+    return parseDataUrlImage(url);
+  }
+
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    throw new Error("Unsupported image URL");
+  }
+
+  const response = await fetchImpl(url);
+
+  if (!response.ok) {
+    throw new Error("Image result could not be fetched");
+  }
+
+  const contentType = normalizeImageContentType(response.headers.get("Content-Type"));
+  const buffer = Buffer.from(await response.arrayBuffer());
+
+  return {
+    buffer,
+    contentType,
+    extension: imageExtension(contentType, url),
+  };
+}
+
+function parseDataUrlImage(url) {
+  const match = url.match(/^data:([^;,]+)?(;base64)?,(.*)$/i);
+
+  if (!match) {
+    throw new Error("Invalid data URL image");
+  }
+
+  const contentType = normalizeImageContentType(match[1]);
+  const buffer = match[2]
+    ? Buffer.from(match[3], "base64")
+    : Buffer.from(decodeURIComponent(match[3]));
+
+  return {
+    buffer,
+    contentType,
+    extension: imageExtension(contentType, ""),
+  };
+}
+
+function normalizeImageContentType(value) {
+  const contentType = String(value ?? "image/png").split(";")[0].trim().toLowerCase();
+
+  return ["image/png", "image/jpeg", "image/webp"].includes(contentType)
+    ? contentType
+    : "image/png";
+}
+
+function imageExtension(contentType, url) {
+  if (contentType === "image/jpeg") {
+    return "jpg";
+  }
+
+  if (contentType === "image/webp") {
+    return "webp";
+  }
+
+  const extension = String(url).match(/\.(png|jpg|jpeg|webp)(?:\?|#|$)/i)?.[1];
+
+  return extension ? extension.toLowerCase().replace("jpeg", "jpg") : "png";
+}
+
+function sanitizeStoragePathSegment(value) {
+  return String(value ?? "item")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96) || "item";
+}
+
+function isSupabasePublicStorageUrl(env, bucket, url) {
+  return String(url).startsWith(
+    `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/`,
+  );
 }
 
 async function handleImageProxy(request, env, fetchImpl, upstreamPath, method) {

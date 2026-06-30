@@ -61,6 +61,8 @@ services:
         sync: false
       - key: WEB_IMAGE_API_KEY
         sync: false
+      - key: WEB_GENERATION_STORAGE_BUCKET
+        value: web-generation-results
 
   - type: web
     name: kroma-web

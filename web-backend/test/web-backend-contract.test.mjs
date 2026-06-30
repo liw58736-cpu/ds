@@ -1621,3 +1621,281 @@ test("paddle webhook retries events that failed before credit mutation", async (
   assert.equal(transactions.length, 1);
   assert.equal(billingEvents[0].status, "processed");
 });
+
+test("generation history stores a completed task for the authenticated web user", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+
+      if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
+        return jsonResponse([
+          { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+        ]);
+      }
+
+      if (url.endsWith("/rest/v1/web_generations?on_conflict=user_id,task_id")) {
+        const body = JSON.parse(init.body);
+        return jsonResponse([body]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const task = {
+    id: "task-cloud-1",
+    productInput: {
+      id: "product-1",
+      imageUrl: "https://cdn.example.com/product.png",
+      fileName: "product.png",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      source: "upload",
+    },
+    config: {
+      module: "main_image",
+      platform: "shopify",
+      aspectRatio: "1:1",
+      style: "premium",
+      outputFormat: "png",
+      sellingPoints: "Launch hero",
+      specifications: "Single SKU",
+      resolution: "1K",
+      selectedMainModules: ["hero_kv", "overall_show"],
+    },
+    status: "completed",
+    resultUrls: [
+      "https://cdn.example.com/result-hero.png",
+      "https://cdn.example.com/result-overall.png",
+    ],
+    resultAssets: [
+      { url: "https://cdn.example.com/result-hero.png", label: "Hero KV" },
+      { url: "https://cdn.example.com/result-overall.png", label: "Overall show" },
+    ],
+    backendTaskIds: ["image-task-1", "image-task-2"],
+    creditCost: 2,
+    createdAt: "2026-06-17T00:01:00.000Z",
+    completedAt: "2026-06-17T00:02:00.000Z",
+    attempt: 1,
+  };
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/generations", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer web-access-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(task),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), { saved: true, task });
+  const upsertCall = calls.find((call) =>
+    call.url.endsWith("/rest/v1/web_generations?on_conflict=user_id,task_id"),
+  );
+  assert.equal(upsertCall.init.method, "POST");
+  assert.match(upsertCall.init.headers.Prefer, /resolution=merge-duplicates/);
+  assert.deepEqual(JSON.parse(upsertCall.init.body), {
+    task_id: "task-cloud-1",
+    user_id: "web-user-1",
+    status: "completed",
+    module: "main_image",
+    input_image_url: "https://cdn.example.com/product.png",
+    result_image_url: "https://cdn.example.com/result-hero.png",
+    credits_cost: 2,
+    error_message: null,
+    task,
+    product: task.productInput,
+    config: task.config,
+    result_urls: task.resultUrls,
+    result_assets: task.resultAssets,
+    backend_task_id: null,
+    backend_task_ids: task.backendTaskIds,
+    completed_at: "2026-06-17T00:02:00.000Z",
+    attempt: 1,
+    created_at: "2026-06-17T00:01:00.000Z",
+  });
+});
+
+test("generation history can copy result images into web storage before saving", async () => {
+  const storedRows = [];
+  const storageUploads = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_GENERATION_STORAGE_BUCKET: "web-generation-results",
+    },
+    fetch: async (url, init = {}) => {
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+
+      if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
+        return jsonResponse([
+          { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+        ]);
+      }
+
+      if (url === "https://cdn.example.com/provider-result.png") {
+        return new Response(new Uint8Array([137, 80, 78, 71]), {
+          status: 200,
+          headers: { "Content-Type": "image/png" },
+        });
+      }
+
+      if (
+        url ===
+        "https://web-project.supabase.co/storage/v1/object/web-generation-results/web-user-1/task-cloud-durable/1.png"
+      ) {
+        storageUploads.push({
+          headers: init.headers,
+          body: Buffer.from(await init.body.arrayBuffer()),
+        });
+        return jsonResponse({ Key: "web-generation-results/web-user-1/task-cloud-durable/1.png" });
+      }
+
+      if (url.endsWith("/rest/v1/web_generations?on_conflict=user_id,task_id")) {
+        const body = JSON.parse(init.body);
+        storedRows.push(body);
+        return jsonResponse([body]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const task = {
+    id: "task-cloud-durable",
+    productInput: {
+      id: "product-1",
+      imageUrl: "https://cdn.example.com/product.png",
+      fileName: "product.png",
+      createdAt: "2026-06-17T00:00:00.000Z",
+      source: "upload",
+    },
+    config: {
+      module: "main_image",
+      platform: "shopify",
+      aspectRatio: "1:1",
+      style: "premium",
+      outputFormat: "png",
+      sellingPoints: "Launch hero",
+      specifications: "Single SKU",
+      resolution: "1K",
+      selectedMainModules: ["hero_kv"],
+    },
+    status: "completed",
+    resultUrls: ["https://cdn.example.com/provider-result.png"],
+    resultAssets: [{ url: "https://cdn.example.com/provider-result.png", label: "Hero KV" }],
+    creditCost: 1,
+    createdAt: "2026-06-17T00:01:00.000Z",
+    completedAt: "2026-06-17T00:02:00.000Z",
+    attempt: 1,
+  };
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/generations", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer web-access-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(task),
+    }),
+  );
+
+  const durableUrl =
+    "https://web-project.supabase.co/storage/v1/object/public/web-generation-results/web-user-1/task-cloud-durable/1.png";
+
+  assert.equal(response.status, 200);
+  assert.equal(storageUploads.length, 1);
+  assert.equal(storageUploads[0].headers["x-upsert"], "true");
+  assert.equal(storageUploads[0].headers["Content-Type"], "image/png");
+  assert.deepEqual([...storageUploads[0].body], [137, 80, 78, 71]);
+  assert.deepEqual(storedRows[0].result_urls, [durableUrl]);
+  assert.deepEqual(storedRows[0].result_assets, [{ url: durableUrl, label: "Hero KV" }]);
+  assert.deepEqual((await readJson(response)).task.resultUrls, [durableUrl]);
+});
+
+test("generation history lists only rows for the authenticated web user", async () => {
+  const calls = [];
+  const task = {
+    id: "task-cloud-2",
+    productInput: {
+      id: "product-2",
+      imageUrl: "https://cdn.example.com/product-2.png",
+      fileName: "product-2.png",
+      createdAt: "2026-06-18T00:00:00.000Z",
+      source: "sample",
+    },
+    config: {
+      module: "detail_page",
+      platform: "shopify",
+      aspectRatio: "long_page",
+      style: "premium",
+      outputFormat: "jpg",
+      sellingPoints: "Fabric details",
+      specifications: "XL only",
+      resolution: "1K",
+      detailModuleCounts: { fabric_craft: 1 },
+    },
+    status: "completed",
+    resultUrls: ["https://cdn.example.com/detail.png"],
+    resultAssets: [{ url: "https://cdn.example.com/detail.png", label: "Fabric" }],
+    creditCost: 1,
+    createdAt: "2026-06-18T00:01:00.000Z",
+    completedAt: "2026-06-18T00:02:00.000Z",
+    attempt: 1,
+  };
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+    },
+    fetch: async (url) => {
+      calls.push({ url });
+
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+
+      if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
+        return jsonResponse([
+          { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+        ]);
+      }
+
+      if (url.includes("/rest/v1/web_generations?")) {
+        assert.match(url, /user_id=eq.web-user-1/);
+        assert.match(url, /order=created_at.desc/);
+        return jsonResponse([{ task }]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/generations", {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), [task]);
+  assert.equal(calls.some((call) => call.url.includes("user_id=eq.web-user-1")), true);
+});

@@ -20,16 +20,58 @@ create table if not exists public.web_credit_transactions (
 create table if not exists public.web_generations (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references public.web_users(id) on delete set null,
+  task_id text,
   status text not null default 'pending',
   module text,
   prompt text,
   input_image_url text,
   result_image_url text,
+  task jsonb,
+  product jsonb,
+  config jsonb,
+  result_urls jsonb not null default '[]'::jsonb,
+  result_assets jsonb not null default '[]'::jsonb,
+  backend_task_id text,
+  backend_task_ids jsonb not null default '[]'::jsonb,
   credits_cost integer not null default 0,
   error_message text,
+  completed_at timestamptz,
+  attempt integer not null default 1,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.web_generations
+  add column if not exists task_id text,
+  add column if not exists task jsonb,
+  add column if not exists product jsonb,
+  add column if not exists config jsonb,
+  add column if not exists result_urls jsonb not null default '[]'::jsonb,
+  add column if not exists result_assets jsonb not null default '[]'::jsonb,
+  add column if not exists backend_task_id text,
+  add column if not exists backend_task_ids jsonb not null default '[]'::jsonb,
+  add column if not exists completed_at timestamptz,
+  add column if not exists attempt integer not null default 1;
+
+create unique index if not exists web_generations_user_task_idx
+on public.web_generations (user_id, task_id);
+
+create index if not exists web_generations_user_created_idx
+on public.web_generations (user_id, created_at desc);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'web-generation-results',
+  'web-generation-results',
+  true,
+  20971520,
+  array['image/png', 'image/jpeg', 'image/webp']
+)
+on conflict (id) do update
+set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 create table if not exists public.web_auth_codes (
   id uuid primary key default gen_random_uuid(),

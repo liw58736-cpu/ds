@@ -1,14 +1,20 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createGenerationTask,
   generateAsset,
   getGenerationTaskSnapshot,
   listGenerationTasks,
   resumeGenerationTask,
+  saveGenerationTaskHistory,
   saveGenerationTasks,
 } from "./generationApi";
 import type { GenerateInput } from "../providers/generationProvider";
 import type { GenerationTask } from "../domain/types";
+import { replaceAccountSnapshot } from "../storage/accountStore";
+
+beforeEach(() => {
+  localStorage.clear();
+});
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -163,6 +169,111 @@ describe("generationApi", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.example.com/api/generation/tasks?accountId=guest",
       expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("lists generation tasks from the web backend when logged in", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1");
+    vi.stubEnv("VITE_API_BASE_URL", "");
+    replaceAccountSnapshot({
+      session: {
+        identifier: "seller@example.com",
+        authView: "login",
+        mode: "password",
+        storeName: "",
+        inviteCode: "",
+        createdAt: "2026-06-17T00:00:00.000Z",
+        provider: "kroma",
+        userId: "web-user-1",
+        accessToken: "web-access-token",
+        refreshToken: "web-refresh-token",
+      },
+      balance: 5,
+      transactions: [],
+    });
+    const remoteTasks: GenerationTask[] = [
+      {
+        id: "web-task-1",
+        productInput: input.product,
+        config: input.config,
+        status: "completed",
+        resultUrls: ["https://cdn.example.com/web-result.png"],
+        creditCost: 1,
+        createdAt: "2026-06-17T00:00:00.000Z",
+        completedAt: "2026-06-17T00:00:01.000Z",
+        attempt: 1,
+      },
+    ];
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(remoteTasks),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listGenerationTasks()).resolves.toEqual(remoteTasks);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://web-api.example.com/api/v1/generations?limit=100",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Authorization: "Bearer web-access-token",
+          "X-Kroma-Client": "web",
+        }),
+      }),
+    );
+  });
+
+  it("saves completed generation tasks to the web backend when logged in", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1");
+    replaceAccountSnapshot({
+      session: {
+        identifier: "seller@example.com",
+        authView: "login",
+        mode: "password",
+        storeName: "",
+        inviteCode: "",
+        createdAt: "2026-06-17T00:00:00.000Z",
+        provider: "kroma",
+        userId: "web-user-1",
+        accessToken: "web-access-token",
+        refreshToken: "web-refresh-token",
+      },
+      balance: 5,
+      transactions: [],
+    });
+    const task: GenerationTask = {
+      id: "web-save-task-1",
+      productInput: input.product,
+      config: input.config,
+      status: "completed",
+      resultUrls: ["https://cdn.example.com/web-save-result.png"],
+      resultAssets: [
+        { url: "https://cdn.example.com/web-save-result.png", label: "Hero KV" },
+      ],
+      creditCost: 1,
+      createdAt: "2026-06-17T00:00:00.000Z",
+      completedAt: "2026-06-17T00:00:01.000Z",
+      attempt: 1,
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ saved: true, task }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await saveGenerationTaskHistory(task);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://web-api.example.com/api/v1/generations",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(task),
+        headers: expect.objectContaining({
+          Authorization: "Bearer web-access-token",
+          "Content-Type": "application/json",
+          "X-Kroma-Client": "web",
+        }),
+      }),
     );
   });
 

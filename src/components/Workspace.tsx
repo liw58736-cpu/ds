@@ -26,6 +26,7 @@ import {
   getGenerationTaskSnapshot,
   listGenerationTasks,
   resumeGenerationTask,
+  saveGenerationTaskHistory,
   saveGenerationTasks,
 } from "../api/generationApi";
 import { GenerationProviderError } from "../providers/generationProvider";
@@ -238,6 +239,7 @@ export function Workspace({
 
         setAccountBalance(account.balance);
         setTasks((currentTasks) => moveTaskToTop(currentTasks, completedTask));
+        void saveGenerationTaskHistory(completedTask);
       } catch (error) {
         if (!isTaskRunCurrent(processingTask.id, runToken)) {
           return;
@@ -250,6 +252,7 @@ export function Workspace({
         });
 
         setTasks((currentTasks) => moveTaskToTop(currentTasks, failedTask));
+        void saveGenerationTaskHistory(failedTask);
       }
     },
     [],

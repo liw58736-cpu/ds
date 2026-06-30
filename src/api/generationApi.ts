@@ -10,8 +10,10 @@ import type {
   GenerationTask,
   MainImageModuleId,
 } from "../domain/types";
+import { getAccountAccessToken } from "../storage/accountStore";
 import { loadTasks, saveTasks } from "../storage/taskStore";
 import { buildGenerationTaskRequest, buildTaskListRequest } from "./apiContracts";
+import { refreshKromaSession } from "./accountApi";
 import {
   cancelKromaGenerationTask,
   resumeKromaGenerationTask,
@@ -253,12 +255,28 @@ export async function cancelGenerationTask(
 
 export async function listGenerationTasks(): Promise<GenerationTask[]> {
   const request = buildTaskListRequest();
+  const localTasks = loadTasks({
+    keepResumableTasks: shouldUseKromaGenerationBackend(),
+  });
+
+  if (shouldUseWebGenerationHistoryBackend()) {
+    try {
+      const cloudTasks = await requestWebGenerationJson<GenerationTask[]>(
+        "/generations?limit=100",
+        { method: "GET" },
+      );
+
+      return mergeGenerationTasks(cloudTasks, localTasks);
+    } catch {
+      return localTasks;
+    }
+  }
 
   if (shouldUseRemoteBackend()) {
     return requestRemoteJson<GenerationTask[]>(request);
   }
 
-  return loadTasks({ keepResumableTasks: shouldUseKromaGenerationBackend() });
+  return localTasks;
 }
 
 export function getGenerationTaskSnapshot(): GenerationTask[] {
@@ -269,4 +287,105 @@ export async function saveGenerationTasks(
   tasks: GenerationTask[],
 ): Promise<void> {
   saveTasks(tasks);
+}
+
+export async function saveGenerationTaskHistory(
+  task: GenerationTask,
+): Promise<void> {
+  if (!shouldUseWebGenerationHistoryBackend()) {
+    return;
+  }
+
+  try {
+    await requestWebGenerationJson<{ saved: boolean; task: GenerationTask }>(
+      "/generations",
+      {
+        method: "POST",
+        body: JSON.stringify(task),
+      },
+    );
+  } catch {
+    // Local history remains the immediate fallback; cloud history should not
+    // interrupt generation completion.
+  }
+}
+
+function mergeGenerationTasks(
+  cloudTasks: GenerationTask[],
+  localTasks: GenerationTask[],
+): GenerationTask[] {
+  const cloudTaskIds = new Set(cloudTasks.map((task) => task.id));
+
+  return [
+    ...cloudTasks,
+    ...localTasks.filter((task) => !cloudTaskIds.has(task.id)),
+  ];
+}
+
+function getConfiguredWebGenerationApiBaseUrl(): string | null {
+  const value = import.meta.env.VITE_WEB_API_BASE_URL?.trim();
+
+  if (!value) {
+    return null;
+  }
+
+  return value.replace(/\/+$/, "");
+}
+
+function shouldUseWebGenerationHistoryBackend(): boolean {
+  return Boolean(getConfiguredWebGenerationApiBaseUrl() && getAccountAccessToken());
+}
+
+async function requestWebGenerationJson<Payload>(
+  path: string,
+  init: RequestInit,
+): Promise<Payload> {
+  const baseUrl = getConfiguredWebGenerationApiBaseUrl();
+  const accessToken = getAccountAccessToken();
+
+  if (!baseUrl || !accessToken) {
+    throw new Error("Web generation history backend is not configured.");
+  }
+
+  let response = await fetch(
+    `${baseUrl}${path}`,
+    buildWebGenerationRequestInit(init, accessToken),
+  );
+
+  if (response.status === 401 || response.status === 403) {
+    await response.text();
+    const refreshedToken = await refreshKromaSession();
+
+    if (refreshedToken) {
+      response = await fetch(
+        `${baseUrl}${path}`,
+        buildWebGenerationRequestInit(init, refreshedToken),
+      );
+    }
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+
+    throw new Error(
+      `Web generation history request failed: ${response.status} ${text}`,
+    );
+  }
+
+  return response.json() as Promise<Payload>;
+}
+
+function buildWebGenerationRequestInit(
+  init: RequestInit,
+  accessToken: string,
+): RequestInit {
+  return {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Kroma-Client": "web",
+      Authorization: `Bearer ${accessToken}`,
+      ...(init.headers ?? {}),
+    },
+  };
 }
