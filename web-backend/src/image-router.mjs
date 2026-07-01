@@ -5,23 +5,6 @@ const defaultMaxAttempts = 3;
 const defaultTaskTtlMs = 30 * 60 * 1000;
 
 const terminalStatuses = new Set(["done", "error"]);
-const detailPageIdentityModules = new Set([
-  "main_display",
-  "style_selling",
-  "fabric_craft",
-  "cutting",
-  "color_size",
-  "multi_color",
-  "promotion",
-  "specs",
-  "care",
-  "buyer_show",
-  "outfit_recommend",
-  "scene_outfit",
-  "blogger_outfit",
-  "flat_lay",
-  "hanger",
-]);
 
 export function hasConfiguredImageProviders(env) {
   return buildProviderPool(env).providers.length > 0;
@@ -194,10 +177,6 @@ function planForRequest(requestBody) {
     { provider: "gptsapi", tier: "standard", progress: "正在生成图片" },
   ];
 
-  if (shouldSkipPackyApiForProductIdentity(requestBody)) {
-    return standardPlan.filter((step) => step.provider !== "packyapi");
-  }
-
   return standardPlan;
 }
 
@@ -221,19 +200,6 @@ function isEditToolRequest(requestBody) {
   ].some((mode) => style.includes(mode));
 }
 
-function shouldSkipPackyApiForProductIdentity(requestBody) {
-  const style = String(requestBody.style ?? "").toLowerCase();
-  const parts = style.split(":");
-
-  if (parts[0] !== "detail_page") {
-    return false;
-  }
-
-  const detailModuleId = parts[1];
-
-  return !detailModuleId || detailPageIdentityModules.has(detailModuleId);
-}
-
 async function tryProvider({ key, requestBody, env, fetchImpl }) {
   if (key.provider === "gptsapi") {
     return requestGptsapi({ key, requestBody, fetchImpl });
@@ -247,6 +213,10 @@ async function tryProvider({ key, requestBody, env, fetchImpl }) {
 }
 
 async function requestOpenAICompatible({ key, requestBody, env, fetchImpl }) {
+  if (shouldUsePackyTemplateEdit(key.provider, requestBody)) {
+    return requestPackyTemplateEdit({ key, requestBody, env, fetchImpl });
+  }
+
   const payload = buildOpenAICompatiblePayload(key.provider, requestBody, env);
   const endpoint = `${key.baseUrl}/images/generations`;
   const response = await fetchImpl(endpoint, {
@@ -266,6 +236,62 @@ async function requestOpenAICompatible({ key, requestBody, env, fetchImpl }) {
   }
 
   return imageResultFromOpenAI(data);
+}
+
+async function requestPackyTemplateEdit({ key, requestBody, env, fetchImpl }) {
+  const model = env.PACKYAPI_IMAGE_MODEL?.trim() || defaultModel;
+  const form = new FormData();
+  const imageInputs = [
+    sourceImageInputFromRequest(requestBody),
+    ...templateImageInputsFromRequest(requestBody),
+  ].filter(Boolean);
+
+  form.set("model", model);
+  form.set("prompt", String(requestBody.prompt ?? ""));
+  form.set("n", "1");
+  form.set("size", packyApiEditSize(requestBody.size));
+  form.set("quality", isHdRequest(requestBody) ? "high" : "medium");
+  form.set("output_format", "png");
+  if (supportsResponseFormat(key.provider, model)) {
+    form.set("response_format", "url");
+  }
+
+  for (const [index, input] of imageInputs.entries()) {
+    const file = await imageInputToBlob(String(input), fetchImpl);
+    if (!file) {
+      return {
+        error: `input_image_upload_failed: image ${index + 1} could not be prepared for PackyAPI`,
+      };
+    }
+    form.append("image", file, `image_${index + 1}.${extensionFromContentType(file.type)}`);
+  }
+
+  const response = await fetchImpl(`${key.baseUrl}/images/edits`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key.apiKey}`,
+      Accept: "*/*",
+    },
+    body: form,
+  });
+  const data = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    return {
+      error: providerError(response.status, data),
+    };
+  }
+
+  return imageResultFromOpenAI(data);
+}
+
+function shouldUsePackyTemplateEdit(provider, requestBody) {
+  return (
+    provider === "packyapi" &&
+    Boolean(requestBody.use_template_mode) &&
+    Boolean(sourceImageInputFromRequest(requestBody)) &&
+    templateImageInputsFromRequest(requestBody).length > 0
+  );
 }
 
 function buildOpenAICompatiblePayload(provider, requestBody, env) {
@@ -301,8 +327,20 @@ function supportsResponseFormat(provider, model) {
 
 function imageInputsFromRequest(requestBody) {
   return [
-    requestBody.image_url,
-    requestBody.image_base64,
+    sourceImageInputFromRequest(requestBody),
+    ...templateImageInputsFromRequest(requestBody),
+  ]
+    .filter(Boolean)
+    .map(String)
+    .filter((image, index, images) => images.indexOf(image) === index);
+}
+
+function sourceImageInputFromRequest(requestBody) {
+  return requestBody.image_url || requestBody.image_base64 || "";
+}
+
+function templateImageInputsFromRequest(requestBody) {
+  return [
     requestBody.template_image_base64,
     ...(Array.isArray(requestBody.template_image_base64s)
       ? requestBody.template_image_base64s
@@ -311,6 +349,97 @@ function imageInputsFromRequest(requestBody) {
     .filter(Boolean)
     .map(String)
     .filter((image, index, images) => images.indexOf(image) === index);
+}
+
+async function imageInputToBlob(input, fetchImpl) {
+  const value = String(input ?? "").trim();
+
+  if (!value) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const response = await fetchImpl(value, { method: "GET" });
+      if (!response.ok) {
+        return null;
+      }
+      const contentType = normalizeImageContentType(
+        response.headers?.get?.("Content-Type"),
+      );
+      const buffer = await response.arrayBuffer();
+      return new Blob([buffer], { type: contentType });
+    } catch {
+      return null;
+    }
+  }
+
+  const dataUrlMatch = value.match(/^data:([^;,]+)?;base64,(.*)$/is);
+  const contentType = normalizeImageContentType(dataUrlMatch?.[1]);
+  const rawBase64 = (dataUrlMatch?.[2] ?? value).replace(/\s/g, "");
+
+  try {
+    const bytes = Buffer.from(rawBase64, "base64");
+    if (bytes.length === 0) {
+      return null;
+    }
+    return new Blob([bytes], { type: contentType });
+  } catch {
+    return null;
+  }
+}
+
+function normalizeImageContentType(value) {
+  const contentType = String(value ?? "").split(";")[0].trim().toLowerCase();
+  return contentType.startsWith("image/") ? contentType : "image/png";
+}
+
+function extensionFromContentType(contentType) {
+  const normalized = normalizeImageContentType(contentType);
+  if (normalized === "image/jpeg" || normalized === "image/jpg") {
+    return "jpg";
+  }
+  if (normalized === "image/webp") {
+    return "webp";
+  }
+  return "png";
+}
+
+function packyApiEditSize(size) {
+  const value = normalizeSize(size);
+  const [rawWidth, rawHeight] = value
+    .split("x")
+    .map((part) => Number.parseInt(part, 10));
+
+  if (!rawWidth || !rawHeight) {
+    return value;
+  }
+
+  const shortEdge = Math.min(rawWidth, rawHeight);
+  const scale = Math.max(1, 768 / shortEdge);
+  const width = Math.ceil((rawWidth * scale) / 16) * 16;
+  const height = Math.ceil((rawHeight * scale) / 16) * 16;
+
+  return clampImageSize(`${width}x${height}`);
+}
+
+function clampImageSize(size) {
+  const [rawWidth, rawHeight] = normalizeSize(size)
+    .split("x")
+    .map((part) => Number.parseInt(part, 10));
+  const maxEdge = Math.max(rawWidth, rawHeight);
+  const maxPixels = 3840 * 2160;
+
+  if (!rawWidth || !rawHeight || (maxEdge <= 3840 && rawWidth * rawHeight <= maxPixels)) {
+    return `${rawWidth}x${rawHeight}`;
+  }
+
+  const scale = Math.min(
+    3840 / maxEdge,
+    Math.sqrt(maxPixels / (rawWidth * rawHeight)),
+  );
+
+  return `${Math.floor(rawWidth * scale)}x${Math.floor(rawHeight * scale)}`;
 }
 
 async function requestGptsapi({ key, requestBody, fetchImpl }) {
