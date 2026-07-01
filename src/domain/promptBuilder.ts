@@ -45,7 +45,7 @@ const mainImagePrompts: Record<
   color_set: {
     title: "多色套装",
     prompt:
-      "Arrange multiple SKU colors or bundle variations with clean alignment, tasteful spacing, and a premium set-comparison feel.",
+      "Arrange multiple SKU colors or bundle variations with clean alignment, tasteful spacing, and a premium set-comparison feel. Only recolor the exact Image 1 garment: keep the same collar, sleeve length, cuffs, placket, hem, silhouette, fabric, closure, buttons, seams, and product category. Never turn the source product into a dress, lingerie, lace costume, packaging-only mockup, or unrelated SKU.",
   },
   function_compare: {
     title: "功能对比",
@@ -96,12 +96,12 @@ const detailPrompts: Record<
   color_size: {
     title: "颜色尺码",
     prompt:
-      "Show the worn subject with tasteful color swatches and a clean size-card area. Preserve the Image 1 product and display this exact size information from the user's specifications when provided; do not add unavailable sizes or fake unreadable text.",
+      "Show the worn subject with tasteful color swatches and a clean size-card area. Use the same Image 1 garment as the main visual, display this exact size information from the user's specifications when provided, and show only the exact user-provided sizes or availability; do not add unavailable sizes or fake unreadable text. Keep the product category, collar, sleeves, cuffs, placket, hem, fabric, and colorways consistent with Image 1.",
   },
   multi_color: {
     title: "多色组合",
     prompt:
-      "Present the same garment in multiple colors side by side with consistent pose, lighting, and easy visual comparison.",
+      "Present the same garment in multiple colors side by side with consistent pose, lighting, and easy visual comparison. Only recolor the exact Image 1 garment: same collar, sleeve length, cuffs, placket, hem, silhouette, fabric, closure, buttons, seams, and product category. Never turn the source product into a dress, lingerie, lace costume, packaging-only mockup, or unrelated SKU.",
   },
   promotion: {
     title: "价格优惠",
@@ -131,7 +131,7 @@ const detailPrompts: Record<
   buyer_show: {
     title: "买家秀",
     prompt:
-      "Create UGC-like lifestyle imagery with natural home, street, or cafe context while keeping the product commercially polished. Preserve Image 1 product identity, garment details, colors, fabric, and fit. If Image 2 reference assets are provided, must use Image 2 reference assets as the buyer-show model, pose, scene, styling, or user material source for this module.",
+      "Create UGC-like lifestyle imagery with natural home, street, or cafe context while keeping the product commercially polished. Preserve Image 1 product identity, garment details, colors, fabric, and fit. If Image 2 reference assets are provided, dress the Image 2 buyer/model in the exact Image 1 product while using Image 2 for model, pose, scene, styling, or user material source. Image 2 must not replace the product SKU.",
   },
   outfit_recommend: {
     title: "搭配推荐",
@@ -222,7 +222,7 @@ export function buildGenerationPrompt(
     `output language: ${config.outputLanguage ?? "中文"}`,
     config.sellingPoints ? `product requirements: ${config.sellingPoints}` : "",
     config.specifications ? `promotion information: ${config.specifications}` : "",
-    "Preserve Image 1 product identity: same product category, garment shape, material, color, seams, lace, buttons, logos, packaging, camera-facing details, and recognisable design. Do not replace it with a different product.",
+    "Preserve Image 1 product identity: same product category, garment shape, material, color, seams, lace, buttons, logos, packaging, camera-facing details, and recognisable design. A blouse or shirt must remain a blouse or shirt; never turn a top into a dress, lingerie, lace costume, packaging-only mockup, or unrelated SKU. Do not replace it with a different product.",
     exactTextInstruction,
     moduleReferenceTextInstruction,
     "avoid loud domestic promotional poster aesthetics, fake tiny unreadable text, distorted logos, changed product identity, invented discounts, invented sizes, and invented materials",
@@ -389,11 +389,11 @@ function withModuleReferencePrompt(
   if (moduleId === "buyer_show") {
     if (imageAssets.length > 0) {
       promptParts.push(
-        "For buyer-show, use Image 2 as the buyer/model/pose/scene source and preserve Image 1 product on that buyer or scene. Do not render the module reference note itself unless it contains product-facing copy.",
+        "For buyer-show, dress the Image 2 buyer/model in the exact Image 1 product and preserve Image 1 product on that buyer or scene. Image 2 must not replace the product SKU. Do not render the module reference note itself unless it contains product-facing copy; do not write instruction words from the note into the image.",
       );
     } else {
       promptParts.push(
-        "For buyer-show, follow module material notes as directions for the buyer/model/pose/scene while preserving Image 1 product identity. Do not render the module reference note itself unless it contains product-facing copy.",
+        "For buyer-show, follow module material notes as directions for the buyer/model/pose/scene while preserving Image 1 product identity. Do not render the module reference note itself unless it contains product-facing copy; do not write instruction words from the note into the image.",
       );
     }
   }

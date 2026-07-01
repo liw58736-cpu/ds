@@ -299,6 +299,78 @@ describe("buildGenerationPrompt", () => {
     expect(colorPrompt).toContain("\u53ea\u6709\u5f53\u524d\u7d2b\u8272\u548c\u9ed1\u8272\u4e24\u79cd\u6b3e\u5f0f");
   });
 
+  it("keeps multi-color and size modules from changing the garment SKU", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "detail_page",
+      aspectRatio: "long_page",
+      sellingPoints: "lavender satin button-front blouse with long sleeves",
+      detailModuleCounts: {
+        color_size: 1,
+        multi_color: 1,
+      },
+      moduleReferenceAssets: {
+        color_size: [
+          {
+            id: "size-note-1",
+            fileName: "material note",
+            imageUrl: "",
+            note: "Only X/L sizes are available.",
+          },
+        ],
+        multi_color: [
+          {
+            id: "color-note-1",
+            fileName: "material note",
+            imageUrl: "",
+            note: "Only the current lavender and black colorways are available.",
+          },
+        ],
+      },
+    });
+    const multiColorPrompt = prompt.modules.find(
+      (module) => module.id === "multi_color",
+    )?.prompt;
+    const colorSizePrompt = prompt.modules.find(
+      (module) => module.id === "color_size",
+    )?.prompt;
+
+    expect(prompt.finalPrompt).toContain("A blouse or shirt must remain a blouse or shirt");
+    expect(multiColorPrompt).toContain("Only recolor the exact Image 1 garment");
+    expect(multiColorPrompt).toContain("same collar, sleeve length, cuffs, placket, hem, silhouette, fabric");
+    expect(multiColorPrompt).toContain("Never turn the source product into a dress");
+    expect(colorSizePrompt).toContain("Use the same Image 1 garment as the main visual");
+    expect(colorSizePrompt).toContain("show only the exact user-provided sizes");
+  });
+
+  it("requires buyer-show references to wear the exact source product", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "detail_page",
+      aspectRatio: "long_page",
+      detailModuleCounts: {
+        buyer_show: 1,
+      },
+      moduleReferenceAssets: {
+        buyer_show: [
+          {
+            id: "buyer-show-ref-1",
+            fileName: "buyer-show.png",
+            imageUrl: "data:image/png;base64,buyer",
+            note: "Use this photo as the buyer-show reference.",
+          },
+        ],
+      },
+    });
+    const buyerShowPrompt = prompt.modules.find(
+      (module) => module.id === "buyer_show",
+    )?.prompt;
+
+    expect(buyerShowPrompt).toContain("dress the Image 2 buyer/model in the exact Image 1 product");
+    expect(buyerShowPrompt).toContain("Image 2 must not replace the product SKU");
+    expect(buyerShowPrompt).toContain("do not write instruction words from the note into the image");
+  });
+
   it("keeps color-size module notes as exact availability copy and constraints", () => {
     const prompt = buildGenerationPrompt({
       ...baseConfig,

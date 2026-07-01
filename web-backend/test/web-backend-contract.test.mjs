@@ -1136,6 +1136,85 @@ test("PackyAPI gpt-image-2 payload omits unsupported response_format", async () 
   assert.equal(calls.some((call) => call.url.includes("/images/generations")), true);
 });
 
+test("provider router rejects truncated base64 images and falls back", async () => {
+  const calls = [];
+  const truncatedPngBase64 = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01,
+  ]).toString("base64");
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      PACKYAPI_BASE_URL: "https://packyapi.example.com/v1",
+      PACKYAPI_KEY_1: "packy-key",
+      PACKYAPI_IMAGE_MODEL: "gpt-image-2",
+      GPTSAPI_BASE_URL: "https://api.gptsapi.net/api/v3/openai",
+      GPTSAPI_KEY_1: "gpts-key",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://packyapi.example.com/v1/images/generations") {
+        return jsonResponse({
+          data: [{ b64_json: truncatedPngBase64 }],
+        });
+      }
+      if (url === "https://api.gptsapi.net/api/v3/openai/gpt-image-2/text-to-image") {
+        return jsonResponse({
+          data: { urls: { get: "https://api.gptsapi.net/poll/task-fallback" } },
+        });
+      }
+      if (url === "https://api.gptsapi.net/poll/task-fallback") {
+        return jsonResponse({
+          data: {
+            status: "completed",
+            outputs: ["https://cdn.example.com/fallback.png"],
+          },
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "product hero",
+        image_url: "https://cdn.example.com/product.png",
+        quality: "standard",
+        size: "1024x1024",
+        task_type: "ecommerce",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+
+  const taskBody = await readJson(task);
+  assert.equal(taskBody.status, "done");
+  assert.equal(taskBody.channel_used, "gptsapi");
+  assert.equal(taskBody.image_url, "https://cdn.example.com/fallback.png");
+  assert.equal(
+    calls.some((call) => call.url === "https://packyapi.example.com/v1/images/generations"),
+    true,
+  );
+});
+
 test("GPTsAPI uses the app-compatible v3 async image endpoint", async () => {
   const calls = [];
   const app = createWebBackend({

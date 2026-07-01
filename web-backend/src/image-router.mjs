@@ -134,15 +134,16 @@ async function routeGeneration({
         env,
         fetchImpl,
       });
-      releaseProviderKey(key, Boolean(result.image_url || result.image_base64));
+      const validatedResult = validateProviderImageResult(result);
+      releaseProviderKey(key, hasProviderImage(validatedResult));
 
-      if (result.image_url || result.image_base64) {
-        return { ...result, provider: key.provider };
+      if (hasProviderImage(validatedResult)) {
+        return { ...validatedResult, provider: key.provider };
       }
 
-      attempts.push({ ...step, reason: result.error ?? "invalid_result" });
-      if (shouldStopFallback(result.error)) {
-        return { error: result.error };
+      attempts.push({ ...step, reason: validatedResult.error ?? "invalid_result" });
+      if (shouldStopFallback(validatedResult.error)) {
+        return { error: validatedResult.error };
       }
     } catch (error) {
       releaseProviderKey(key, false);
@@ -426,6 +427,99 @@ function imageResultFromOpenAI(data) {
   }
 
   return { image_base64: `data:image/png;base64,${image}` };
+}
+
+function hasProviderImage(result) {
+  return Boolean(result?.image_url || result?.image_base64);
+}
+
+function validateProviderImageResult(result) {
+  if (!hasProviderImage(result)) {
+    return result;
+  }
+
+  if (result.image_base64 && !isValidInlineImage(result.image_base64)) {
+    return { error: "invalid_image_result" };
+  }
+
+  return result;
+}
+
+function isValidInlineImage(image) {
+  const decoded = decodeInlineImage(image);
+  if (!decoded) {
+    return false;
+  }
+
+  return (
+    isValidPng(decoded) ||
+    isValidJpeg(decoded) ||
+    isValidWebp(decoded)
+  );
+}
+
+function decodeInlineImage(image) {
+  const text = String(image ?? "").trim();
+  if (!text) {
+    return null;
+  }
+
+  const dataUrlMatch = text.match(/^data:[^,]*;base64,(.*)$/is);
+  const rawBase64 = (dataUrlMatch?.[1] ?? text).replace(/\s/g, "");
+  if (!rawBase64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(rawBase64)) {
+    return null;
+  }
+
+  try {
+    const buffer = Buffer.from(rawBase64, "base64");
+    return buffer.length > 0 ? buffer : null;
+  } catch {
+    return null;
+  }
+}
+
+function isValidPng(buffer) {
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  const iend = [0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82];
+  return (
+    startsWithBytes(buffer, signature) &&
+    endsWithBytes(buffer, iend)
+  );
+}
+
+function isValidJpeg(buffer) {
+  return (
+    buffer.length >= 4 &&
+    buffer[0] === 0xff &&
+    buffer[1] === 0xd8 &&
+    buffer[buffer.length - 2] === 0xff &&
+    buffer[buffer.length - 1] === 0xd9
+  );
+}
+
+function isValidWebp(buffer) {
+  return (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP"
+  );
+}
+
+function startsWithBytes(buffer, bytes) {
+  if (buffer.length < bytes.length) {
+    return false;
+  }
+
+  return bytes.every((byte, index) => buffer[index] === byte);
+}
+
+function endsWithBytes(buffer, bytes) {
+  if (buffer.length < bytes.length) {
+    return false;
+  }
+
+  const start = buffer.length - bytes.length;
+  return bytes.every((byte, index) => buffer[start + index] === byte);
 }
 
 function normalizeWuyinkejiResult(result) {
