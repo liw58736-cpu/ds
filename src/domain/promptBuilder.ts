@@ -312,6 +312,10 @@ function withModuleReferencePrompt(
   const instructionOnlyNotes = notes.filter(
     (note) => !isProductFacingCopyNote(note),
   );
+  const colorConstraintNotes = notes.filter(isColorConstraintNote);
+  const availableColorways = colorConstraintModules.has(moduleId)
+    ? extractAvailableColorways(colorConstraintNotes)
+    : [];
   const imageAssets = assets.filter(hasModuleReferenceImage);
   const noteOnlyAssets = assets.filter(
     (asset) => !hasModuleReferenceImage(asset) && hasModuleReferenceNote(asset),
@@ -326,6 +330,10 @@ function withModuleReferencePrompt(
       }
 
       if (shouldHideInstructionNoteText(moduleId, note)) {
+        if (colorConstraintModules.has(moduleId) && isColorConstraintNote(note)) {
+          return `${label}: use this uploaded reference asset as a colorway or material reference (${note}); do not render the user note wording as visible text.`;
+        }
+
         return `${label}: use this uploaded reference asset as the buyer-show visual source; do not render the user note wording.`;
       }
 
@@ -372,10 +380,21 @@ function withModuleReferencePrompt(
     );
   }
 
-  if (colorConstraintModules.has(moduleId) && notes.some(isColorConstraintNote)) {
+  if (colorConstraintModules.has(moduleId) && colorConstraintNotes.length > 0) {
+    const colorwayCopy =
+      availableColorways.length > 0
+        ? `Available colorways: ${availableColorways.join("\u3001")}. `
+        : "";
+
     promptParts.push(
-      `Use exactly the user-specified colorways from the module reference notes: ${notes.filter(isColorConstraintNote).join(" | ")}. Do not add extra colors, extra variants, or invented swatches. Do not render the color constraint note itself as a title, badge, caption, or visible sentence unless the note explicitly asks to display that text.`,
+      `${colorwayCopy}Use exactly the user-specified colorways from the module reference notes. Do not add extra colors, extra variants, or invented swatches. Treat color-only notes as non-visible constraints, not customer-facing copy. Do not render the color constraint note itself as a title, badge, caption, or visible sentence unless the note explicitly asks to display that text.`,
     );
+
+    if (moduleId === "color_size") {
+      promptParts.push(
+        "Do not place color-only notes in the size information area; show colors only as swatches or short color labels, and reserve the size information area for explicit size or availability copy.",
+      );
+    }
   }
 
   if (
@@ -540,6 +559,34 @@ function isColorConstraintNote(note: string): boolean {
       note,
     )
   );
+}
+
+const colorKeywordCatalog: Array<{
+  name: string;
+  patterns: RegExp[];
+}> = [
+  { name: "\u7d2b\u8272", patterns: [/\u7d2b/u, /\blavender\b/i, /\bpurple\b/i] },
+  { name: "\u9ed1\u8272", patterns: [/\u9ed1/u, /\bblack\b/i] },
+  { name: "\u767d\u8272", patterns: [/\u767d/u, /\bwhite\b/i] },
+  { name: "\u7ea2\u8272", patterns: [/\u7ea2/u, /\bred\b/i] },
+  { name: "\u84dd\u8272", patterns: [/\u84dd/u, /\bblue\b/i] },
+  { name: "\u7eff\u8272", patterns: [/\u7eff/u, /\bgreen\b/i] },
+  { name: "\u9ec4\u8272", patterns: [/\u9ec4/u, /\byellow\b/i] },
+  { name: "\u7070\u8272", patterns: [/\u7070/u, /\bgr[ae]y\b/i] },
+  { name: "\u7c89\u8272", patterns: [/\u7c89/u, /\bpink\b/i] },
+  { name: "\u68d5\u8272", patterns: [/\u68d5/u, /\bbrown\b/i] },
+  { name: "\u5496\u8272", patterns: [/\u5496/u, /\bcoffee\b/i] },
+  { name: "\u7c73\u8272", patterns: [/\u7c73/u, /\bbeige\b/i] },
+];
+
+function extractAvailableColorways(notes: string[]): string[] {
+  const colorways = colorKeywordCatalog
+    .filter((entry) =>
+      notes.some((note) => entry.patterns.some((pattern) => pattern.test(note))),
+    )
+    .map((entry) => entry.name);
+
+  return [...new Set(colorways)];
 }
 
 function shouldHideInstructionNoteText(moduleId: string, note: string): boolean {

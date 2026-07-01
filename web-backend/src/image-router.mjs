@@ -5,6 +5,23 @@ const defaultMaxAttempts = 3;
 const defaultTaskTtlMs = 30 * 60 * 1000;
 
 const terminalStatuses = new Set(["done", "error"]);
+const detailPageIdentityModules = new Set([
+  "main_display",
+  "style_selling",
+  "fabric_craft",
+  "cutting",
+  "color_size",
+  "multi_color",
+  "promotion",
+  "specs",
+  "care",
+  "buyer_show",
+  "outfit_recommend",
+  "scene_outfit",
+  "blogger_outfit",
+  "flat_lay",
+  "hanger",
+]);
 
 export function hasConfiguredImageProviders(env) {
   return buildProviderPool(env).providers.length > 0;
@@ -170,12 +187,18 @@ function planForRequest(requestBody) {
     return [{ provider: "packyapi", tier: "standard", progress: "正在处理图片" }];
   }
 
-  return [
+  const standardPlan = [
     { provider: "rightcode", tier: "standard", progress: "正在生成图片" },
     { provider: "wuyinkeji", tier: "standard", progress: "正在生成图片" },
     { provider: "packyapi", tier: "standard", progress: "正在生成图片" },
     { provider: "gptsapi", tier: "standard", progress: "正在生成图片" },
   ];
+
+  if (shouldSkipPackyApiForProductIdentity(requestBody)) {
+    return standardPlan.filter((step) => step.provider !== "packyapi");
+  }
+
+  return standardPlan;
 }
 
 function isHdRequest(requestBody) {
@@ -196,6 +219,19 @@ function isEditToolRequest(requestBody) {
     "restoration",
     "image_edit",
   ].some((mode) => style.includes(mode));
+}
+
+function shouldSkipPackyApiForProductIdentity(requestBody) {
+  const style = String(requestBody.style ?? "").toLowerCase();
+  const parts = style.split(":");
+
+  if (parts[0] !== "detail_page") {
+    return false;
+  }
+
+  const detailModuleId = parts[1];
+
+  return !detailModuleId || detailPageIdentityModules.has(detailModuleId);
 }
 
 async function tryProvider({ key, requestBody, env, fetchImpl }) {

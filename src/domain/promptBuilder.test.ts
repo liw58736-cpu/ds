@@ -364,7 +364,8 @@ describe("buildGenerationPrompt", () => {
 
     expect(colorPrompt).toContain("exactly the user-specified colorways");
     expect(colorPrompt).toContain("Do not add extra colors");
-    expect(colorPrompt).toContain("\u53ea\u6709\u5f53\u524d\u7d2b\u8272\u548c\u9ed1\u8272\u4e24\u79cd\u6b3e\u5f0f");
+    expect(colorPrompt).toContain("Available colorways: \u7d2b\u8272\u3001\u9ed1\u8272");
+    expect(colorPrompt).toContain("Treat color-only notes as non-visible constraints");
   });
 
   it("uses color-only module notes as constraints without rendering the note sentence", () => {
@@ -391,7 +392,11 @@ describe("buildGenerationPrompt", () => {
     )?.prompt;
 
     expect(multiColorPrompt).toContain("Use exactly the user-specified colorways");
-    expect(multiColorPrompt).toContain("\u5f53\u524d\u53ea\u6709\u7d2b\u8272\u548c\u9ed1\u8272");
+    expect(multiColorPrompt).toContain("Available colorways");
+    expect(multiColorPrompt).toContain("\u7d2b\u8272\u3001\u9ed1\u8272");
+    expect(multiColorPrompt).not.toContain(
+      "Module material note 1: \u5f53\u524d\u53ea\u6709\u7d2b\u8272\u548c\u9ed1\u8272",
+    );
     expect(multiColorPrompt).toContain(
       "Do not render the color constraint note itself as a title, badge, caption, or visible sentence",
     );
@@ -401,6 +406,37 @@ describe("buildGenerationPrompt", () => {
     expect(prompt.finalPrompt).not.toContain(
       "render module reference note text exactly and legibly: \u5f53\u524d\u53ea\u6709\u7d2b\u8272\u548c\u9ed1\u8272",
     );
+  });
+
+  it("keeps color-only notes out of size copy areas", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "detail_page",
+      aspectRatio: "long_page",
+      detailModuleCounts: {
+        color_size: 1,
+      },
+      moduleReferenceAssets: {
+        color_size: [
+          {
+            id: "color-size-color-note",
+            fileName: "素材备注",
+            imageUrl: "",
+            note: "现在只有黑色和当前的紫色",
+          },
+        ],
+      },
+    });
+    const colorSizePrompt = prompt.modules.find(
+      (module) => module.id === "color_size",
+    )?.prompt;
+
+    expect(colorSizePrompt).toContain("Available colorways");
+    expect(colorSizePrompt).toContain("紫色、黑色");
+    expect(colorSizePrompt).toContain(
+      "Do not place color-only notes in the size information area",
+    );
+    expect(colorSizePrompt).not.toContain("Module material note 1: 现在只有黑色和当前的紫色");
   });
 
   it("keeps multi-color and size modules from changing the garment SKU", () => {

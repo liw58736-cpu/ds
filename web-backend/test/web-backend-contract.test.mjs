@@ -1136,6 +1136,84 @@ test("PackyAPI gpt-image-2 payload omits unsupported response_format", async () 
   assert.equal(calls.some((call) => call.url.includes("/images/generations")), true);
 });
 
+test("detail-page identity modules skip PackyAPI fallback to avoid changing the product", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      RIGHTCODE_BASE_URL: "https://rightcode.example.com/v1",
+      RIGHTCODE_KEY_1: "rightcode-key",
+      WUYINKEJI_BASE_URL: "https://wuyinkeji.example.com/api",
+      WUYINKEJI_KEY_1: "wuyinkeji-key",
+      PACKYAPI_BASE_URL: "https://packyapi.example.com/v1",
+      PACKYAPI_KEY_1: "packy-key",
+      GPTSAPI_BASE_URL: "https://api.gptsapi.net/api/v3/openai",
+      GPTSAPI_KEY_1: "gpts-key",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://rightcode.example.com/v1/images/generations") {
+        return jsonResponse({ error: { message: "provider failed" } }, 500);
+      }
+      if (url === "https://wuyinkeji.example.com/api/draw_submit") {
+        return jsonResponse({ code: 500, message: "provider failed" }, 500);
+      }
+      if (url === "https://api.gptsapi.net/api/v3/openai/gpt-image-2/text-to-image") {
+        return jsonResponse({
+          data: { urls: { get: "https://api.gptsapi.net/poll/specs-task" } },
+        });
+      }
+      if (url === "https://api.gptsapi.net/poll/specs-task") {
+        return jsonResponse({
+          data: {
+            status: "completed",
+            outputs: ["https://cdn.example.com/specs.png"],
+          },
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "规格参数 Preserve Image 1 blouse exactly",
+        image_url: "https://cdn.example.com/product.png",
+        quality: "standard",
+        size: "1024x1792",
+        style: "detail_page:specs:template",
+        task_type: "ecommerce",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+  const taskBody = await readJson(task);
+
+  assert.equal(taskBody.status, "done");
+  assert.equal(taskBody.channel_used, "gptsapi");
+  assert.equal(
+    calls.some((call) => call.url === "https://packyapi.example.com/v1/images/generations"),
+    false,
+  );
+});
+
 test("provider router rejects truncated base64 images and falls back", async () => {
   const calls = [];
   const truncatedPngBase64 = Buffer.from([

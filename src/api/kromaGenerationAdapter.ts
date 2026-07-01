@@ -113,7 +113,25 @@ function buildKromaStyle(
     return `${config.module}:${config.whiteBackgroundMode ?? "white_background"}:${routeMode}`;
   }
 
+  if (config.module === "detail_page") {
+    const detailModuleId = getSingleSelectedModuleId(config.detailModuleCounts);
+
+    if (detailModuleId) {
+      return `${config.module}:${detailModuleId}:${routeMode}`;
+    }
+  }
+
   return `${config.module}:${routeMode}`;
+}
+
+function getSingleSelectedModuleId(
+  counts: GenerationTaskCreateRequest["body"]["config"]["detailModuleCounts"],
+): string | null {
+  const selectedModuleIds = Object.entries(counts ?? {})
+    .filter(([, count]) => Number(count) > 0)
+    .map(([moduleId]) => moduleId);
+
+  return selectedModuleIds.length === 1 ? selectedModuleIds[0] : null;
 }
 
 export async function submitKromaGenerationTask(

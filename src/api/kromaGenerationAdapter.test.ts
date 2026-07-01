@@ -148,6 +148,22 @@ describe("kromaGenerationAdapter", () => {
     );
   });
 
+  it("includes the selected detail module id in the backend style", () => {
+    const request = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        module: "detail_page",
+        aspectRatio: "long_page",
+        detailModuleCounts: { specs: 1 },
+      },
+    });
+
+    expect(buildKromaGenerateRequest(request)).toMatchObject({
+      style: "detail_page:specs:template",
+    });
+  });
+
   it("does not drop later module reference uploads when a request contains multiple modules", () => {
     const request = buildGenerationTaskRequest({
       ...baseInput,

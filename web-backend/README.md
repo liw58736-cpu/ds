@@ -141,6 +141,10 @@ backend owns `/image/*` routing when any provider key is configured. Route order
 
 - Template mode and standard generation:
   `RightCode -> Wuyinkeji -> PackyAPI -> GPTsAPI`
+- Product-identity detail-page modules, such as specs, color/size, multi-color,
+  buyer show, fabric/craft, and cutting, skip PackyAPI fallback to avoid
+  replacing the uploaded product:
+  `RightCode -> Wuyinkeji -> GPTsAPI`
 - Edit tools:
   `PackyAPI`
 - HD / 2K / 4K:
