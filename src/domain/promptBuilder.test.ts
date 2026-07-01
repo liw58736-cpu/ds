@@ -326,4 +326,47 @@ describe("buildGenerationPrompt", () => {
     expect(colorSizePrompt).toContain("Do not invent unavailable sizes");
     expect(colorSizePrompt).toContain("\u53ea\u6709 X/L \u4e24\u79cd\u5c3a\u7801");
   });
+
+  it("keeps note-only module material as hard visible copy and constraints", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "detail_page",
+      aspectRatio: "long_page",
+      detailModuleCounts: {
+        color_size: 1,
+        promotion: 1,
+      },
+      moduleReferenceAssets: {
+        color_size: [
+          {
+            id: "size-note-only",
+            fileName: "素材备注",
+            imageUrl: "",
+            note: "只有XL码",
+          },
+        ],
+        promotion: [
+          {
+            id: "promo-note-only",
+            fileName: "素材备注",
+            imageUrl: "",
+            note: "限时4折",
+          },
+        ],
+      },
+    });
+    const colorSizePrompt = prompt.modules.find(
+      (module) => module.id === "color_size",
+    )?.prompt;
+    const promotionPrompt = prompt.modules.find(
+      (module) => module.id === "promotion",
+    )?.prompt;
+
+    expect(prompt.finalPrompt).toContain("只有XL码");
+    expect(prompt.finalPrompt).toContain("限时4折");
+    expect(colorSizePrompt).toContain("Render only this size or availability copy");
+    expect(colorSizePrompt).toContain("只有XL码");
+    expect(promotionPrompt).toContain("render module reference note text exactly");
+    expect(promotionPrompt).toContain("限时4折");
+  });
 });

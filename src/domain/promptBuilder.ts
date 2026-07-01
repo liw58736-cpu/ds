@@ -200,6 +200,14 @@ const colorConstraintModules = new Set<string>([
 
 const sizeAvailabilityModules = new Set<string>(["color_size", "specs"]);
 
+function hasModuleReferenceImage(asset: ModuleReferenceAsset): boolean {
+  return asset.imageUrl.trim().length > 0;
+}
+
+function hasModuleReferenceNote(asset: ModuleReferenceAsset): boolean {
+  return (asset.note?.trim() ?? "").length > 0;
+}
+
 export function buildGenerationPrompt(
   config: GenerationConfig,
 ): BuiltGenerationPrompt {
@@ -303,7 +311,11 @@ function withModuleReferencePrompt(
   const instructionOnlyNotes = notes.filter(
     (note) => !isProductFacingCopyNote(note),
   );
-  const assetDescriptions = assets
+  const imageAssets = assets.filter(hasModuleReferenceImage);
+  const noteOnlyAssets = assets.filter(
+    (asset) => !hasModuleReferenceImage(asset) && hasModuleReferenceNote(asset),
+  );
+  const imageAssetDescriptions = imageAssets
     .map((asset, index) => {
       const note = asset.note?.trim();
       const label = `Image 2 reference asset ${index + 1}`;
@@ -319,10 +331,33 @@ function withModuleReferencePrompt(
       return `${label}: ${note}`;
     })
     .join(" ");
+  const noteOnlyDescriptions = noteOnlyAssets
+    .map((asset, index) => {
+      const note = asset.note?.trim() ?? "";
+      const label = `Module material note ${index + 1}`;
+
+      if (shouldHideInstructionNoteText(moduleId, note)) {
+        return `${label}: follow this as an instruction for how to use the module material; do not render the user note wording.`;
+      }
+
+      return `${label}: ${note}`;
+    })
+    .join(" ");
   const promptParts = [
     prompt,
-    "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
   ];
+
+  if (imageAssets.length > 0) {
+    promptParts.push(
+      "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
+    );
+  }
+
+  if (noteOnlyAssets.length > 0) {
+    promptParts.push(
+      "Module material notes are user-provided constraints for this module only; follow them as hard requirements while preserving Image 1 product identity.",
+    );
+  }
 
   if (instructionOnlyNotes.length > 0) {
     promptParts.push(
@@ -352,12 +387,18 @@ function withModuleReferencePrompt(
   }
 
   if (moduleId === "buyer_show") {
-    promptParts.push(
-      "For buyer-show, use Image 2 as the buyer/model/pose/scene source and preserve Image 1 product on that buyer or scene. Do not render the module reference note itself unless it contains product-facing copy.",
-    );
+    if (imageAssets.length > 0) {
+      promptParts.push(
+        "For buyer-show, use Image 2 as the buyer/model/pose/scene source and preserve Image 1 product on that buyer or scene. Do not render the module reference note itself unless it contains product-facing copy.",
+      );
+    } else {
+      promptParts.push(
+        "For buyer-show, follow module material notes as directions for the buyer/model/pose/scene while preserving Image 1 product identity. Do not render the module reference note itself unless it contains product-facing copy.",
+      );
+    }
   }
 
-  promptParts.push(assetDescriptions);
+  promptParts.push(imageAssetDescriptions, noteOnlyDescriptions);
 
   return promptParts.filter(Boolean).join(" ");
 }
@@ -513,6 +554,6 @@ function getModuleReferenceAssets(
   moduleId: string,
 ): ModuleReferenceAsset[] {
   return (config.moduleReferenceAssets?.[moduleId] ?? []).filter(
-    (asset) => asset.imageUrl.trim().length > 0,
+    (asset) => hasModuleReferenceImage(asset) || hasModuleReferenceNote(asset),
   );
 }

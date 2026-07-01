@@ -176,6 +176,21 @@ describe("Workspace", () => {
     expect(screen.getByText("已加 1 张素材")).toBeInTheDocument();
   });
 
+  it("lets users save module material notes without uploading an image", async () => {
+    const user = userEvent.setup();
+    render(<Workspace activeModule="detail_page" />);
+
+    const colorSizeCard = screen.getByRole("button", {
+      name: "颜色尺码 穿着主体 + 色卡 / 尺码",
+    });
+
+    await user.click(within(colorSizeCard).getByRole("button", { name: "添加素材" }));
+    await user.type(screen.getByLabelText("素材备注"), "只有XL码");
+    await user.click(screen.getByRole("button", { name: "保存素材" }));
+
+    expect(screen.getByText("已加 1 条备注")).toBeInTheDocument();
+  });
+
   it("renders the module material dialog outside the parameter panel", async () => {
     const user = userEvent.setup();
     render(<Workspace />);

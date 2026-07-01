@@ -107,6 +107,46 @@ const versionOptions: Array<{
 const maxDetailModuleCount = 9;
 const maxModuleReferenceAssets = 3;
 
+function hasModuleReferenceImage(asset: ModuleReferenceAsset): boolean {
+  return asset.imageUrl.trim().length > 0;
+}
+
+function hasModuleReferenceNote(asset: ModuleReferenceAsset): boolean {
+  return (asset.note?.trim() ?? "").length > 0;
+}
+
+function createNoteOnlyReferenceAsset(note: string): ModuleReferenceAsset {
+  return {
+    id: `module-ref-note-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`,
+    fileName: "素材备注",
+    imageUrl: "",
+    note,
+  };
+}
+
+function formatReferenceSummary(assets: ModuleReferenceAsset[]): string | null {
+  const imageCount = assets.filter(hasModuleReferenceImage).length;
+  const noteCount = assets.filter(
+    (asset) => !hasModuleReferenceImage(asset) && hasModuleReferenceNote(asset),
+  ).length;
+
+  if (imageCount > 0 && noteCount > 0) {
+    return `已加 ${imageCount} 张素材 / ${noteCount} 条备注`;
+  }
+
+  if (imageCount > 0) {
+    return `已加 ${imageCount} 张素材`;
+  }
+
+  if (noteCount > 0) {
+    return `已加 ${noteCount} 条备注`;
+  }
+
+  return null;
+}
+
 const mainImageModules: Array<{
   id: MainImageModuleId;
   title: string;
@@ -185,6 +225,9 @@ export function ParameterPanel({
   const selectedMainModules = config.selectedMainModules ?? [];
   const detailCounts = config.detailModuleCounts ?? {};
   const moduleReferenceAssets = config.moduleReferenceAssets ?? {};
+  const draftImageReferenceAssets = draftReferenceAssets.filter(
+    hasModuleReferenceImage,
+  );
   const whiteBackgroundMode = config.whiteBackgroundMode ?? "white_background";
   const meta = pageMeta[activeModule];
   const normalizedConfig = { ...config, resolution, generationVersion };
@@ -264,7 +307,7 @@ export function ParameterPanel({
 
     const remainingSlots = Math.max(
       0,
-      maxModuleReferenceAssets - draftReferenceAssets.length,
+      maxModuleReferenceAssets - draftImageReferenceAssets.length,
     );
     const selectedFiles = Array.from(files).slice(0, remainingSlots);
 
@@ -311,10 +354,16 @@ export function ParameterPanel({
 
     const note = draftReferenceNote.trim();
     const nextReferenceAssets = { ...moduleReferenceAssets };
-    const savedAssets = draftReferenceAssets.map((asset) => ({
-      ...asset,
-      ...(note ? { note } : {}),
-    }));
+    const savedAssets = draftReferenceAssets
+      .filter(hasModuleReferenceImage)
+      .map((asset) => ({
+        ...asset,
+        ...(note ? { note } : {}),
+      }));
+
+    if (savedAssets.length === 0 && note) {
+      savedAssets.push(createNoteOnlyReferenceAsset(note));
+    }
 
     if (savedAssets.length > 0) {
       nextReferenceAssets[editingReferenceModule.id] = savedAssets;
@@ -369,7 +418,9 @@ export function ParameterPanel({
           <div className="module-card-grid">
             {mainImageModules.map((module) => {
               const isActive = selectedMainModules.includes(module.id);
-              const referenceCount = getReferenceAssets(module.id).length;
+              const referenceSummary = formatReferenceSummary(
+                getReferenceAssets(module.id),
+              );
 
               return (
                 <div
@@ -404,9 +455,9 @@ export function ParameterPanel({
                     </button>
                   </div>
                   <span>{module.description}</span>
-                  {referenceCount > 0 ? (
+                  {referenceSummary ? (
                     <em className="module-reference-count">
-                      已加 {referenceCount} 张素材
+                      {referenceSummary}
                     </em>
                   ) : null}
                 </div>
@@ -427,7 +478,9 @@ export function ParameterPanel({
             {detailContentModules.map((module) => {
               const count = detailCounts[module.id] ?? 0;
               const isActive = count > 0;
-              const referenceCount = getReferenceAssets(module.id).length;
+              const referenceSummary = formatReferenceSummary(
+                getReferenceAssets(module.id),
+              );
 
               return (
                 <div
@@ -491,9 +544,9 @@ export function ParameterPanel({
                     </button>
                   </div>
                   <em>{isActive ? "已加入，可继续加图" : "点击添加"}</em>
-                  {referenceCount > 0 ? (
+                  {referenceSummary ? (
                     <em className="module-reference-count">
-                      已加 {referenceCount} 张素材
+                      {referenceSummary}
                     </em>
                   ) : null}
                 </div>
@@ -726,9 +779,9 @@ export function ParameterPanel({
                 onChange={handleReferenceFilesChange}
               />
             </label>
-            {draftReferenceAssets.length > 0 ? (
+            {draftImageReferenceAssets.length > 0 ? (
               <div className="module-reference-list">
-                {draftReferenceAssets.map((asset) => (
+                {draftImageReferenceAssets.map((asset) => (
                   <div className="module-reference-item" key={asset.id}>
                     <img src={asset.imageUrl} alt={asset.fileName} />
                     <span>{asset.fileName}</span>

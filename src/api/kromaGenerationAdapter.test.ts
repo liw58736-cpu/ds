@@ -181,6 +181,35 @@ describe("kromaGenerationAdapter", () => {
     });
   });
 
+  it("keeps note-only module material in the prompt without sending empty image2 data", () => {
+    const request = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        module: "detail_page",
+        aspectRatio: "long_page",
+        detailModuleCounts: { color_size: 1 },
+        moduleReferenceAssets: {
+          color_size: [
+            {
+              id: "size-note-only",
+              fileName: "素材备注",
+              imageUrl: "",
+              note: "只有XL码",
+            },
+          ],
+        },
+      },
+    });
+    const kromaRequest = buildKromaGenerateRequest(request);
+
+    expect(kromaRequest).not.toHaveProperty("template_image_base64");
+    expect(kromaRequest).not.toHaveProperty("template_image_base64s");
+    expect(kromaRequest.use_template_mode).toBe(false);
+    expect(kromaRequest.prompt).toContain("只有XL码");
+    expect(kromaRequest.prompt).toContain("Render only this size or availability copy");
+  });
+
   it("maps AI tool 1K work to the standard ecommerce backend path", () => {
     const request = buildGenerationTaskRequest({
       ...baseInput,
