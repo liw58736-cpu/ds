@@ -111,7 +111,7 @@ const detailPrompts: Record<
   specs: {
     title: "规格参数",
     prompt:
-      "Show a worn subject with clean callout lines and specification-card zones for measurements, structure, and material notes. Use only the user-provided product specifications; render important size, material, discount, and availability text exactly when provided.",
+      "Use Image 1 product as the central product visual, with clean callout lines and specification-card zones for measurements, structure, and material notes. Preserve the exact garment category and details from Image 1: same collar, sleeve length, cuffs, placket, hem, fabric sheen, silhouette, buttons, seams, and visible construction. Do not change a long-sleeve blouse or shirt into a sleeveless top, lace top, vest, dress, or unrelated garment. Use only the user-provided product specifications; render important size, material, discount, and availability text exactly when provided.",
   },
   care: {
     title: "洗护说明",
@@ -373,7 +373,7 @@ function withModuleReferencePrompt(
 
   if (colorConstraintModules.has(moduleId) && notes.some(isColorConstraintNote)) {
     promptParts.push(
-      `Use exactly the user-specified colorways from the module reference notes: ${notes.filter(isColorConstraintNote).join(" | ")}. Do not add extra colors, extra variants, or invented swatches.`,
+      `Use exactly the user-specified colorways from the module reference notes: ${notes.filter(isColorConstraintNote).join(" | ")}. Do not add extra colors, extra variants, or invented swatches. Do not render the color constraint note itself as a title, badge, caption, or visible sentence unless the note explicitly asks to display that text.`,
     );
   }
 
@@ -452,8 +452,7 @@ function isProductFacingCopyNote(note: string): boolean {
   return (
     hasExplicitTextMarker(note) ||
     isSizeAvailabilityNote(note) ||
-    isPromotionCopyNote(note) ||
-    isColorConstraintNote(note)
+    isPromotionCopyNote(note)
   );
 }
 
@@ -475,19 +474,21 @@ function hasExplicitTextMarker(note: string): boolean {
 }
 
 function isSizeAvailabilityNote(note: string): boolean {
-  return (
+  const hasSizeSpecificText =
     /(^|[^a-z])(xs|s|m|l|xl|xxl|xxxl)([^a-z]|$)/i.test(note) ||
     /[0-9]+\s*(cm|mm|\u7801)/i.test(note) ||
-    [
-      "\u5c3a\u7801",
-      "\u53ea\u6709",
-      "\u4ec5\u6709",
-      "\u53ea\u5269",
-      "\u73b0\u8d27",
-      "\u5e93\u5b58",
-      "\u7801",
-    ].some((marker) => note.includes(marker)) ||
-    /\b(size|sizes|available|availability|only|in stock)\b/i.test(note)
+    ["\u5c3a\u7801", "\u5747\u7801", "\u7801"].some((marker) =>
+      note.includes(marker),
+    ) ||
+    /\b(size|sizes|sizing)\b/i.test(note);
+  const hasAvailabilityText =
+    ["\u53ea\u5269", "\u73b0\u8d27", "\u5e93\u5b58"].some((marker) =>
+      note.includes(marker),
+    ) || /\b(available|availability|in stock)\b/i.test(note);
+
+  return (
+    hasSizeSpecificText ||
+    (hasAvailabilityText && !isColorConstraintNote(note))
   );
 }
 
@@ -533,6 +534,14 @@ function isColorConstraintNote(note: string): boolean {
 }
 
 function shouldHideInstructionNoteText(moduleId: string, note: string): boolean {
+  if (
+    colorConstraintModules.has(moduleId) &&
+    isColorConstraintNote(note) &&
+    !hasExplicitTextMarker(note)
+  ) {
+    return true;
+  }
+
   if (moduleId !== "buyer_show" || isProductFacingCopyNote(note)) {
     return false;
   }

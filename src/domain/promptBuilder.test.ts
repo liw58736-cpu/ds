@@ -299,6 +299,42 @@ describe("buildGenerationPrompt", () => {
     expect(colorPrompt).toContain("\u53ea\u6709\u5f53\u524d\u7d2b\u8272\u548c\u9ed1\u8272\u4e24\u79cd\u6b3e\u5f0f");
   });
 
+  it("uses color-only module notes as constraints without rendering the note sentence", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "detail_page",
+      aspectRatio: "long_page",
+      detailModuleCounts: {
+        multi_color: 1,
+      },
+      moduleReferenceAssets: {
+        multi_color: [
+          {
+            id: "color-note-1",
+            fileName: "material note",
+            imageUrl: "",
+            note: "\u5f53\u524d\u53ea\u6709\u7d2b\u8272\u548c\u9ed1\u8272",
+          },
+        ],
+      },
+    });
+    const multiColorPrompt = prompt.modules.find(
+      (module) => module.id === "multi_color",
+    )?.prompt;
+
+    expect(multiColorPrompt).toContain("Use exactly the user-specified colorways");
+    expect(multiColorPrompt).toContain("\u5f53\u524d\u53ea\u6709\u7d2b\u8272\u548c\u9ed1\u8272");
+    expect(multiColorPrompt).toContain(
+      "Do not render the color constraint note itself as a title, badge, caption, or visible sentence",
+    );
+    expect(multiColorPrompt).not.toContain(
+      "Product-facing module reference copy or constraints",
+    );
+    expect(prompt.finalPrompt).not.toContain(
+      "render module reference note text exactly and legibly: \u5f53\u524d\u53ea\u6709\u7d2b\u8272\u548c\u9ed1\u8272",
+    );
+  });
+
   it("keeps multi-color and size modules from changing the garment SKU", () => {
     const prompt = buildGenerationPrompt({
       ...baseConfig,
@@ -341,6 +377,39 @@ describe("buildGenerationPrompt", () => {
     expect(multiColorPrompt).toContain("Never turn the source product into a dress");
     expect(colorSizePrompt).toContain("Use the same Image 1 garment as the main visual");
     expect(colorSizePrompt).toContain("show only the exact user-provided sizes");
+  });
+
+  it("keeps specs pages anchored to the exact Image 1 garment", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "detail_page",
+      aspectRatio: "long_page",
+      sellingPoints: "lavender satin button-front blouse with long sleeves",
+      detailModuleCounts: {
+        specs: 1,
+      },
+      moduleReferenceAssets: {
+        specs: [
+          {
+            id: "spec-note-1",
+            fileName: "material note",
+            imageUrl: "",
+            note: "Only X/L sizes are available.",
+          },
+        ],
+      },
+    });
+    const specsPrompt = prompt.modules.find((module) => module.id === "specs")
+      ?.prompt;
+
+    expect(specsPrompt).toContain("Use Image 1 product as the central product visual");
+    expect(specsPrompt).toContain(
+      "same collar, sleeve length, cuffs, placket, hem, fabric sheen",
+    );
+    expect(specsPrompt).toContain(
+      "Do not change a long-sleeve blouse or shirt into a sleeveless",
+    );
+    expect(specsPrompt).toContain("Render only this size or availability copy");
   });
 
   it("requires buyer-show references to wear the exact source product", () => {
