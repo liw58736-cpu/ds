@@ -174,6 +174,7 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "保存素材" }));
 
     expect(screen.getByText("已加 1 张素材")).toBeInTheDocument();
+    expect(packagingCard).toHaveAttribute("aria-pressed", "true");
   });
 
   it("lets users save module material notes without uploading an image", async () => {
@@ -189,6 +190,7 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "保存素材" }));
 
     expect(screen.getByText("已加 1 条备注")).toBeInTheDocument();
+    expect(colorSizeCard).toHaveAttribute("aria-pressed", "true");
   });
 
   it("renders the module material dialog outside the parameter panel", async () => {
@@ -337,6 +339,31 @@ describe("Workspace", () => {
           generationVersion: "standard",
           resolution: "4K",
           selectedMainModules: ["detail_closeup"],
+        },
+      });
+    });
+  });
+
+  it("starts detail page generation from the sample product", async () => {
+    const user = userEvent.setup();
+    render(<Workspace activeModule="detail_page" />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: "主图展示 首屏 KV：建立第一眼识别" }));
+    await user.click(screen.getByRole("button", { name: "生成详情页" }));
+
+    expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
+
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+
+      expect(storedTasks[0]).toMatchObject({
+        status: "completed",
+        config: {
+          module: "detail_page",
+          detailModuleCounts: { main_display: 1 },
         },
       });
     });

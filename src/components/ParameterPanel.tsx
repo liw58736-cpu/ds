@@ -147,6 +147,14 @@ function formatReferenceSummary(assets: ModuleReferenceAsset[]): string | null {
   return null;
 }
 
+function isMainImageModuleId(moduleId: string): moduleId is MainImageModuleId {
+  return mainImageModules.some((module) => module.id === moduleId);
+}
+
+function isDetailPageModuleId(moduleId: string): moduleId is DetailPageModuleId {
+  return detailContentModules.some((module) => module.id === moduleId);
+}
+
 const mainImageModules: Array<{
   id: MainImageModuleId;
   title: string;
@@ -371,13 +379,39 @@ export function ParameterPanel({
       delete nextReferenceAssets[editingReferenceModule.id];
     }
 
-    onChange({
+    const nextConfig: GenerationConfig = {
       ...config,
       moduleReferenceAssets:
         Object.keys(nextReferenceAssets).length > 0
           ? nextReferenceAssets
           : undefined,
-    });
+    };
+
+    if (
+      savedAssets.length > 0 &&
+      isMainImageModuleId(editingReferenceModule.id) &&
+      !selectedMainModules.includes(editingReferenceModule.id)
+    ) {
+      nextConfig.selectedMainModules = [
+        ...selectedMainModules,
+        editingReferenceModule.id,
+      ];
+    }
+
+    if (
+      savedAssets.length > 0 &&
+      isDetailPageModuleId(editingReferenceModule.id)
+    ) {
+      nextConfig.detailModuleCounts = {
+        ...detailCounts,
+        [editingReferenceModule.id]: Math.max(
+          1,
+          detailCounts[editingReferenceModule.id] ?? 0,
+        ),
+      };
+    }
+
+    onChange(nextConfig);
     setEditingReferenceModule(null);
     setDraftReferenceAssets([]);
     setDraftReferenceNote("");
