@@ -81,6 +81,74 @@ describe("buildGenerationPrompt", () => {
     expect(showcasePrompt.modules[0].prompt).not.toContain("no extra props");
   });
 
+  it("adds Image 1 SKU preservation guard to every main-image module", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "main_image",
+      selectedMainModules: [
+        "hero_kv",
+        "overall_show",
+        "detail_closeup",
+        "use_scene",
+        "color_set",
+        "function_compare",
+        "packaging",
+        "trust",
+      ],
+    });
+
+    expect(prompt.modules).toHaveLength(8);
+    for (const module of prompt.modules) {
+      expect(module.prompt).toContain("The Image 1 product is the sold SKU");
+      expect(module.prompt).toContain(
+        "Do not swap in a different product, model garment, stock item, or invented SKU",
+      );
+      expect(module.prompt).toContain(
+        "When placing it on a model, in hands, in packaging, or in a scene, use the exact Image 1 product",
+      );
+    }
+  });
+
+  it("adds Image 1 SKU preservation guard to every detail-page module", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "detail_page",
+      aspectRatio: "long_page",
+      detailModuleCounts: {
+        main_display: 1,
+        brand_intro: 1,
+        style_selling: 1,
+        fabric_craft: 1,
+        cutting: 1,
+        color_size: 1,
+        multi_color: 1,
+        promotion: 1,
+        specs: 1,
+        care: 1,
+        service: 1,
+        faq: 1,
+        buyer_show: 1,
+        outfit_recommend: 1,
+        scene_outfit: 1,
+        blogger_outfit: 1,
+        flat_lay: 1,
+        hanger: 1,
+        chapter: 1,
+      },
+    });
+
+    expect(prompt.modules).toHaveLength(19);
+    for (const module of prompt.modules) {
+      expect(module.prompt).toContain("The Image 1 product is the sold SKU");
+      expect(module.prompt).toContain(
+        "preserve its exact category, silhouette or shape, material or fabric",
+      );
+      expect(module.prompt).toContain(
+        "Do not swap in a different product, model garment, stock item, or invented SKU",
+      );
+    }
+  });
+
   it("includes the selected output language in the final prompt", () => {
     const prompt = buildGenerationPrompt({
       ...baseConfig,

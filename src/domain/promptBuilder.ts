@@ -300,10 +300,11 @@ function withModuleReferencePrompt(
   moduleId: string,
   config: GenerationConfig,
 ): string {
+  const guardedPrompt = withProductIdentityGuard(prompt);
   const assets = getModuleReferenceAssets(config, moduleId);
 
   if (assets.length === 0) {
-    return prompt;
+    return guardedPrompt;
   }
 
   const notes = uniqueNotes(assets);
@@ -344,7 +345,7 @@ function withModuleReferencePrompt(
     })
     .join(" ");
   const promptParts = [
-    prompt,
+    guardedPrompt,
   ];
 
   if (imageAssets.length > 0) {
@@ -401,6 +402,14 @@ function withModuleReferencePrompt(
   promptParts.push(imageAssetDescriptions, noteOnlyDescriptions);
 
   return promptParts.filter(Boolean).join(" ");
+}
+
+function withProductIdentityGuard(prompt: string): string {
+  if (prompt.includes("The Image 1 product is the sold SKU")) {
+    return prompt;
+  }
+
+  return `${prompt} The Image 1 product is the sold SKU for this module; preserve its exact category, silhouette or shape, material or fabric, colorway, seams, buttons, logos, packaging, hardware, proportions, camera-facing details, and recognisable design. Do not swap in a different product, model garment, stock item, or invented SKU. When placing it on a model, in hands, in packaging, or in a scene, use the exact Image 1 product; only the background, layout, camera framing, styling context, or allowed colorway may change.`;
 }
 
 function getExactTextInstruction(config: GenerationConfig): string {
