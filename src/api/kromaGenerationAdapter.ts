@@ -36,6 +36,13 @@ interface KromaGenerationSubmitOptions {
   shouldContinue?: () => boolean;
 }
 
+const internalProgressPattern =
+  /通道|主通道|备用|第一|第二|第三|第四|尝试|channel|provider|route/i;
+
+function sanitizeProgress(progress: string): string {
+  return internalProgressPattern.test(progress) ? "正在生成图片" : progress;
+}
+
 export function getConfiguredKromaApiBaseUrl(): string | null {
   const value =
     import.meta.env.VITE_KROMA_API_BASE_URL?.trim() ||
@@ -288,7 +295,7 @@ function notifyProgress(
   onProgress: KromaGenerationSubmitOptions["onProgress"],
 ): void {
   if (task.progress) {
-    onProgress?.(task.progress);
+    onProgress?.(sanitizeProgress(task.progress));
   }
 }
 

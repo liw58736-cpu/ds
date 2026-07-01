@@ -48,6 +48,17 @@ function getDisplayTasks(
   );
 }
 
+const internalProgressPattern =
+  /通道|主通道|备用|第一|第二|第三|第四|尝试|channel|provider|route/i;
+
+function getRunningProgress(task: GenerationTask): string {
+  if (!task.progress || internalProgressPattern.test(task.progress)) {
+    return "正在生成图片";
+  }
+
+  return task.progress;
+}
+
 export function ResultPreview({
   product,
   latestTask,
@@ -165,7 +176,7 @@ function PreviewTaskCard({
   const resultAssets = task.status === "completed" ? getTaskResultAssets(task) : [];
   const canRetryFailedTask =
     task.status === "failed" && task.errorCode !== "upload_source_unavailable";
-  const runningProgress = isTaskRunning && task.progress ? task.progress : "处理中";
+  const runningProgress = isTaskRunning ? getRunningProgress(task) : "正在生成图片";
 
   return (
     <article className={`preview-task-card preview-task-${task.status}`}>

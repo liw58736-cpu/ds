@@ -158,22 +158,22 @@ async function routeGeneration({
 function planForRequest(requestBody) {
   if (isHdRequest(requestBody)) {
     return [
-      { provider: "wuyinkeji", tier: "hd", progress: "正在尝试高清通道" },
-      { provider: "rightcode", tier: "hd", progress: "正在尝试备用高清通道" },
-      { provider: "gptsapi", tier: "standard", progress: "正在尝试快速通道" },
-      { provider: "packyapi", tier: "hd", progress: "正在尝试第四通道" },
+      { provider: "wuyinkeji", tier: "hd", progress: "正在生成高清图片" },
+      { provider: "rightcode", tier: "hd", progress: "正在生成高清图片" },
+      { provider: "gptsapi", tier: "standard", progress: "正在生成高清图片" },
+      { provider: "packyapi", tier: "hd", progress: "正在生成高清图片" },
     ];
   }
 
   if (isEditToolRequest(requestBody)) {
-    return [{ provider: "packyapi", tier: "standard", progress: "正在处理编辑任务" }];
+    return [{ provider: "packyapi", tier: "standard", progress: "正在处理图片" }];
   }
 
   return [
-    { provider: "rightcode", tier: "standard", progress: "正在尝试主通道" },
-    { provider: "wuyinkeji", tier: "standard", progress: "正在尝试第二通道" },
-    { provider: "packyapi", tier: "standard", progress: "正在尝试第三通道" },
-    { provider: "gptsapi", tier: "standard", progress: "正在尝试备用通道" },
+    { provider: "rightcode", tier: "standard", progress: "正在生成图片" },
+    { provider: "wuyinkeji", tier: "standard", progress: "正在生成图片" },
+    { provider: "packyapi", tier: "standard", progress: "正在生成图片" },
+    { provider: "gptsapi", tier: "standard", progress: "正在生成图片" },
   ];
 }
 

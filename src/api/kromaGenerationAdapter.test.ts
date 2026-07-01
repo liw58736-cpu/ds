@@ -323,7 +323,8 @@ describe("kromaGenerationAdapter", () => {
       expect.objectContaining({ method: "GET" }),
     );
     expect(onProgress).toHaveBeenCalledWith("Preparing...");
-    expect(onProgress).toHaveBeenCalledWith("Trying first channel...");
+    expect(onProgress).not.toHaveBeenCalledWith("Trying first channel...");
+    expect(onProgress).toHaveBeenCalledWith("正在生成图片");
     expect(onTaskStarted).toHaveBeenCalledWith("kroma-task-1");
   });
 

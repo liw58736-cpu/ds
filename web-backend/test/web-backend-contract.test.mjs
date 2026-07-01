@@ -1012,6 +1012,72 @@ test("image generation uses the web backend provider router instead of forwardin
   });
 });
 
+test("image generation progress does not expose provider channel details", async () => {
+  let providerStarted;
+  const providerStartedPromise = new Promise((resolve) => {
+    providerStarted = resolve;
+  });
+  let finishProvider;
+  const providerResponsePromise = new Promise((resolve) => {
+    finishProvider = () => resolve(jsonResponse({
+      data: [{ url: "https://cdn.example.com/result.png" }],
+    }));
+  });
+
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      RIGHTCODE_BASE_URL: "https://rightcode.example.com/v1",
+      RIGHTCODE_KEY_1: "rightcode-key",
+    },
+    fetch: async (url) => {
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://rightcode.example.com/v1/images/generations") {
+        providerStarted();
+        return providerResponsePromise;
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "product hero",
+        image_url: "https://cdn.example.com/product.png",
+        quality: "standard",
+        size: "1024x1024",
+        task_type: "ecommerce",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await providerStartedPromise;
+
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+
+  assert.equal(task.status, 200);
+  const taskBody = await readJson(task);
+  assert.equal(taskBody.status, "processing");
+  assert.equal(taskBody.progress, "正在生成图片");
+  assert.doesNotMatch(taskBody.progress, /通道|主通道|备用|尝试|channel|provider/i);
+
+  finishProvider();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
+
 test("PackyAPI gpt-image-2 payload omits unsupported response_format", async () => {
   const calls = [];
   const app = createWebBackend({

@@ -77,10 +77,26 @@ const unavailableUploadTask: GenerationTask = {
 };
 
 describe("ResultPreview", () => {
-  it("shows backend progress while a generation task is running", () => {
+  it("shows a user-facing progress message while a generation task is running", () => {
     render(<ResultPreview product={product} latestTask={processingTask} />);
 
-    expect(screen.getByText("Trying HD channel...")).toBeInTheDocument();
+    expect(screen.queryByText("Trying HD channel...")).not.toBeInTheDocument();
+    expect(screen.getByText("正在生成图片")).toBeInTheDocument();
+  });
+
+  it("hides internal provider channel progress while a generation task is running", () => {
+    render(
+      <ResultPreview
+        product={product}
+        latestTask={{
+          ...processingTask,
+          progress: "正在尝试主通道",
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("正在尝试主通道")).not.toBeInTheDocument();
+    expect(screen.getByText("正在生成图片")).toBeInTheDocument();
   });
 
   it("shows a running progress timeline and lets users cancel the preview task", async () => {
@@ -96,7 +112,8 @@ describe("ResultPreview", () => {
     );
 
     expect(screen.queryByText("进度跟踪")).not.toBeInTheDocument();
-    expect(screen.getByText("Trying HD channel...")).toBeInTheDocument();
+    expect(screen.queryByText("Trying HD channel...")).not.toBeInTheDocument();
+    expect(screen.getByText("正在生成图片")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "取消生成" }));
 
