@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import homepageHtml from "../index.html?raw";
+import aboutHtml from "../public/about/index.html?raw";
+import aboutDirectHtml from "../public/about.html?raw";
+import creditsHtml from "../public/credits/index.html?raw";
+import creditsDirectHtml from "../public/credits.html?raw";
 import privacyHtml from "../public/privacy/index.html?raw";
 import privacyDirectHtml from "../public/privacy.html?raw";
 import refundHtml from "../public/refund/index.html?raw";
@@ -29,6 +33,10 @@ describe("static legal pages", () => {
         title: "Terms of Service",
       },
       {
+        html: termsHtml,
+        title: "Seller Identity",
+      },
+      {
         html: privacyHtml,
         title: "Privacy Policy",
       },
@@ -43,6 +51,22 @@ describe("static legal pages", () => {
       {
         html: refundDirectHtml,
         title: "Refund Policy",
+      },
+      {
+        html: creditsHtml,
+        title: "Credit Policy",
+      },
+      {
+        html: creditsDirectHtml,
+        title: "Credit Policy",
+      },
+      {
+        html: aboutHtml,
+        title: "About kroma",
+      },
+      {
+        html: aboutDirectHtml,
+        title: "About kroma",
       },
     ];
 
