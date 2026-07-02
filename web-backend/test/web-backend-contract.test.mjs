@@ -1012,6 +1012,92 @@ test("image generation uses the web backend provider router instead of forwardin
   });
 });
 
+test("image generation stores inline provider results before returning them", async () => {
+  const calls = [];
+  const storageUploads = [];
+  const inlinePng =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_GENERATION_STORAGE_BUCKET: "web-generation-results",
+      RIGHTCODE_BASE_URL: "https://rightcode.example.com/v1",
+      RIGHTCODE_KEY_1: "rightcode-key",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://rightcode.example.com/v1/images/generations") {
+        return jsonResponse({ data: [{ b64_json: inlinePng }] });
+      }
+      if (url === "https://web-project.supabase.co/storage/v1/bucket") {
+        return jsonResponse({ name: "web-generation-results" });
+      }
+      if (
+        url.match(
+          /^https:\/\/web-project\.supabase\.co\/storage\/v1\/object\/web-generation-results\/web-user-1\/web-img-[a-f0-9]+\/result\.png$/,
+        )
+      ) {
+        storageUploads.push({
+          url,
+          headers: init.headers,
+          body: Buffer.from(await init.body.arrayBuffer()),
+        });
+        return jsonResponse({ Key: "web-generation-results/result.png" });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "product hero",
+        image_url: "https://cdn.example.com/product.png",
+        quality: "standard",
+        size: "1024x1024",
+        task_type: "ecommerce",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+
+  assert.equal(task.status, 200);
+  const taskBody = await readJson(task);
+  assert.equal(taskBody.status, "done");
+  assert.equal(taskBody.image_base64, null);
+  assert.equal(
+    taskBody.image_url,
+    `https://web-project.supabase.co/storage/v1/object/public/web-generation-results/web-user-1/${body.task_id}/result.png`,
+  );
+  assert.equal(storageUploads.length, 1);
+  assert.equal(storageUploads[0].headers["x-upsert"], "true");
+  assert.equal(storageUploads[0].headers["Content-Type"], "image/png");
+  assert.deepEqual(
+    storageUploads[0].body.subarray(0, 8),
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  );
+  assert.equal(
+    calls.some((call) => call.url === "https://kroma-api.onrender.com/api/v1/image/generate"),
+    false,
+  );
+});
+
 test("image generation progress does not expose provider channel details", async () => {
   let providerStarted;
   const providerStartedPromise = new Promise((resolve) => {

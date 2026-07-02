@@ -84,10 +84,17 @@ function runTask({ task, requestBody, pool, env, fetchImpl }) {
         return;
       }
 
-      if (result.image_url || result.image_base64) {
+      const storedResult = await storeInlineImageResult({
+        result,
+        task,
+        env,
+        fetchImpl,
+      });
+
+      if (storedResult.image_url || storedResult.image_base64) {
         task.status = "done";
-        task.image_url = result.image_url ?? null;
-        task.image_base64 = result.image_base64 ?? null;
+        task.image_url = storedResult.image_url ?? null;
+        task.image_base64 = storedResult.image_base64 ?? null;
         task.channel_used = result.provider;
         task.error = null;
         task.progress = "完成";
@@ -960,6 +967,123 @@ function toTaskResponse(task) {
     error: task.error,
     progress: task.progress,
   };
+}
+
+async function storeInlineImageResult({ result, task, env, fetchImpl }) {
+  if (!result?.image_base64) {
+    return result;
+  }
+
+  const bucket = env.WEB_GENERATION_STORAGE_BUCKET?.trim() || "web-generation-results";
+
+  if (!bucket || !task.user_id || !env.WEB_SUPABASE_URL || !env.WEB_SUPABASE_SERVICE_ROLE_KEY) {
+    return result;
+  }
+
+  try {
+    await ensureImageResultStorageBucket(fetchImpl, env, bucket);
+    const image = parseInlineImageForStorage(result.image_base64);
+    const objectPath = [
+      sanitizeStoragePathSegment(task.user_id),
+      sanitizeStoragePathSegment(task.task_id),
+      `result.${image.extension}`,
+    ].join("/");
+    const response = await fetchImpl(
+      `${supabaseUrl(env)}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath}`,
+      {
+        method: "PUT",
+        headers: {
+          apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": image.contentType,
+          "x-upsert": "true",
+        },
+        body: new Blob([image.buffer], { type: image.contentType }),
+      },
+    );
+
+    await parseJsonResponseOrThrow(response);
+
+    return {
+      ...result,
+      image_url: `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath}`,
+      image_base64: null,
+    };
+  } catch {
+    return result;
+  }
+}
+
+async function ensureImageResultStorageBucket(fetchImpl, env, bucket) {
+  try {
+    const response = await fetchImpl(`${supabaseUrl(env)}/storage/v1/bucket`, {
+      method: "POST",
+      headers: {
+        apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: bucket,
+        name: bucket,
+        public: true,
+        file_size_limit: 20 * 1024 * 1024,
+        allowed_mime_types: ["image/png", "image/jpeg", "image/webp"],
+      }),
+    });
+
+    if (response.status === 409) {
+      await response.text();
+      return;
+    }
+
+    await parseJsonResponseOrThrow(response);
+  } catch {
+    // The upload may still work if the bucket already exists.
+  }
+}
+
+function parseInlineImageForStorage(value) {
+  const text = String(value ?? "").trim();
+  const dataUrlMatch = text.match(/^data:([^;,]+)?;base64,(.*)$/is);
+  const contentType = normalizeInlineImageContentType(dataUrlMatch?.[1]);
+  const rawBase64 = (dataUrlMatch?.[2] ?? text).replace(/\s/g, "");
+
+  return {
+    buffer: Buffer.from(rawBase64, "base64"),
+    contentType,
+    extension: extensionFromContentType(contentType),
+  };
+}
+
+function normalizeInlineImageContentType(value) {
+  const contentType = String(value ?? "image/png").split(";")[0].trim().toLowerCase();
+
+  return ["image/png", "image/jpeg", "image/webp"].includes(contentType)
+    ? contentType
+    : "image/png";
+}
+
+function sanitizeStoragePathSegment(value) {
+  return String(value ?? "item")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96) || "item";
+}
+
+function supabaseUrl(env) {
+  return String(env.WEB_SUPABASE_URL ?? "").replace(/\/+$/, "");
+}
+
+async function parseJsonResponseOrThrow(response) {
+  const data = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(data?.msg ?? data?.message ?? data?.error ?? "Storage request failed");
+  }
+
+  return data;
 }
 
 function cleanupTasks(tasks) {
