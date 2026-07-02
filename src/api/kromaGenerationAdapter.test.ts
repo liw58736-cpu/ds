@@ -222,7 +222,7 @@ describe("kromaGenerationAdapter", () => {
     expect(kromaRequest).not.toHaveProperty("template_image_base64");
     expect(kromaRequest).not.toHaveProperty("template_image_base64s");
     expect(kromaRequest.use_template_mode).toBe(false);
-    expect(kromaRequest.prompt).toContain("只有XL码");
+    expect(kromaRequest.prompt).toContain("只有 XL 码");
     expect(kromaRequest.prompt).toContain("Render only this size or availability copy");
   });
 

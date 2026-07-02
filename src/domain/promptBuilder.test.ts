@@ -302,9 +302,11 @@ describe("buildGenerationPrompt", () => {
       (module) => module.id === "color_size",
     )?.prompt;
 
-    expect(prompt.finalPrompt).toContain("只有X\\L码");
+    expect(prompt.finalPrompt).toContain("只有 XL 码");
+    expect(prompt.finalPrompt).not.toContain("只有X\\L码");
     expect(prompt.finalPrompt).toContain("module reference note text exactly");
-    expect(colorSizePrompt).toContain("只有X\\L码");
+    expect(colorSizePrompt).toContain("只有 XL 码");
+    expect(colorSizePrompt).not.toContain("只有X\\L码");
     expect(colorSizePrompt).toContain("render module reference note text exactly");
     expect(colorSizePrompt).toContain("must use Image 2 reference assets");
   });
@@ -607,10 +609,10 @@ describe("buildGenerationPrompt", () => {
       (module) => module.id === "promotion",
     )?.prompt;
 
-    expect(prompt.finalPrompt).toContain("只有XL码");
+    expect(prompt.finalPrompt).toContain("只有 XL 码");
     expect(prompt.finalPrompt).toContain("限时4折");
     expect(colorSizePrompt).toContain("Render only this size or availability copy");
-    expect(colorSizePrompt).toContain("只有XL码");
+    expect(colorSizePrompt).toContain("只有 XL 码");
     expect(promotionPrompt).toContain("render module reference note text exactly");
     expect(promotionPrompt).toContain("限时4折");
   });

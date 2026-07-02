@@ -308,7 +308,7 @@ function withModuleReferencePrompt(
   }
 
   const notes = uniqueNotes(assets);
-  const visibleNotes = notes.filter(isProductFacingCopyNote);
+  const visibleNotes = getProductFacingCopyNotes(notes);
   const instructionOnlyNotes = notes.filter(
     (note) => !isProductFacingCopyNote(note),
   );
@@ -337,7 +337,7 @@ function withModuleReferencePrompt(
         return `${label}: use this uploaded reference asset as the buyer-show visual source; do not render the user note wording.`;
       }
 
-      return `${label}: ${note}`;
+      return `${label}: ${formatReferenceNoteForPrompt(note)}`;
     })
     .join(" ");
   const noteOnlyDescriptions = noteOnlyAssets
@@ -349,7 +349,7 @@ function withModuleReferencePrompt(
         return `${label}: follow this as an instruction for how to use the module material; do not render the user note wording.`;
       }
 
-      return `${label}: ${note}`;
+      return `${label}: ${formatReferenceNoteForPrompt(note)}`;
     })
     .join(" ");
   const promptParts = [
@@ -432,7 +432,7 @@ function withProductIdentityGuard(prompt: string): string {
 }
 
 function getExactTextInstruction(config: GenerationConfig): string {
-  const specifications = config.specifications.trim();
+  const specifications = normalizeProductFacingText(config.specifications.trim());
 
   if (!specifications) {
     return "";
@@ -447,7 +447,7 @@ function getModuleReferenceTextInstruction(config: GenerationConfig): string {
       (assets) => assets ?? [],
     ),
   );
-  const visibleNotes = notes.filter(isProductFacingCopyNote);
+  const visibleNotes = getProductFacingCopyNotes(notes);
 
   if (notes.length === 0) {
     return "";
@@ -474,6 +474,44 @@ function uniqueNotes(assets: ModuleReferenceAsset[]): string[] {
         .filter((note) => note.length > 0),
     ),
   ];
+}
+
+function getProductFacingCopyNotes(notes: string[]): string[] {
+  return [
+    ...new Set(
+      notes
+        .filter(isProductFacingCopyNote)
+        .map(normalizeProductFacingText)
+        .filter((note) => note.length > 0),
+    ),
+  ];
+}
+
+function formatReferenceNoteForPrompt(note: string): string {
+  return isProductFacingCopyNote(note) ? normalizeProductFacingText(note) : note;
+}
+
+function normalizeProductFacingText(value: string): string {
+  return normalizeSizeCopy(value.trim());
+}
+
+function normalizeSizeCopy(value: string): string {
+  let output = value
+    .replace(/\bXXX\s*\\\s*L\b/gi, "XXXL")
+    .replace(/\bXX\s*\\\s*L\b/gi, "XXL")
+    .replace(/\bX\s*\\\s*L\b/gi, "XL");
+
+  const sizeListPattern =
+    /\b(XXXL|XXL|XL|XS|S|M|L)\s*[\\/、,，]\s*(XXXL|XXL|XL|XS|S|M|L)\b/gi;
+  let previous = "";
+  while (previous !== output) {
+    previous = output;
+    output = output.replace(sizeListPattern, "$1 / $2");
+  }
+
+  return output
+    .replace(/\b(XXXL|XXL|XL|XS|S|M|L)\s*码/gi, "$1 码")
+    .replace(/只有\s*(XXXL|XXL|XL|XS|S|M|L)\s*码/gi, "只有 $1 码");
 }
 
 function isProductFacingCopyNote(note: string): boolean {
