@@ -1078,7 +1078,7 @@ test("image generation progress does not expose provider channel details", async
   await new Promise((resolve) => setTimeout(resolve, 0));
 });
 
-test("PackyAPI gpt-image-2 payload omits unsupported response_format", async () => {
+test("PackyAPI source-image jobs use the edit endpoint and omit unsupported response_format", async () => {
   const calls = [];
   const app = createWebBackend({
     env: {
@@ -1094,11 +1094,20 @@ test("PackyAPI gpt-image-2 payload omits unsupported response_format", async () 
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
       }
-      if (url === "https://packyapi.example.com/v1/images/generations") {
-        const payload = JSON.parse(init.body);
-        assert.equal(payload.model, "gpt-image-2");
-        assert.equal(payload.response_format, undefined);
-        assert.deepEqual(payload.image, ["https://cdn.example.com/product.png"]);
+      if (url === "https://cdn.example.com/product.png") {
+        return new Response(Buffer.from("product"), {
+          headers: { "Content-Type": "image/png" },
+        });
+      }
+      if (url === "https://packyapi.example.com/v1/images/edits") {
+        assert.equal(init.method, "POST");
+        assert.equal(init.headers.Authorization, "Bearer packy-key");
+        assert.equal(init.headers["Content-Type"], undefined);
+        assert.equal(init.body instanceof FormData, true);
+        assert.equal(init.body.get("model"), "gpt-image-2");
+        assert.equal(init.body.get("prompt"), "product hero");
+        assert.equal(init.body.get("response_format"), null);
+        assert.equal(init.body.getAll("image").length, 1);
         return jsonResponse({
           data: [{ url: "https://cdn.example.com/packy.png" }],
         });
@@ -1133,7 +1142,8 @@ test("PackyAPI gpt-image-2 payload omits unsupported response_format", async () 
 
   assert.equal(task.status, 200);
   assert.equal((await readJson(task)).image_url, "https://cdn.example.com/packy.png");
-  assert.equal(calls.some((call) => call.url.includes("/images/generations")), true);
+  assert.equal(calls.some((call) => call.url.includes("/images/generations")), false);
+  assert.equal(calls.some((call) => call.url.includes("/images/edits")), true);
 });
 
 test("detail-page template modules use PackyAPI edit fallback with product and module material images", async () => {
@@ -1246,7 +1256,12 @@ test("provider router rejects truncated base64 images and falls back", async () 
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
       }
-      if (url === "https://packyapi.example.com/v1/images/generations") {
+      if (url === "https://cdn.example.com/product.png") {
+        return new Response(Buffer.from("product"), {
+          headers: { "Content-Type": "image/png" },
+        });
+      }
+      if (url === "https://packyapi.example.com/v1/images/edits") {
         return jsonResponse({
           data: [{ b64_json: truncatedPngBase64 }],
         });
@@ -1297,7 +1312,7 @@ test("provider router rejects truncated base64 images and falls back", async () 
   assert.equal(taskBody.channel_used, "gptsapi");
   assert.equal(taskBody.image_url, "https://cdn.example.com/fallback.png");
   assert.equal(
-    calls.some((call) => call.url === "https://packyapi.example.com/v1/images/generations"),
+    calls.some((call) => call.url === "https://packyapi.example.com/v1/images/edits"),
     true,
   );
 });

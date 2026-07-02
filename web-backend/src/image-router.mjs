@@ -213,7 +213,7 @@ async function tryProvider({ key, requestBody, env, fetchImpl }) {
 }
 
 async function requestOpenAICompatible({ key, requestBody, env, fetchImpl }) {
-  if (shouldUsePackyTemplateEdit(key.provider, requestBody)) {
+  if (shouldUsePackyImageEdit(key.provider, requestBody)) {
     return requestPackyTemplateEdit({ key, requestBody, env, fetchImpl });
   }
 
@@ -285,12 +285,10 @@ async function requestPackyTemplateEdit({ key, requestBody, env, fetchImpl }) {
   return imageResultFromOpenAI(data);
 }
 
-function shouldUsePackyTemplateEdit(provider, requestBody) {
+function shouldUsePackyImageEdit(provider, requestBody) {
   return (
     provider === "packyapi" &&
-    Boolean(requestBody.use_template_mode) &&
-    Boolean(sourceImageInputFromRequest(requestBody)) &&
-    templateImageInputsFromRequest(requestBody).length > 0
+    Boolean(sourceImageInputFromRequest(requestBody))
   );
 }
 
