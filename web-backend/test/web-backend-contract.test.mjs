@@ -1319,6 +1319,84 @@ test("detail-page template modules use PackyAPI edit fallback with product and m
   );
 });
 
+test("buyer-show template references prefer PackyAPI edit before standard providers", async () => {
+  const calls = [];
+  const productImage = `data:image/png;base64,${Buffer.from("product").toString("base64")}`;
+  const buyerImage = `data:image/png;base64,${Buffer.from("buyer").toString("base64")}`;
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      RIGHTCODE_BASE_URL: "https://rightcode.example.com/v1",
+      RIGHTCODE_KEY_1: "rightcode-key",
+      PACKYAPI_BASE_URL: "https://packyapi.example.com/v1",
+      PACKYAPI_KEY_1: "packy-key",
+      PACKYAPI_IMAGE_MODEL: "gpt-image-2",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://rightcode.example.com/v1/images/generations") {
+        return jsonResponse({
+          data: [{ url: "https://cdn.example.com/rightcode-ignored-reference.png" }],
+        });
+      }
+      if (url === "https://packyapi.example.com/v1/images/edits") {
+        assert.equal(init.method, "POST");
+        assert.equal(init.body instanceof FormData, true);
+        assert.equal(init.body.getAll("image").length, 2);
+        return jsonResponse({
+          data: [{ url: "https://cdn.example.com/packy-buyer-show.png" }],
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "Preserve Image 1 product; use Image 2 as buyer-show reference.",
+        image_base64: productImage,
+        template_image_base64: buyerImage,
+        template_image_base64s: [buyerImage],
+        use_template_mode: true,
+        quality: "standard",
+        size: "1024x1792",
+        style: "detail_page:buyer_show:template",
+        task_type: "ecommerce",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+
+  assert.equal(task.status, 200);
+  const taskBody = await readJson(task);
+  assert.equal(taskBody.image_url, "https://cdn.example.com/packy-buyer-show.png");
+  assert.equal(
+    calls.some((call) => call.url === "https://rightcode.example.com/v1/images/generations"),
+    false,
+  );
+  assert.equal(
+    calls.some((call) => call.url === "https://packyapi.example.com/v1/images/edits"),
+    true,
+  );
+});
+
 test("provider router rejects truncated base64 images and falls back", async () => {
   const calls = [];
   const truncatedPngBase64 = Buffer.from([

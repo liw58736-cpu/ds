@@ -164,6 +164,16 @@ async function routeGeneration({
 }
 
 function planForRequest(requestBody) {
+  if (isBuyerShowTemplateRequest(requestBody)) {
+    const tier = isHdRequest(requestBody) ? "hd" : "standard";
+    return [
+      { provider: "packyapi", tier, progress: "正在生成图片" },
+      { provider: "rightcode", tier, progress: "正在生成图片" },
+      { provider: "wuyinkeji", tier, progress: "正在生成图片" },
+      { provider: "gptsapi", tier: "standard", progress: "正在生成图片" },
+    ];
+  }
+
   if (isHdRequest(requestBody)) {
     return [
       { provider: "wuyinkeji", tier: "hd", progress: "正在生成高清图片" },
@@ -189,6 +199,17 @@ function planForRequest(requestBody) {
 
 function isHdRequest(requestBody) {
   return ["hd", "2k", "4k"].includes(String(requestBody.quality ?? "").toLowerCase());
+}
+
+function isBuyerShowTemplateRequest(requestBody) {
+  return (
+    String(requestBody.style ?? "").toLowerCase().includes("buyer_show") &&
+    Boolean(
+      requestBody.template_image_base64 ||
+        (Array.isArray(requestBody.template_image_base64s) &&
+          requestBody.template_image_base64s.length > 0),
+    )
+  );
 }
 
 function isEditToolRequest(requestBody) {
