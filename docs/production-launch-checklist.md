@@ -183,6 +183,33 @@ WEB_PADDLE_WEBHOOK_SECRET
 
 The frontend sends `customData.user_id`, `customData.plan_id`, `customData.plan_name`, and `customData.credits`. The backend verifies `Paddle-Signature`, credits once, and stores the event in `web_billing_events`.
 
+## 3.1 Paddle Domain Approval Notes
+
+Current approved Paddle checkout domains:
+
+- `kromaai.app` approved on 2026-07-03
+- `listingpro-rho.vercel.app`
+- `i18nmate-site.vercel.app`
+
+Lessons from the `kromaai.app` approval delay:
+
+- Paddle domain approval must use the bare domain only: `kromaai.app`.
+- Do not enter `https://`, `www`, paths, query strings, or extra text in the
+  domain field.
+- If the submitted value shows as `kromaai.app chrome.app` or any value with a
+  space, delete it and resubmit. That means the browser/page input captured
+  extra text, not that Paddle changed the domain by itself.
+- Before submitting, verify the live site visibly links to or contains the
+  terms of service, privacy notice, and refund policy. Paddle explicitly checks
+  for these.
+- Use the same approved domain that launches checkout. If checkout starts from
+  `https://kromaai.app`, approval for another Vercel or Render domain is not
+  enough.
+- Multiple approved domains are allowed in Paddle. Do not remove older approved
+  domains if another product still uses them.
+- After approval, test checkout from the real production URL, not localhost or
+  an unapproved preview URL.
+
 ## 4. Image Generation Upstream
 
 Set the image upstream on `kroma-web-api`:
