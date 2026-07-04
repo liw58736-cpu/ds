@@ -31,6 +31,14 @@ describe("static legal pages", () => {
     expect(homepageHtml).toContain("AI ecommerce image generation");
   });
 
+  it("hides the raw crawler fallback before the React app hydrates", () => {
+    expect(homepageHtml).toContain(".static-crawler-fallback{display:none}");
+    expect(homepageHtml).toContain('class="static-crawler-fallback"');
+    expect(homepageHtml).toContain(
+      "#root .static-crawler-fallback{display:block!important}",
+    );
+  });
+
   it("publishes crawlable static pages on directory and direct html paths", () => {
     const pages = [
       {
