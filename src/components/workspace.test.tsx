@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GenerationTask } from "../domain/types";
-import { getAccountSnapshot } from "../storage/accountStore";
+import { getAccountSnapshot, replaceAccountSnapshot } from "../storage/accountStore";
 import { AppShell } from "./AppShell";
 import { Workspace } from "./Workspace";
 
@@ -480,6 +480,121 @@ describe("Workspace", () => {
       expect(createdTasks).toHaveLength(1);
     });
     expect(screen.queryByRole("button", { name: "任务已满" })).not.toBeInTheDocument();
+  });
+
+  it("keeps in-flight tasks when a delayed history sync finishes", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1");
+    vi.stubEnv("VITE_API_BASE_URL", "");
+    replaceAccountSnapshot({
+      session: {
+        identifier: "seller@example.com",
+        authView: "login",
+        mode: "password",
+        storeName: "",
+        inviteCode: "",
+        createdAt: "2026-06-17T00:00:00.000Z",
+        provider: "kroma",
+        userId: "web-user-1",
+        accessToken: "web-access-token",
+        refreshToken: "web-refresh-token",
+      },
+      balance: 20,
+      transactions: [],
+    });
+    const historyTask = createStoredTask({
+      id: "history-task-1",
+      createdAt: "2026-06-15T01:00:00.000Z",
+    });
+    let resolveHistory!: (response: Response) => void;
+    const historyRequest = new Promise<Response>((resolve) => {
+      resolveHistory = resolve;
+    });
+    let submittedCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const requestUrl = String(input);
+
+        if (requestUrl.endsWith("/generations?limit=100")) {
+          return historyRequest;
+        }
+
+        if (requestUrl.endsWith("/user/credits")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ credits: 20 }),
+          } as Response);
+        }
+
+        if (requestUrl.endsWith("/image/generate")) {
+          submittedCount += 1;
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                task_id: `backend-task-${submittedCount}`,
+                status: "processing",
+                progress: "正在生成图片",
+              }),
+          } as Response);
+        }
+
+        if (requestUrl.includes("/image/task/")) {
+          return new Promise<Response>(() => undefined);
+        }
+
+        return Promise.reject(new Error(`Unexpected request: ${requestUrl}`));
+      }),
+    );
+    const { container, rerender } = render(<Workspace activeModule="detail_page" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "使用示例商品" }));
+    fireEvent.click(container.querySelector(".generate-button") as HTMLButtonElement);
+
+    let firstTaskId = "";
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+
+      expect(storedTasks).toHaveLength(1);
+      expect(storedTasks[0]?.status).toBe("processing");
+      firstTaskId = storedTasks[0]?.id ?? "";
+    });
+
+    rerender(<Workspace activeModule="white_background" />);
+    fireEvent.click(container.querySelector(".generate-button") as HTMLButtonElement);
+
+    let secondTaskId = "";
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+
+      expect(storedTasks).toHaveLength(2);
+      expect(storedTasks.every((task) => task.status === "processing")).toBe(true);
+      secondTaskId = storedTasks.find((task) => task.id !== firstTaskId)?.id ?? "";
+    });
+
+    resolveHistory({
+      ok: true,
+      json: () => Promise.resolve([historyTask]),
+    } as Response);
+
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+      const storedTaskIds = storedTasks.map((task) => task.id);
+
+      expect(storedTaskIds).toEqual(
+        expect.arrayContaining([firstTaskId, secondTaskId, "history-task-1"]),
+      );
+    });
+
+    screen
+      .getAllByRole("button", { name: "取消生成" })
+      .forEach((button) => fireEvent.click(button));
   });
 
   it("does not render inline recent tasks in the workspace settings column", async () => {

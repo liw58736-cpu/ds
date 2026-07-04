@@ -41,6 +41,31 @@ function moveTaskToTop(
   return [nextTask, ...tasks.filter((task) => task.id !== nextTask.id)];
 }
 
+function getTaskCreatedAtTime(task: GenerationTask): number {
+  const time = Date.parse(task.createdAt);
+
+  return Number.isFinite(time) ? time : 0;
+}
+
+function mergeLoadedTasksWithCurrent(
+  currentTasks: GenerationTask[],
+  loadedTasks: GenerationTask[],
+  activeTaskIds: Set<string>,
+): GenerationTask[] {
+  const taskById = new Map(loadedTasks.map((task) => [task.id, task]));
+
+  for (const task of currentTasks) {
+    if (!taskById.has(task.id) || activeTaskIds.has(task.id)) {
+      taskById.set(task.id, task);
+    }
+  }
+
+  return Array.from(taskById.values()).sort(
+    (firstTask, secondTask) =>
+      getTaskCreatedAtTime(secondTask) - getTaskCreatedAtTime(firstTask),
+  );
+}
+
 function getFailureDetails(error: unknown): {
   errorCode: string;
   errorMessage: string;
@@ -338,7 +363,13 @@ export function Workspace({
   useEffect(() => {
     void listGenerationTasks().then((storedTasks) => {
       hasLoadedTasksRef.current = true;
-      setTasks(storedTasks);
+      setTasks((currentTasks) =>
+        mergeLoadedTasksWithCurrent(
+          currentTasks,
+          storedTasks,
+          new Set(Object.keys(taskRunTokensRef.current)),
+        ),
+      );
       storedTasks
         .filter(
           (task) =>
@@ -349,6 +380,10 @@ export function Workspace({
             ),
         )
         .forEach((task) => {
+          if (taskRunTokensRef.current[task.id]) {
+            return;
+          }
+
           void runProcessingTask(task, startTaskRun(task.id), "resume");
         });
     });

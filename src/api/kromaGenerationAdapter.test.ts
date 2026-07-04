@@ -373,6 +373,51 @@ describe("kromaGenerationAdapter", () => {
     expect(onTaskStarted).toHaveBeenCalledWith("kroma-task-1");
   });
 
+  it("keeps polling when a task status request has a temporary gateway failure", async () => {
+    vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            task_id: "kroma-task-retryable",
+            status: "processing",
+            progress: "正在生成图片",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 504,
+        text: () =>
+          Promise.resolve(JSON.stringify({ detail: "Supabase request failed" })),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            task_id: "kroma-task-retryable",
+            status: "done",
+            image_url: "https://cdn.example.com/recovered.png",
+            channel_used: "rightcode",
+          }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      submitKromaGenerationTask(buildGenerationTaskRequest(baseInput), {
+        pollIntervalMs: 0,
+        maxPolls: 3,
+      }),
+    ).resolves.toMatchObject({
+      taskId: "kroma-task-retryable",
+      status: "completed",
+      resultUrls: ["https://cdn.example.com/recovered.png"],
+      channelUsed: "rightcode",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it("refreshes an expired saved token and retries generation once", async () => {
     vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1/");
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1/");

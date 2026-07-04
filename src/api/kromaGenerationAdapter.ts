@@ -290,8 +290,18 @@ async function fetchKromaTask(
   );
 
   if (!pollResponse.ok) {
-    const text = await pollResponse.text();
+    if (isRetryableTaskPollStatus(pollResponse.status)) {
+      return {
+        status: "ok",
+        task: {
+          task_id: taskId,
+          status: "processing",
+          progress: "正在生成图片",
+        },
+      };
+    }
 
+    const text = await pollResponse.text();
     return {
       status: "failed",
       task: failedKromaTask(
@@ -306,6 +316,10 @@ async function fetchKromaTask(
     status: "ok",
     task: (await pollResponse.json()) as KromaTaskResponse,
   };
+}
+
+function isRetryableTaskPollStatus(status: number): boolean {
+  return [408, 429, 500, 502, 503, 504].includes(status);
 }
 
 function notifyProgress(
