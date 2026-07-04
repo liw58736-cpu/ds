@@ -57,6 +57,57 @@ describe("Workspace", () => {
     expect(screen.getByText("sample-product.jpg")).toBeInTheDocument();
   });
 
+  it("asks for a product image before selecting main image modules", async () => {
+    const user = userEvent.setup();
+    render(<Workspace />);
+
+    const heroCard = screen.getByRole("button", { name: /首屏 KV/ });
+
+    await user.click(heroCard);
+
+    expect(screen.getByText("请先上传商品图，再选择模块。")).toBeInTheDocument();
+    expect(screen.getByText("已选 0")).toBeInTheDocument();
+    expect(heroCard).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(within(heroCard).getByRole("button", { name: "添加素材" }));
+
+    expect(screen.queryByRole("dialog", { name: "首屏 KV素材" })).not.toBeInTheDocument();
+    expect(screen.getByText("请先上传商品图，再选择模块。")).toBeInTheDocument();
+  });
+
+  it("asks for a product image before selecting detail page modules", async () => {
+    const user = userEvent.setup();
+    render(<Workspace activeModule="detail_page" />);
+
+    const brandCard = screen.getByRole("button", {
+      name: "品牌介绍 编辑式封面 + 品牌定位",
+    });
+
+    await user.click(brandCard);
+    await user.click(screen.getByRole("button", { name: "品牌介绍 增加 1 张" }));
+
+    expect(screen.getByText("请先上传商品图，再选择模块。")).toBeInTheDocument();
+    expect(screen.getByText("已选 0")).toBeInTheDocument();
+    expect(brandCard).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("asks for a product image before switching AI tool modules", async () => {
+    const user = userEvent.setup();
+    render(<Workspace activeModule="white_background" />);
+
+    await user.click(screen.getByRole("button", { name: "AI背景" }));
+
+    expect(screen.getByText("请先上传商品图，再选择模块。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "白底图" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "AI背景" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
   it("renders detail page settings as a separate studio page", async () => {
     const user = userEvent.setup();
     render(<Workspace activeModule="detail_page" />);
@@ -120,6 +171,8 @@ describe("Workspace", () => {
     const user = userEvent.setup();
     render(<Workspace />);
 
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+
     expect(screen.getByText(/预计消耗 3 积分/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /首屏 KV/ }));
@@ -140,6 +193,8 @@ describe("Workspace", () => {
     const user = userEvent.setup();
     render(<Workspace activeModule="detail_page" />);
 
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+
     await user.click(
       screen.getByRole("button", { name: "品牌介绍 编辑式封面 + 品牌定位" }),
     );
@@ -157,6 +212,8 @@ describe("Workspace", () => {
   it("lets users add reference images and notes to a module card", async () => {
     const user = userEvent.setup();
     render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
 
     const packagingCard = screen.getByRole("button", {
       name: "包装展示 礼盒、配件与开箱细节",
@@ -181,6 +238,8 @@ describe("Workspace", () => {
     const user = userEvent.setup();
     render(<Workspace activeModule="detail_page" />);
 
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+
     const colorSizeCard = screen.getByRole("button", {
       name: "颜色尺码 穿着主体 + 色卡 / 尺码",
     });
@@ -196,6 +255,8 @@ describe("Workspace", () => {
   it("renders the module material dialog outside the parameter panel", async () => {
     const user = userEvent.setup();
     render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
 
     const packagingCard = screen.getByRole("button", {
       name: "包装展示 礼盒、配件与开箱细节",
@@ -996,6 +1057,110 @@ describe("Workspace", () => {
 
     expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(1);
     expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
+  it("keeps generated AI tool results when credit sync fails after success", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1");
+    vi.stubEnv("VITE_API_BASE_URL", "");
+    replaceAccountSnapshot({
+      session: {
+        identifier: "seller@example.com",
+        authView: "login",
+        mode: "password",
+        storeName: "",
+        inviteCode: "",
+        createdAt: "2026-06-17T00:00:00.000Z",
+        provider: "kroma",
+        userId: "web-user-1",
+        accessToken: "web-access-token",
+        refreshToken: "web-refresh-token",
+      },
+      balance: 20,
+      transactions: [],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const requestUrl = String(input);
+
+        if (requestUrl.endsWith("/generations?limit=100")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve([]),
+          } as Response);
+        }
+
+        if (requestUrl.endsWith("/user/credits")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ credits: 20 }),
+          } as Response);
+        }
+
+        if (requestUrl.endsWith("/image/generate")) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                task_id: "ai-tool-credit-sync-task",
+                status: "processing",
+                progress: "正在生成图片",
+              }),
+          } as Response);
+        }
+
+        if (requestUrl.endsWith("/image/task/ai-tool-credit-sync-task")) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                task_id: "ai-tool-credit-sync-task",
+                status: "done",
+                image_url: "https://cdn.example.com/ai-tool-result.png",
+              }),
+          } as Response);
+        }
+
+        if (requestUrl.includes("/user/credits/deduct")) {
+          return Promise.resolve({
+            ok: false,
+            status: 500,
+            text: () => Promise.resolve('{"detail":"Supabase request failed"}'),
+          } as Response);
+        }
+
+        if (requestUrl.endsWith("/generations")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ saved: true }),
+          } as Response);
+        }
+
+        return Promise.reject(new Error(`Unexpected request: ${requestUrl}`));
+      }),
+    );
+    const user = userEvent.setup();
+    render(<Workspace activeModule="white_background" />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: "精修" }));
+    await user.click(screen.getByRole("button", { name: "生成精修" }));
+
+    expect(await screen.findByAltText("生成结果", {}, { timeout: 3500 })).toHaveAttribute(
+      "src",
+      "https://cdn.example.com/ai-tool-result.png",
+    );
+
+    await waitFor(() => {
+      const storedTasks = JSON.parse(
+        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      ) as GenerationTask[];
+
+      expect(storedTasks[0]).toMatchObject({
+        status: "completed",
+        resultUrls: ["https://cdn.example.com/ai-tool-result.png"],
+      });
+    });
   });
 
 });

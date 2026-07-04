@@ -1232,6 +1232,87 @@ test("PackyAPI source-image jobs use the edit endpoint and omit unsupported resp
   assert.equal(calls.some((call) => call.url.includes("/images/edits")), true);
 });
 
+test("AI edit tools fall back to standard providers when PackyAPI edit fails", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      PACKYAPI_BASE_URL: "https://packyapi.example.com/v1",
+      PACKYAPI_KEY_1: "packy-key",
+      RIGHTCODE_BASE_URL: "https://rightcode.example.com/v1",
+      RIGHTCODE_KEY_1: "rightcode-key",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://cdn.example.com/product.png") {
+        return new Response(Buffer.from("product"), {
+          headers: { "Content-Type": "image/png" },
+        });
+      }
+      if (url === "https://packyapi.example.com/v1/images/edits") {
+        return jsonResponse({ error: { message: "temporary edit outage" } }, 503);
+      }
+      if (url === "https://rightcode.example.com/v1/images/generations") {
+        assert.equal(init.method, "POST");
+        assert.deepEqual(JSON.parse(init.body), {
+          model: "gpt-image-2",
+          prompt: "retouch the product photo",
+          n: 1,
+          size: "1024x1024",
+          response_format: "url",
+          image: ["https://cdn.example.com/product.png"],
+        });
+        return jsonResponse({
+          data: [{ url: "https://cdn.example.com/rightcode-retouch.png" }],
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "retouch the product photo",
+        image_url: "https://cdn.example.com/product.png",
+        quality: "standard",
+        size: "1024x1024",
+        task_type: "retouch",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+  const taskBody = await readJson(task);
+
+  assert.equal(taskBody.status, "done");
+  assert.equal(taskBody.image_url, "https://cdn.example.com/rightcode-retouch.png");
+  assert.equal(taskBody.channel_used, "rightcode");
+  assert.equal(
+    calls.some((call) => call.url === "https://packyapi.example.com/v1/images/edits"),
+    true,
+  );
+  assert.equal(
+    calls.some((call) => call.url === "https://rightcode.example.com/v1/images/generations"),
+    true,
+  );
+});
+
 test("detail-page template modules use PackyAPI edit fallback with product and module material images", async () => {
   const calls = [];
   const productImage = `data:image/png;base64,${Buffer.from("product").toString("base64")}`;

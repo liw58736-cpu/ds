@@ -184,7 +184,12 @@ function planForRequest(requestBody) {
   }
 
   if (isEditToolRequest(requestBody)) {
-    return [{ provider: "packyapi", tier: "standard", progress: "正在处理图片" }];
+    return [
+      { provider: "packyapi", tier: "standard", progress: "正在处理图片" },
+      { provider: "rightcode", tier: "standard", progress: "正在处理图片" },
+      { provider: "wuyinkeji", tier: "standard", progress: "正在处理图片" },
+      { provider: "gptsapi", tier: "standard", progress: "正在处理图片" },
+    ];
   }
 
   const standardPlan = [
@@ -215,17 +220,17 @@ function isBuyerShowTemplateRequest(requestBody) {
 function isEditToolRequest(requestBody) {
   const taskType = String(requestBody.task_type ?? "").toLowerCase();
   const style = String(requestBody.style ?? "").toLowerCase();
-  if (taskType === "image_edit") {
-    return true;
-  }
-  return [
+  const editModes = [
     "remove_object",
     "watermark_remove",
     "background_remove",
+    "ghost_model",
     "retouch",
     "restoration",
     "image_edit",
-  ].some((mode) => style.includes(mode));
+  ];
+
+  return editModes.includes(taskType) || editModes.some((mode) => style.includes(mode));
 }
 
 async function tryProvider({ key, requestBody, env, fetchImpl }) {

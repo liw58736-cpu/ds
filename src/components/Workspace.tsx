@@ -259,14 +259,20 @@ export function Workspace({
           creditCost: result.creditCost,
           completedAt: new Date().toISOString(),
         });
-        const account = await consumeCredits({
-          amount: result.creditCost,
-          label: "生成商品素材",
-        });
 
-        setAccountBalance(account.balance);
         setTasks((currentTasks) => moveTaskToTop(currentTasks, completedTask));
         void saveGenerationTaskHistory(completedTask);
+        try {
+          const account = await consumeCredits({
+            amount: result.creditCost,
+            label: "生成商品素材",
+          });
+
+          setAccountBalance(account.balance);
+        } catch {
+          // Keep the generated result visible; a temporary credit sync failure
+          // should not turn a completed image into a failed task.
+        }
       } catch (error) {
         if (!isTaskRunCurrent(processingTask.id, runToken)) {
           return;
@@ -423,6 +429,7 @@ export function Workspace({
             onChange={setConfig}
             onGenerate={handleGenerate}
             onBuyCredits={onOpenPricing}
+            hasProduct={Boolean(product)}
             isGenerateDisabled={!product}
             runningTaskCount={runningTaskCount}
             isOutOfCredits={isAuthenticated && isOutOfCredits}

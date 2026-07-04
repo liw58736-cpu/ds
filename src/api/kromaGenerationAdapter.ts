@@ -6,7 +6,7 @@ import { refreshKromaSession } from "./accountApi";
 
 export interface KromaGenerateRequest {
   prompt: string;
-  task_type: "ecommerce" | "image_edit";
+  task_type: "ecommerce" | "image_edit" | "retouch";
   style: string;
   image_url?: string;
   image_base64?: string;
@@ -73,7 +73,7 @@ export function buildKromaGenerateRequest(
 
   return {
     prompt: prompt.finalPrompt,
-    task_type: "ecommerce",
+    task_type: getKromaTaskType(config),
     style: buildKromaStyle(config, routeMode),
     ...imageInput,
     ...moduleReferenceImageInput,
@@ -82,6 +82,24 @@ export function buildKromaGenerateRequest(
     use_template_mode: hasModuleReferenceImages,
     keep_user_outfit_pose: false,
   };
+}
+
+function getKromaTaskType(
+  config: GenerationTaskCreateRequest["body"]["config"],
+): KromaGenerateRequest["task_type"] {
+  if (config.module !== "white_background") {
+    return "ecommerce";
+  }
+
+  if (config.whiteBackgroundMode === "retouch") {
+    return "retouch";
+  }
+
+  if (config.whiteBackgroundMode === "ghost_model") {
+    return "image_edit";
+  }
+
+  return "ecommerce";
 }
 
 function getModuleReferenceImageInput(

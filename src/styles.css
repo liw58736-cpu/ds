@@ -2957,6 +2957,31 @@ body {
   background: #f6fbf9;
 }
 
+.module-card-button.is-disabled,
+.detail-module-button.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.module-card-button.is-disabled:hover,
+.detail-module-button.is-disabled:hover {
+  transform: none;
+  border-color: var(--button-border);
+  background: #f8fcfa;
+}
+
+.module-product-required-notice {
+  margin: -2px 0 1px;
+  padding: 8px 10px;
+  border: 1px solid #f4c982;
+  border-radius: 8px;
+  color: #80540a;
+  background: #fff8e8;
+  font-size: 0.78rem;
+  font-weight: 720;
+  line-height: 1.45;
+}
+
 .module-card-button.is-active,
 .detail-module-button.is-active {
   border-color: var(--selected);
@@ -3054,6 +3079,11 @@ body {
   border-color: var(--button-border);
   background: #ffffff;
   font-size: 0.82rem;
+}
+
+.segmented-control button.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .segmented-control button.is-active,

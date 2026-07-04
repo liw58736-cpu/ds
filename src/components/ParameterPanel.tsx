@@ -1,4 +1,4 @@
-import { type ChangeEvent, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   brandVersionExtraCredits,
@@ -30,6 +30,7 @@ interface ParameterPanelProps {
   onChange: (config: GenerationConfig) => void;
   onGenerate: () => void;
   onBuyCredits?: () => void;
+  hasProduct: boolean;
   isGenerateDisabled: boolean;
   runningTaskCount: number;
   isOutOfCredits?: boolean;
@@ -213,6 +214,7 @@ export function ParameterPanel({
   onChange,
   onGenerate,
   onBuyCredits,
+  hasProduct,
   isGenerateDisabled,
   runningTaskCount,
   isOutOfCredits = false,
@@ -228,6 +230,8 @@ export function ParameterPanel({
     ModuleReferenceAsset[]
   >([]);
   const [draftReferenceNote, setDraftReferenceNote] = useState("");
+  const [showProductRequiredNotice, setShowProductRequiredNotice] =
+    useState(false);
   const resolution = config.resolution ?? "1K";
   const generationVersion = config.generationVersion ?? "brand";
   const selectedMainModules = config.selectedMainModules ?? [];
@@ -261,7 +265,29 @@ export function ParameterPanel({
     onChange({ ...config, [key]: value });
   };
 
+  useEffect(() => {
+    if (hasProduct) {
+      setShowProductRequiredNotice(false);
+    }
+  }, [hasProduct]);
+
+  const requireProductBeforeModuleSelection = () => {
+    if (hasProduct) {
+      return false;
+    }
+
+    setShowProductRequiredNotice(true);
+    return true;
+  };
+
   const toggleMainModule = (moduleId: MainImageModuleId) => {
+    if (
+      !selectedMainModules.includes(moduleId) &&
+      requireProductBeforeModuleSelection()
+    ) {
+      return;
+    }
+
     const nextModules = selectedMainModules.includes(moduleId)
       ? selectedMainModules.filter((currentModule) => currentModule !== moduleId)
       : [...selectedMainModules, moduleId];
@@ -273,6 +299,10 @@ export function ParameterPanel({
     moduleId: DetailPageModuleId,
     nextCount: number,
   ) => {
+    if (nextCount > 0 && requireProductBeforeModuleSelection()) {
+      return;
+    }
+
     const normalizedCount = Math.max(
       0,
       Math.min(maxDetailModuleCount, Math.floor(nextCount)),
@@ -292,10 +322,25 @@ export function ParameterPanel({
     setDetailModuleCount(moduleId, (detailCounts[moduleId] ?? 0) + 1);
   };
 
+  const selectWhiteBackgroundMode = (mode: WhiteBackgroundMode) => {
+    if (
+      mode !== whiteBackgroundMode &&
+      requireProductBeforeModuleSelection()
+    ) {
+      return;
+    }
+
+    updateConfig("whiteBackgroundMode", mode);
+  };
+
   const getReferenceAssets = (moduleId: string): ModuleReferenceAsset[] =>
     moduleReferenceAssets[moduleId] ?? [];
 
   const openReferenceEditor = (moduleId: string, title: string) => {
+    if (requireProductBeforeModuleSelection()) {
+      return;
+    }
+
     const assets = getReferenceAssets(moduleId);
     const notes = assets
       .map((asset) => asset.note?.trim() ?? "")
@@ -448,6 +493,11 @@ export function ParameterPanel({
             <span id="main-image-modules">模块选择（多选）</span>
             <small>新用户可体验前 4 个模块。</small>
           </div>
+          {showProductRequiredNotice ? (
+            <p className="module-product-required-notice" role="status">
+              请先上传商品图，再选择模块。
+            </p>
+          ) : null}
           <p className="selection-count">已选 {selectedMainModules.length}</p>
           <div className="module-card-grid">
             {mainImageModules.map((module) => {
@@ -461,9 +511,12 @@ export function ParameterPanel({
                   role="button"
                   tabIndex={0}
                   key={module.id}
-                  className={`module-card-button${isActive ? " is-active" : ""}`}
+                  className={`module-card-button${isActive ? " is-active" : ""}${
+                    !hasProduct && !isActive ? " is-disabled" : ""
+                  }`}
                   aria-label={`${module.title} ${module.description}`}
                   aria-pressed={isActive}
+                  aria-disabled={!hasProduct && !isActive}
                   onClick={() => toggleMainModule(module.id)}
                   onKeyDown={(event) => {
                     if (event.key !== "Enter" && event.key !== " ") {
@@ -507,6 +560,11 @@ export function ParameterPanel({
             <span id="detail-modules">服装详情内容模块</span>
             <small>点击未选模块会添加 1 张图，右上角可继续叠加数量。</small>
           </div>
+          {showProductRequiredNotice ? (
+            <p className="module-product-required-notice" role="status">
+              请先上传商品图，再选择模块。
+            </p>
+          ) : null}
           <p className="selection-count">已选 {selectedDetailCount}</p>
           <div className="detail-module-grid">
             {detailContentModules.map((module) => {
@@ -521,8 +579,11 @@ export function ParameterPanel({
                   key={module.id}
                   role="button"
                   tabIndex={0}
-                  className={`detail-module-button${isActive ? " is-active" : ""}`}
+                  className={`detail-module-button${isActive ? " is-active" : ""}${
+                    !hasProduct && !isActive ? " is-disabled" : ""
+                  }`}
                   aria-pressed={isActive}
+                  aria-disabled={!hasProduct && !isActive}
                   aria-label={`${module.title} ${module.description}`}
                   onClick={() => {
                     if (!isActive) {
@@ -596,20 +657,30 @@ export function ParameterPanel({
             <span>AI工具</span>
             <small>选择要生成的工具类型</small>
           </div>
+          {showProductRequiredNotice ? (
+            <p className="module-product-required-notice" role="status">
+              请先上传商品图，再选择模块。
+            </p>
+          ) : null}
           <div className="segmented-control" aria-label="AI工具">
-            {whiteBackgroundModes.map((mode) => (
-              <button
-                type="button"
-                key={mode.value}
-                className={
-                  mode.value === whiteBackgroundMode ? "is-active" : undefined
-                }
-                aria-pressed={mode.value === whiteBackgroundMode}
-                onClick={() => updateConfig("whiteBackgroundMode", mode.value)}
-              >
-                {mode.label}
-              </button>
-            ))}
+            {whiteBackgroundModes.map((mode) => {
+              const isActive = mode.value === whiteBackgroundMode;
+
+              return (
+                <button
+                  type="button"
+                  key={mode.value}
+                  className={`${isActive ? "is-active" : ""}${
+                    !hasProduct && !isActive ? " is-disabled" : ""
+                  }`.trim() || undefined}
+                  aria-pressed={isActive}
+                  aria-disabled={!hasProduct && !isActive}
+                  onClick={() => selectWhiteBackgroundMode(mode.value)}
+                >
+                  {mode.label}
+                </button>
+              );
+            })}
           </div>
         </section>
       ) : null}

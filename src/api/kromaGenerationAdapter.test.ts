@@ -247,6 +247,40 @@ describe("kromaGenerationAdapter", () => {
     });
   });
 
+  it("maps AI ghost mannequin work to an image edit task", () => {
+    const request = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        module: "white_background",
+        whiteBackgroundMode: "ghost_model",
+      },
+    });
+
+    expect(buildKromaGenerateRequest(request)).toMatchObject({
+      task_type: "image_edit",
+      style: "white_background:ghost_model:standard",
+      use_template_mode: false,
+    });
+  });
+
+  it("maps AI retouch work to the retouch task type used by the image router", () => {
+    const request = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        module: "white_background",
+        whiteBackgroundMode: "retouch",
+      },
+    });
+
+    expect(buildKromaGenerateRequest(request)).toMatchObject({
+      task_type: "retouch",
+      style: "white_background:retouch:standard",
+      use_template_mode: false,
+    });
+  });
+
   it("maps HD requests to the 2K/4K quality values used by the reference router", () => {
     const request = buildGenerationTaskRequest({
       ...baseInput,
