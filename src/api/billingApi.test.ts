@@ -133,10 +133,10 @@ describe("billingApi", () => {
         customData: expect.objectContaining({
           user_id: "user-1",
           plan_id: "basic-top-up",
-          credits: 120,
         }),
       }),
     );
+    expect(checkoutOpen.mock.calls[0][0].customData).not.toHaveProperty("credits");
     expect(getAccountSnapshot().balance).toBe(5);
     expect(appendChild).not.toHaveBeenCalled();
   });

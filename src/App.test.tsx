@@ -188,7 +188,7 @@ describe("App", () => {
     expect(screen.getAllByRole("button", { name: "支付" })).toHaveLength(3);
     await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
     expect(screen.getByRole("status")).toHaveTextContent(
-      "已确认 专业包，950 积分已入账，当前余额 955 积分。",
+      "已确认 专业包，10,500 积分已入账，当前余额 10,505 积分。",
     );
 
     await user.click(screen.getByRole("button", { name: "订阅方案" }));
@@ -213,12 +213,12 @@ describe("App", () => {
     await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "已确认 专业包，950 积分已入账，当前余额 955 积分。",
+      "已确认 专业包，10,500 积分已入账，当前余额 10,505 积分。",
     );
 
     await user.click(screen.getByRole("button", { name: "账户" }));
 
-    expect(screen.getByText("955 credits")).toBeInTheDocument();
+    expect(screen.getByText("10,505 credits")).toBeInTheDocument();
     expect(screen.queryByText("最近积分记录")).not.toBeInTheDocument();
     expect(screen.queryByText("购买 专业包")).not.toBeInTheDocument();
   });
@@ -297,10 +297,10 @@ describe("App", () => {
         items: [{ priceId: "pri_pro", quantity: 1 }],
         customData: expect.objectContaining({
           plan_id: "pro-top-up",
-          credits: 950,
         }),
       }),
     );
+    expect(checkoutOpen.mock.calls[0][0].customData).not.toHaveProperty("credits");
     expect(getAccountSnapshot().balance).toBe(5);
   });
 
@@ -1145,12 +1145,12 @@ describe("App", () => {
 
     await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
     expect(screen.getByRole("status")).toHaveTextContent(
-      "已确认 专业包，950 积分已入账，当前余额 950 积分。",
+      "已确认 专业包，10,500 积分已入账，当前余额 10,500 积分。",
     );
 
     await user.click(screen.getByRole("button", { name: "商品主图" }));
 
-    expect(getAccountSnapshot().balance).toBe(950);
+    expect(getAccountSnapshot().balance).toBe(10500);
     expect(
       screen.getByRole("button", { name: "生成商品主图" }),
     ).toBeInTheDocument();

@@ -129,7 +129,6 @@ async function openPaddleCheckout(input: PurchasePlanInput): Promise<void> {
       user_id: input.userId ?? "guest",
       plan_id: input.planId,
       plan_name: input.planName,
-      credits: Math.max(0, Math.floor(input.credits)),
     },
     settings: {
       successUrl: `${window.location.origin}/?payment=paddle-success`,

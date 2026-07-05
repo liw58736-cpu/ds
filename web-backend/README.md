@@ -113,12 +113,11 @@ https://kroma-web-api.onrender.com/api/v1/billing/paddle/webhook
 ```
 
 Subscribe at least to `transaction.completed`. The checkout frontend sends
-`customData.user_id`, `customData.plan_id`, `customData.plan_name`, and
-`customData.credits`; the webhook verifies the `Paddle-Signature`, applies the
-credit top-up once, and stores the event in `web_billing_events` for idempotency.
-If Paddle sends a later transaction without `customData.credits`, the backend
-can derive credits from `WEB_PADDLE_PRICE_CREDITS_JSON` using the Paddle price
-id in `data.items`.
+`customData.user_id`, `customData.plan_id`, and `customData.plan_name`; the
+webhook verifies the `Paddle-Signature`, derives credits from
+`WEB_PADDLE_PRICE_CREDITS_JSON` using the Paddle price id in `data.items`,
+applies the credit top-up once, and stores the event in `web_billing_events`
+for idempotency. Do not trust client-supplied credits for live Paddle events.
 
 The frontend static service should use:
 

@@ -1103,12 +1103,30 @@ function requireInternalBillingAccess(request, env) {
 }
 
 function resolvePaddleFulfillment(data, customData, env) {
+  const priceId = extractPaddlePriceId(data);
+  const mapped = priceId ? parsePaddlePriceCreditMap(env)[priceId] : null;
   const customCredits = Math.max(
     0,
     Number.parseInt(String(customData.credits ?? "0"), 10),
   );
   const customPlanId = String(customData.plan_id ?? customData.planId ?? "");
   const customPlanName = String(customData.plan_name ?? customData.planName ?? customPlanId);
+
+  if (priceId) {
+    if (!mapped) {
+      return {
+        credits: 0,
+        planId: customPlanId,
+        planName: customPlanName,
+      };
+    }
+
+    return {
+      credits: Math.max(0, Number.parseInt(String(mapped.credits ?? "0"), 10)),
+      planId: String(mapped.plan_id ?? mapped.planId ?? customPlanId),
+      planName: String(mapped.plan_name ?? mapped.planName ?? mapped.plan_id ?? mapped.planId ?? customPlanName),
+    };
+  }
 
   if (customCredits > 0) {
     return {
@@ -1118,21 +1136,10 @@ function resolvePaddleFulfillment(data, customData, env) {
     };
   }
 
-  const priceId = extractPaddlePriceId(data);
-  const mapped = priceId ? parsePaddlePriceCreditMap(env)[priceId] : null;
-
-  if (!mapped) {
-    return {
-      credits: 0,
-      planId: customPlanId,
-      planName: customPlanName,
-    };
-  }
-
   return {
-    credits: Math.max(0, Number.parseInt(String(mapped.credits ?? "0"), 10)),
-    planId: String(mapped.plan_id ?? mapped.planId ?? customPlanId),
-    planName: String(mapped.plan_name ?? mapped.planName ?? mapped.plan_id ?? mapped.planId ?? customPlanName),
+    credits: 0,
+    planId: customPlanId,
+    planName: customPlanName,
   };
 }
 
