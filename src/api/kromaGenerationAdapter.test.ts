@@ -281,6 +281,36 @@ describe("kromaGenerationAdapter", () => {
     });
   });
 
+  it("maps AI outfit change work to an image edit task with the target garment image", () => {
+    const request = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        module: "white_background",
+        whiteBackgroundMode: "outfit_change",
+        moduleReferenceAssets: {
+          outfit_change: [
+            {
+              id: "target-garment",
+              fileName: "target-garment.png",
+              imageUrl: "data:image/png;base64,target-garment",
+            },
+          ],
+        },
+      },
+    });
+    const kromaRequest = buildKromaGenerateRequest(request);
+
+    expect(kromaRequest).toMatchObject({
+      task_type: "image_edit",
+      style: "white_background:outfit_change:standard",
+      template_image_base64: "data:image/png;base64,target-garment",
+      template_image_base64s: ["data:image/png;base64,target-garment"],
+      use_template_mode: true,
+    });
+    expect(kromaRequest.prompt).toContain("Image 2 is the target clothing");
+  });
+
   it("maps HD requests to the 2K/4K quality values used by the reference router", () => {
     const request = buildGenerationTaskRequest({
       ...baseInput,

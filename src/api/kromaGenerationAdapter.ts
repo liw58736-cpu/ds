@@ -95,7 +95,10 @@ function getKromaTaskType(
     return "retouch";
   }
 
-  if (config.whiteBackgroundMode === "ghost_model") {
+  if (
+    config.whiteBackgroundMode === "ghost_model" ||
+    config.whiteBackgroundMode === "outfit_change"
+  ) {
     return "image_edit";
   }
 

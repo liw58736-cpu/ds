@@ -181,7 +181,7 @@ const aiToolPromptCopy: Record<WhiteBackgroundMode, string> = {
   retouch:
     "Retouch the uploaded product image while keeping the same product, pose, framing, and identity. Improve fabric cleanliness, wrinkles, lighting balance, edge clarity, color consistency, and commercial polish. Do not redesign the product, do not change the model pose, and do not add a new scene.",
   outfit_change:
-    "Create a visible outfit styling variation around the uploaded garment. Preserve the main garment's color, collar, pocket, buttons, fabric texture, and silhouette, but change the surrounding outfit styling such as pants, layering, shoes, accessories, and presentation context. The result should clearly look like a new styled look, not the same plain cutout.",
+    "Create an outfit-change edit. Use Image 1 as the base person or model photo, and use Image 2 as the target clothing to put onto the person in Image 1. Preserve the Image 1 person's identity, pose, body proportions, camera angle, and scene where appropriate. Replace only the visible outfit with the Image 2 garment while preserving the Image 2 garment category, color, collar, sleeves, silhouette, fabric texture, pattern, seams, buttons, logos, and recognisable design.",
   product_showcase:
     "Create a premium product showcase composition for ecommerce. Preserve the product identity, then stage it with refined studio lighting, a pedestal, hanger, folded detail, tasteful props, depth, and a polished retail display setup. The result must look like a designed product showcase, not a plain white-background cutout.",
   pure_white:
@@ -222,7 +222,7 @@ export function buildGenerationPrompt(
     `output language: ${config.outputLanguage ?? "中文"}`,
     config.sellingPoints ? `product requirements: ${config.sellingPoints}` : "",
     config.specifications ? `promotion information: ${config.specifications}` : "",
-    "Preserve Image 1 product identity: same product category, garment shape, material, color, seams, lace, buttons, logos, packaging, camera-facing details, and recognisable design. A blouse or shirt must remain a blouse or shirt; never turn a top into a dress, lingerie, lace costume, packaging-only mockup, or unrelated SKU. Do not replace it with a different product.",
+    getSharedImageIdentityInstruction(config),
     exactTextInstruction,
     moduleReferenceTextInstruction,
     "avoid loud domestic promotional poster aesthetics, fake tiny unreadable text, distorted logos, changed product identity, invented discounts, invented sizes, and invented materials",
@@ -300,7 +300,10 @@ function withModuleReferencePrompt(
   moduleId: string,
   config: GenerationConfig,
 ): string {
-  const guardedPrompt = withProductIdentityGuard(prompt);
+  const guardedPrompt =
+    moduleId === "outfit_change"
+      ? withOutfitChangeIdentityGuard(prompt)
+      : withProductIdentityGuard(prompt);
   const assets = getModuleReferenceAssets(config, moduleId);
 
   if (assets.length === 0) {
@@ -358,7 +361,9 @@ function withModuleReferencePrompt(
 
   if (imageAssets.length > 0) {
     promptParts.push(
-      "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
+      moduleId === "outfit_change"
+        ? "Image 2 reference assets are the target clothing for outfit change. Use the uploaded Image 2 garment as the clothing to wear on Image 1. Do not render the upload note as visible text. Do not invent extra garments or extra colorways."
+        : "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
     );
   }
 
@@ -429,6 +434,25 @@ function withProductIdentityGuard(prompt: string): string {
   }
 
   return `${prompt} The Image 1 product is the sold SKU for this module; preserve its exact category, silhouette or shape, material or fabric, colorway, seams, buttons, logos, packaging, hardware, proportions, camera-facing details, and recognisable design. Do not swap in a different product, model garment, stock item, or invented SKU. When placing it on a model, in hands, in packaging, or in a scene, use the exact Image 1 product; only the background, layout, camera framing, styling context, or allowed colorway may change.`;
+}
+
+function withOutfitChangeIdentityGuard(prompt: string): string {
+  if (prompt.includes("Image 2 is the target clothing")) {
+    return prompt;
+  }
+
+  return `${prompt} Image 1 is the base photo. Image 2 is the target clothing. Keep the person, pose, hands, face, body proportions, camera angle, and scene from Image 1 stable, but replace the outfit with Image 2 clothing. Preserve Image 2 garment details exactly; do not keep the old Image 1 outfit unless it is not part of the clothing being replaced.`;
+}
+
+function getSharedImageIdentityInstruction(config: GenerationConfig): string {
+  if (
+    config.module === "white_background" &&
+    config.whiteBackgroundMode === "outfit_change"
+  ) {
+    return "For outfit change, Image 1 is the base person or model photo and Image 2 is the target clothing. Preserve Image 1 person, pose, body shape, camera angle, and scene; replace the visible outfit with Image 2 clothing while preserving Image 2 garment details. Do not render upload notes as visible text.";
+  }
+
+  return "Preserve Image 1 product identity: same product category, garment shape, material, color, seams, lace, buttons, logos, packaging, camera-facing details, and recognisable design. A blouse or shirt must remain a blouse or shirt; never turn a top into a dress, lingerie, lace costume, packaging-only mockup, or unrelated SKU. Do not replace it with a different product.";
 }
 
 function getExactTextInstruction(config: GenerationConfig): string {

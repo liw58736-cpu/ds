@@ -232,11 +232,18 @@ export function ParameterPanel({
   const [draftReferenceNote, setDraftReferenceNote] = useState("");
   const [showProductRequiredNotice, setShowProductRequiredNotice] =
     useState(false);
+  const [
+    showOutfitChangeRequiredNotice,
+    setShowOutfitChangeRequiredNotice,
+  ] = useState(false);
   const resolution = config.resolution ?? "1K";
   const generationVersion = config.generationVersion ?? "brand";
   const selectedMainModules = config.selectedMainModules ?? [];
   const detailCounts = config.detailModuleCounts ?? {};
   const moduleReferenceAssets = config.moduleReferenceAssets ?? {};
+  const outfitChangeReferenceAssets = moduleReferenceAssets.outfit_change ?? [];
+  const outfitChangeTargetAsset =
+    outfitChangeReferenceAssets.find(hasModuleReferenceImage) ?? null;
   const draftImageReferenceAssets = draftReferenceAssets.filter(
     hasModuleReferenceImage,
   );
@@ -270,6 +277,12 @@ export function ParameterPanel({
       setShowProductRequiredNotice(false);
     }
   }, [hasProduct]);
+
+  useEffect(() => {
+    if (whiteBackgroundMode !== "outfit_change" || outfitChangeTargetAsset) {
+      setShowOutfitChangeRequiredNotice(false);
+    }
+  }, [whiteBackgroundMode, outfitChangeTargetAsset]);
 
   const requireProductBeforeModuleSelection = () => {
     if (hasProduct) {
@@ -336,6 +349,27 @@ export function ParameterPanel({
   const getReferenceAssets = (moduleId: string): ModuleReferenceAsset[] =>
     moduleReferenceAssets[moduleId] ?? [];
 
+  const saveModuleReferenceAssets = (
+    moduleId: string,
+    assets: ModuleReferenceAsset[],
+  ) => {
+    const nextReferenceAssets = { ...moduleReferenceAssets };
+
+    if (assets.length > 0) {
+      nextReferenceAssets[moduleId] = assets;
+    } else {
+      delete nextReferenceAssets[moduleId];
+    }
+
+    onChange({
+      ...config,
+      moduleReferenceAssets:
+        Object.keys(nextReferenceAssets).length > 0
+          ? nextReferenceAssets
+          : undefined,
+    });
+  };
+
   const openReferenceEditor = (moduleId: string, title: string) => {
     if (requireProductBeforeModuleSelection()) {
       return;
@@ -398,6 +432,42 @@ export function ParameterPanel({
       [...currentAssets, ...assets].slice(0, maxModuleReferenceAssets),
     );
     event.target.value = "";
+  };
+
+  const handleOutfitChangeTargetFileChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const asset = await new Promise<ModuleReferenceAsset>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        resolve({
+          id: `outfit-change-target-${Date.now().toString(36)}-${Math.random()
+            .toString(36)
+            .slice(2, 8)}`,
+          fileName: file.name,
+          imageUrl: String(reader.result ?? ""),
+          note: "Use this uploaded garment as the target clothing for outfit change.",
+        });
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+    saveModuleReferenceAssets("outfit_change", [asset]);
+    setShowOutfitChangeRequiredNotice(false);
+    event.target.value = "";
+  };
+
+  const removeOutfitChangeTargetAsset = () => {
+    saveModuleReferenceAssets("outfit_change", []);
+    setShowOutfitChangeRequiredNotice(true);
   };
 
   const saveReferenceAssets = () => {
@@ -466,6 +536,19 @@ export function ParameterPanel({
     setDraftReferenceAssets((currentAssets) =>
       currentAssets.filter((asset) => asset.id !== assetId),
     );
+  };
+
+  const handleGenerateClick = () => {
+    if (
+      activeModule === "white_background" &&
+      whiteBackgroundMode === "outfit_change" &&
+      !outfitChangeTargetAsset
+    ) {
+      setShowOutfitChangeRequiredNotice(true);
+      return;
+    }
+
+    onGenerate();
   };
 
   return (
@@ -682,6 +765,50 @@ export function ParameterPanel({
               );
             })}
           </div>
+          {whiteBackgroundMode === "outfit_change" ? (
+            <div className="outfit-change-target-card">
+              <div className="setting-group-heading">
+                <span>换装服饰</span>
+                <small>多上传 1 张要换上的衣服，作为 Image 2 参考</small>
+              </div>
+              {showOutfitChangeRequiredNotice ? (
+                <p className="module-product-required-notice" role="status">
+                  请上传要换上的服饰图。
+                </p>
+              ) : null}
+              <label className="outfit-change-upload">
+                <span>上传要换上的服饰图</span>
+                <small>建议使用清晰正面或半身服饰图</small>
+                <input
+                  aria-label="上传要换上的服饰图"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleOutfitChangeTargetFileChange}
+                />
+              </label>
+              {outfitChangeTargetAsset ? (
+                <div className="outfit-change-target-preview">
+                  <img
+                    src={outfitChangeTargetAsset.imageUrl}
+                    alt="要换上的服饰图"
+                  />
+                  <div>
+                    <p className="file-label">已选择服饰</p>
+                    <p className="file-name">
+                      {outfitChangeTargetAsset.fileName}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={removeOutfitChangeTargetAsset}
+                  >
+                    删除
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -764,11 +891,6 @@ export function ParameterPanel({
                   : "描述产品核心卖点、视觉方向和希望强调的主图风格。"
               }
             />
-            {activeModule === "detail_page" ? (
-              <p className="field-hint">
-                建议输入：款式名称、面料材质、设计亮点、适合人群、风格调性等。输入组图要求并选择输出语言后，系统会自动分析产品并生成共享文案。
-              </p>
-            ) : null}
           </div>
 
           <div className="field">
@@ -829,7 +951,7 @@ export function ParameterPanel({
         <button
           type="button"
           className="primary-button generate-button"
-          onClick={isOutOfCredits ? onBuyCredits : onGenerate}
+          onClick={isOutOfCredits ? onBuyCredits : handleGenerateClick}
           disabled={!isOutOfCredits && isGenerateDisabled}
         >
           {isOutOfCredits

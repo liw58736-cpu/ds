@@ -225,6 +225,7 @@ function isEditToolRequest(requestBody) {
     "watermark_remove",
     "background_remove",
     "ghost_model",
+    "outfit_change",
     "retouch",
     "restoration",
     "image_edit",
