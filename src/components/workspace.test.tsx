@@ -174,6 +174,8 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
 
     expect(screen.getByText(/预计消耗 3 积分/)).toBeInTheDocument();
+    expect(screen.getByText(/1K 每张 1 积分/)).toBeInTheDocument();
+    expect(screen.getByText(/品牌版 2 积分/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /首屏 KV/ }));
     await user.click(screen.getByRole("button", { name: /整体展示/ }));
@@ -183,6 +185,7 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "2K" }));
 
     expect(screen.getByText(/预计消耗 6 积分/)).toBeInTheDocument();
+    expect(screen.getByText(/2K 每张 2 积分/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "标准版快速出图，适合批量 SKU" }));
 
