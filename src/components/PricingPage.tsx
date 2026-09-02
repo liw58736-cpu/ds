@@ -7,6 +7,7 @@ import {
 } from "../api/billingApi";
 import { getAccountSnapshot } from "../storage/accountStore";
 import type { WebBackendHealth } from "../api/accountApi";
+import { NoticeDialog } from "./NoticeDialog";
 
 type BillingType = "top-up" | "subscription";
 
@@ -228,10 +229,20 @@ function PricingCard({
   );
 }
 
-export function PricingPage() {
+interface PricingPageProps {
+  onRequireLogin?: () => void;
+}
+
+export function PricingPage({ onRequireLogin }: PricingPageProps = {}) {
   const [activeBilling, setActiveBilling] = useState<BillingType>("top-up");
   const [selectedPlan, setSelectedPlan] = useState<CreditPlan | null>(null);
   const [paymentStatus, setPaymentStatus] = useState("");
+  const [paymentNotice, setPaymentNotice] = useState("");
+
+  const showPaymentNotice = (message: string) => {
+    setPaymentStatus(message);
+    setPaymentNotice(message);
+  };
 
   const activePlans =
     activeBilling === "top-up" ? topUpPlans : subscriptionPlans;
@@ -252,7 +263,7 @@ export function PricingPage() {
 
     if (usePaddle && !session?.userId) {
       setSelectedPlan(plan);
-      setPaymentStatus("请先登录 kroma 账户，再购买积分。");
+      showPaymentNotice("请先登录 kroma 账户，再购买积分。");
       return;
     }
 
@@ -260,7 +271,7 @@ export function PricingPage() {
     try {
       if (usePaddle) {
         if (missingPaddleConfig.length > 0) {
-          setPaymentStatus(
+          showPaymentNotice(
             `支付套餐未配置完成：${missingPaddleConfig.join("、")}。`,
           );
           return;
@@ -269,7 +280,7 @@ export function PricingPage() {
         const backendHealth = await getWebBackendHealth();
 
         if (!isPaymentFulfillmentReady(backendHealth)) {
-          setPaymentStatus("支付入账暂未配置完成，请稍后再试或联系支持。");
+          showPaymentNotice("支付入账暂未配置完成，请稍后再试或联系支持。");
           return;
         }
       }
@@ -299,11 +310,9 @@ export function PricingPage() {
         )} 积分已入账，当前余额 ${formatCredits(snapshot.balance)} 积分。`,
       );
     } catch (error) {
-      setPaymentStatus(
-        error instanceof Error
-          ? error.message
-          : "支付通道暂时不可用，请稍后再试。",
-      );
+      showPaymentNotice(error instanceof Error
+        ? error.message
+        : "支付通道暂时不可用，请稍后再试。");
     }
   };
 
@@ -350,6 +359,14 @@ export function PricingPage() {
           ))}
         </div>
       </section>
+      <NoticeDialog
+        open={Boolean(paymentNotice)}
+        title={paymentNotice.includes("登录") ? "请先登录" : "暂时无法支付"}
+        message={paymentNotice}
+        primaryLabel={paymentNotice.includes("登录") ? "去登录" : undefined}
+        onPrimary={paymentNotice.includes("登录") ? onRequireLogin : undefined}
+        onClose={() => setPaymentNotice("")}
+      />
     </main>
   );
 }

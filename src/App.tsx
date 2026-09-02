@@ -97,7 +97,7 @@ export default function App() {
     ) : page === "history" ? (
       <HistoryPage />
     ) : page === "pricing" ? (
-      <PricingPage />
+      <PricingPage onRequireLogin={() => handlePageChange("login")} />
     ) : page === "motion" ? (
       <MotionStudioPage />
     ) : page === "cleanup" ? (

@@ -25,6 +25,7 @@ import type {
   ModuleReferenceAsset,
   WhiteBackgroundMode,
 } from "../domain/types";
+import { NoticeDialog } from "./NoticeDialog";
 
 type StudioModule = Extract<
   GenerationModule,
@@ -750,11 +751,6 @@ export function ParameterPanel({
             <span id="main-image-modules">模块选择（多选）</span>
             <small>新用户可体验前 4 个模块。</small>
           </div>
-          {showProductRequiredNotice ? (
-            <p className="module-product-required-notice" role="status">
-              请先上传商品图，再选择模块。
-            </p>
-          ) : null}
           <p className="selection-count">已选 {selectedMainModules.length}</p>
           <div className="module-card-grid">
             {mainImageModules.map((module) => {
@@ -817,11 +813,6 @@ export function ParameterPanel({
             <span id="detail-modules">服装详情内容模块</span>
             <small>点击未选模块会添加 1 张图，右上角可继续叠加数量。</small>
           </div>
-          {showProductRequiredNotice ? (
-            <p className="module-product-required-notice" role="status">
-              请先上传商品图，再选择模块。
-            </p>
-          ) : null}
           <p className="selection-count">已选 {selectedDetailCount}</p>
           <div className="detail-module-grid">
             {detailContentModules.map((module) => {
@@ -914,11 +905,6 @@ export function ParameterPanel({
             <span>AI工具</span>
             <small>选择要生成的工具类型</small>
           </div>
-          {showProductRequiredNotice ? (
-            <p className="module-product-required-notice" role="status">
-              请先上传商品图，再选择模块。
-            </p>
-          ) : null}
           <div className="segmented-control" aria-label="AI工具">
             {whiteBackgroundModes.map((mode) => {
               const isActive = mode.value === whiteBackgroundMode;
@@ -945,11 +931,6 @@ export function ParameterPanel({
                 <span>换装服饰</span>
                 <small>多上传 1 张要换上的衣服，作为 Image 2 参考</small>
               </div>
-              {showOutfitChangeRequiredNotice ? (
-                <p className="module-product-required-notice" role="status">
-                  请上传要换上的服饰图。
-                </p>
-              ) : null}
               <label className="outfit-change-upload">
                 <span>上传要换上的服饰图</span>
                 <small>建议使用清晰正面或半身服饰图</small>
@@ -1297,6 +1278,18 @@ export function ParameterPanel({
         </div>,
         document.body,
       ) : null}
+      <NoticeDialog
+        open={showProductRequiredNotice}
+        title="请先上传商品图"
+        message="上传商品图后才能选择生成模块，避免生成与商品无关的无效图片。"
+        onClose={() => setShowProductRequiredNotice(false)}
+      />
+      <NoticeDialog
+        open={showOutfitChangeRequiredNotice}
+        title="请上传换装服饰"
+        message="换装需要额外上传一张目标服饰图，系统会将它作为 Image 2 参考。"
+        onClose={() => setShowOutfitChangeRequiredNotice(false)}
+      />
     </>
   );
 }

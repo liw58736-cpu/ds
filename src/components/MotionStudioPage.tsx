@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Film, ImagePlus, Play } from "lucide-react";
+import { NoticeDialog } from "./NoticeDialog";
 
 type MotionStyle = "zoom_in" | "zoom_out" | "pan_left" | "float";
 type MotionRatio = "9:16" | "4:5" | "1:1";
@@ -71,6 +72,7 @@ export function MotionStudioPage() {
   const [status, setStatus] = useState("上传一张静图后即可生成轻动态视频。");
   const [downloadUrl, setDownloadUrl] = useState("");
   const [isRendering, setIsRendering] = useState(false);
+  const [errorNotice, setErrorNotice] = useState("");
   const activeStyle = useMemo(() => motionStyles.find((item) => item.value === style)!, [style]);
 
   useEffect(() => () => {
@@ -90,7 +92,9 @@ export function MotionStudioPage() {
 
   const renderVideo = async () => {
     if (!imageUrl || typeof MediaRecorder === "undefined") {
-      setStatus(imageUrl ? "当前浏览器不支持本地视频生成，请使用最新版 Chrome。" : "请先上传静图。");
+      const errorMessage = imageUrl ? "当前浏览器不支持本地视频生成，请使用最新版 Chrome。" : "请先上传静图。";
+      setStatus(errorMessage);
+      setErrorNotice(errorMessage);
       return;
     }
 
@@ -134,7 +138,9 @@ export function MotionStudioPage() {
       setDownloadUrl(nextUrl);
       setStatus(`已生成 ${duration} 秒 ${ratio} WebM 视频，可直接下载。`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "视频生成失败，请重试。");
+      const errorMessage = error instanceof Error ? error.message : "视频生成失败，请重试。";
+      setStatus(errorMessage);
+      setErrorNotice(errorMessage);
     } finally {
       setIsRendering(false);
     }
@@ -177,6 +183,12 @@ export function MotionStudioPage() {
           </div>
         </section>
       </div>
+      <NoticeDialog
+        open={Boolean(errorNotice)}
+        title="轻动态生成失败"
+        message={errorNotice}
+        onClose={() => setErrorNotice("")}
+      />
     </main>
   );
 }

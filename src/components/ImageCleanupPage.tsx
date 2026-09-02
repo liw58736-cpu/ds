@@ -5,6 +5,14 @@ import { runImageCleanup, type CleanupMode } from "../api/cleanupApi";
 import { saveGenerationTaskHistory, saveGenerationTasks, getGenerationTaskSnapshot } from "../api/generationApi";
 import { completeTask, createTask, failTask, markProcessing } from "../domain/taskState";
 import type { GenerationConfig, ProductInput } from "../domain/types";
+import { NoticeDialog } from "./NoticeDialog";
+
+interface CleanupNotice {
+  title: string;
+  message: string;
+  primaryLabel?: string;
+  onPrimary?: () => void;
+}
 
 interface ImageCleanupPageProps {
   isAuthenticated: boolean;
@@ -99,6 +107,7 @@ export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricin
   const [status, setStatus] = useState("上传图片后，用画笔涂抹需要清理的区域。");
   const [resultUrl, setResultUrl] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [notice, setNotice] = useState<CleanupNotice | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pathsRef = useRef<MaskPath[]>([]);
   const drawingRef = useRef<MaskPath | null>(null);
@@ -166,12 +175,37 @@ export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricin
   };
 
   const handleGenerate = async () => {
-    if (!isAuthenticated) return onRequireLogin();
-    if (getCurrentAccountSnapshot().balance < 1) return onOpenPricing();
-    if (!product) return setStatus("请先上传图片。");
-    if (!authorized) return setStatus("请确认你拥有或已获授权处理该图片。");
+    if (!isAuthenticated) {
+      setNotice({
+        title: "请先登录",
+        message: "登录后才能使用图片清理，任务结果和积分记录会保存到账户中。",
+        primaryLabel: "去登录",
+        onPrimary: onRequireLogin,
+      });
+      return;
+    }
+    if (getCurrentAccountSnapshot().balance < 1) {
+      setNotice({
+        title: "积分不足",
+        message: "图片清理需要 1 积分，失败任务不会扣除积分。",
+        primaryLabel: "查看价格",
+        onPrimary: onOpenPricing,
+      });
+      return;
+    }
+    if (!product) {
+      setNotice({ title: "请先上传图片", message: "上传需要处理的图片后，再涂抹清理区域。" });
+      return;
+    }
+    if (!authorized) {
+      setNotice({ title: "请确认图片授权", message: "勾选授权确认后，才能编辑和保存这张图片。" });
+      return;
+    }
     const maskBase64 = exportMask();
-    if (!maskBase64) return setStatus("请先用画笔涂抹需要清理的区域。");
+    if (!maskBase64) {
+      setNotice({ title: "还没有涂抹区域", message: "请先用红色画笔覆盖需要去除的水印、文字或物体。" });
+      return;
+    }
 
     const processingTask = markProcessing(createTask({ product, config: cleanupConfig(mode), now: new Date().toISOString() }));
     let currentProcessingTask = processingTask;
@@ -220,6 +254,10 @@ export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricin
       await saveGenerationTaskHistory(failed);
       await saveGenerationTasks([failed, ...getGenerationTaskSnapshot().filter((task) => task.id !== failed.id)]);
       setStatus(failed.errorMessage ?? "图片清理失败，未扣除积分。");
+      setNotice({
+        title: "图片清理失败",
+        message: failed.errorMessage ?? "本次任务未扣除积分，请稍后重试。",
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -242,10 +280,18 @@ export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricin
           <p className="cleanup-status" role="status">{status}</p>
         </section>
         <section className="panel cleanup-canvas-panel" aria-label="涂抹区域">
-          {product ? <div className="cleanup-canvas-wrap"><img src={product.imageUrl} alt="待清理图片" referrerPolicy="no-referrer" onLoad={(event) => { const canvas = canvasRef.current; if (!canvas) return; canvas.width = event.currentTarget.naturalWidth; canvas.height = event.currentTarget.naturalHeight; redrawMask(); }} onError={() => setStatus("图片加载失败，请重新提取或手动上传。")} /><canvas ref={canvasRef} aria-label="清理蒙版画布" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); const path = { size: brushSize * (event.currentTarget.width / event.currentTarget.getBoundingClientRect().width), points: [pointerPoint(event)] }; drawingRef.current = path; pathsRef.current.push(path); redrawMask(); }} onPointerMove={(event) => { if (!drawingRef.current) return; drawingRef.current.points.push(pointerPoint(event)); redrawMask(); }} onPointerUp={() => { drawingRef.current = null; }} onPointerCancel={() => { drawingRef.current = null; }} /></div> : <div className="cleanup-empty"><Brush aria-hidden="true" /><strong>等待图片</strong><span>上传后用红色画笔涂抹清理区域</span></div>}
-          {resultUrl ? <div className="cleanup-result"><img src={resultUrl} alt="图片清理结果" /><button type="button" className="primary-button" onClick={() => void downloadCleanupResult(resultUrl).catch((error) => setStatus(error instanceof Error ? error.message : "下载失败"))}><Download aria-hidden="true" />下载结果</button></div> : null}
+          {product ? <div className="cleanup-canvas-wrap"><img src={product.imageUrl} alt="待清理图片" referrerPolicy="no-referrer" onLoad={(event) => { const canvas = canvasRef.current; if (!canvas) return; canvas.width = event.currentTarget.naturalWidth; canvas.height = event.currentTarget.naturalHeight; redrawMask(); }} onError={() => { const errorMessage = "图片加载失败，请重新提取或手动上传。"; setStatus(errorMessage); setNotice({ title: "图片加载失败", message: errorMessage }); }} /><canvas ref={canvasRef} aria-label="清理蒙版画布" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); const path = { size: brushSize * (event.currentTarget.width / event.currentTarget.getBoundingClientRect().width), points: [pointerPoint(event)] }; drawingRef.current = path; pathsRef.current.push(path); redrawMask(); }} onPointerMove={(event) => { if (!drawingRef.current) return; drawingRef.current.points.push(pointerPoint(event)); redrawMask(); }} onPointerUp={() => { drawingRef.current = null; }} onPointerCancel={() => { drawingRef.current = null; }} /></div> : <div className="cleanup-empty"><Brush aria-hidden="true" /><strong>等待图片</strong><span>上传后用红色画笔涂抹清理区域</span></div>}
+          {resultUrl ? <div className="cleanup-result"><img src={resultUrl} alt="图片清理结果" /><button type="button" className="primary-button" onClick={() => void downloadCleanupResult(resultUrl).catch((error) => { const errorMessage = error instanceof Error ? error.message : "下载失败"; setStatus(errorMessage); setNotice({ title: "结果下载失败", message: errorMessage }); })}><Download aria-hidden="true" />下载结果</button></div> : null}
         </section>
       </div>
+      <NoticeDialog
+        open={Boolean(notice)}
+        title={notice?.title ?? "提示"}
+        message={notice?.message ?? ""}
+        primaryLabel={notice?.primaryLabel}
+        onPrimary={notice?.onPrimary}
+        onClose={() => setNotice(null)}
+      />
     </main>
   );
 }

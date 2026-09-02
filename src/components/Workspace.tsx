@@ -34,6 +34,7 @@ import { ParameterPanel } from "./ParameterPanel";
 import { ResultPreview } from "./ResultPreview";
 import { UploadPanel } from "./UploadPanel";
 import { MaterialImportPanel } from "./MaterialImportPanel";
+import { NoticeDialog } from "./NoticeDialog";
 
 function moveTaskToTop(
   tasks: GenerationTask[],
@@ -141,6 +142,7 @@ export function Workspace({
   const [activePreviewTaskId, setActivePreviewTaskId] = useState<
     string | null | undefined
   >(undefined);
+  const [showLoginRequiredNotice, setShowLoginRequiredNotice] = useState(false);
   const productRef = useRef<ProductInput | null>(null);
   const activeModuleRef = useRef(activeModule);
   const hasLoadedTasksRef = useRef(true);
@@ -332,7 +334,7 @@ export function Workspace({
 
   const handleGenerate = () => {
     if (!isAuthenticated) {
-      onRequireLogin?.();
+      setShowLoginRequiredNotice(true);
       return;
     }
 
@@ -381,7 +383,7 @@ export function Workspace({
     }
 
     if (!isAuthenticated) {
-      onRequireLogin?.();
+      setShowLoginRequiredNotice(true);
       return;
     }
 
@@ -466,6 +468,8 @@ export function Workspace({
               onUseAsProduct={handleImportedProduct}
               onUseAsReference={handleImportedReference}
               onUseForCleanup={onOpenCleanup}
+              isAuthenticated={isAuthenticated}
+              onRequireLogin={onRequireLogin}
             />
           ) : null}
           <UploadPanel product={product} onProductChange={handleProductChange} />
@@ -491,6 +495,14 @@ export function Workspace({
           />
         </section>
       </div>
+      <NoticeDialog
+        open={showLoginRequiredNotice}
+        title="请先登录"
+        message="登录后才能提交生成任务，生成进度、结果和积分记录也会保存到账户中。"
+        primaryLabel="去登录"
+        onPrimary={onRequireLogin}
+        onClose={() => setShowLoginRequiredNotice(false)}
+      />
     </main>
   );
 }

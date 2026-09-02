@@ -14,6 +14,33 @@ afterEach(() => {
 });
 
 describe("MaterialImportPanel", () => {
+  it("shows an obvious login dialog instead of only a small status line", async () => {
+    const user = userEvent.setup();
+    const onRequireLogin = vi.fn();
+    render(
+      <MaterialImportPanel
+        onUseAsProduct={vi.fn()}
+        onUseAsReference={vi.fn()}
+        isAuthenticated={false}
+        onRequireLogin={onRequireLogin}
+      />,
+    );
+
+    await user.type(
+      screen.getByLabelText("公开素材链接"),
+      "https://www.xiaohongshu.com/explore/note-1",
+    );
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "提取笔记图片" }));
+
+    expect(screen.getByRole("alertdialog", { name: "请先登录" })).toHaveTextContent(
+      "登录后才能提取并保存小红书图片",
+    );
+    await user.click(screen.getByRole("button", { name: "去登录" }));
+    expect(onRequireLogin).toHaveBeenCalledOnce();
+    expect(importPublicMaterial).not.toHaveBeenCalled();
+  });
+
   it("extracts pasted Xiaohongshu share text and hands a stable image to cleanup", async () => {
     const user = userEvent.setup();
     const onUseForCleanup = vi.fn();

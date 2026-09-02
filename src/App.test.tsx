@@ -117,6 +117,8 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
     await user.click(screen.getByRole("button", { name: "生成商品主图" }));
 
+    expect(screen.getByRole("alertdialog", { name: "请先登录" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "去登录" }));
     expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
     expect(screen.queryByAltText("生成结果")).not.toBeInTheDocument();
   });
@@ -549,6 +551,7 @@ describe("App", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "请先登录 kroma 账户，再购买积分。",
     );
+    expect(screen.getByRole("alertdialog", { name: "请先登录" })).toBeInTheDocument();
     expect(checkoutOpen).not.toHaveBeenCalled();
   });
 

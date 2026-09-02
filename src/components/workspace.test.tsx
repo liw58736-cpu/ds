@@ -65,14 +65,15 @@ describe("Workspace", () => {
 
     await user.click(heroCard);
 
-    expect(screen.getByText("请先上传商品图，再选择模块。")).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "请先上传商品图" })).toBeInTheDocument();
     expect(screen.getByText("已选 0")).toBeInTheDocument();
     expect(heroCard).toHaveAttribute("aria-pressed", "false");
+    await user.click(screen.getByRole("button", { name: "我知道了" }));
 
     await user.click(within(heroCard).getByRole("button", { name: "添加素材" }));
 
     expect(screen.queryByRole("dialog", { name: "首屏 KV素材" })).not.toBeInTheDocument();
-    expect(screen.getByText("请先上传商品图，再选择模块。")).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "请先上传商品图" })).toBeInTheDocument();
   });
 
   it("asks for a product image before selecting detail page modules", async () => {
@@ -84,9 +85,10 @@ describe("Workspace", () => {
     });
 
     await user.click(brandCard);
+    await user.click(screen.getByRole("button", { name: "我知道了" }));
     await user.click(screen.getByRole("button", { name: "品牌介绍 增加 1 张" }));
 
-    expect(screen.getByText("请先上传商品图，再选择模块。")).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "请先上传商品图" })).toBeInTheDocument();
     expect(screen.getByText("已选 0")).toBeInTheDocument();
     expect(brandCard).toHaveAttribute("aria-pressed", "false");
   });
@@ -97,7 +99,7 @@ describe("Workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "AI背景" }));
 
-    expect(screen.getByText("请先上传商品图，再选择模块。")).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "请先上传商品图" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "白底图" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -340,7 +342,7 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "换装" }));
     await user.click(screen.getByRole("button", { name: "生成换装" }));
 
-    expect(screen.getByText("请上传要换上的服饰图。")).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "请上传换装服饰" })).toBeInTheDocument();
     expect(screen.queryByText("正在生成")).not.toBeInTheDocument();
   });
 

@@ -299,6 +299,23 @@ test("new content tools render and remain usable without horizontal overflow", a
   await expectNoHorizontalDocumentOverflow(page);
 });
 
+test("guest Xiaohongshu extraction uses a visible login dialog", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "灵感创作", exact: true }).click();
+  await page
+    .getByLabel("公开素材链接")
+    .fill("https://www.xiaohongshu.com/explore/example");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "提取笔记图片" }).click();
+
+  const dialog = page.getByRole("alertdialog", { name: "请先登录" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("登录后才能提取并保存小红书图片");
+  await expectNoHorizontalDocumentOverflow(page);
+  await dialog.getByRole("button", { name: "去登录" }).click();
+  await expect(page.getByRole("heading", { name: "登录" })).toBeVisible();
+});
+
 test("light motion generates a real downloadable WebM in the browser", async ({
   page,
 }, testInfo) => {

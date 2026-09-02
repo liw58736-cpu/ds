@@ -4,17 +4,29 @@ import {
   importPublicMaterial,
   storeImportedMaterial,
 } from "../api/materialImportApi";
+import { NoticeDialog } from "./NoticeDialog";
+
+interface MaterialNotice {
+  title: string;
+  message: string;
+  primaryLabel?: string;
+  onPrimary?: () => void;
+}
 
 interface MaterialImportPanelProps {
   onUseAsProduct: (imageUrl: string, title: string) => void;
   onUseAsReference: (imageUrl: string, title: string) => void;
   onUseForCleanup?: (imageUrl: string, title: string) => void;
+  isAuthenticated?: boolean;
+  onRequireLogin?: () => void;
 }
 
 export function MaterialImportPanel({
   onUseAsProduct,
   onUseAsReference,
   onUseForCleanup,
+  isAuthenticated = true,
+  onRequireLogin,
 }: MaterialImportPanelProps) {
   const [url, setUrl] = useState("");
   const [authorized, setAuthorized] = useState(false);
@@ -23,14 +35,29 @@ export function MaterialImportPanel({
   const [title, setTitle] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [message, setMessage] = useState("支持粘贴整段小红书分享文案、公开笔记链接和直接图片链接。");
+  const [notice, setNotice] = useState<MaterialNotice | null>(null);
+
+  const showNotice = (nextNotice: MaterialNotice) => {
+    setMessage(nextNotice.message);
+    setNotice(nextNotice);
+  };
 
   const handleImport = async () => {
     if (!url.trim()) {
-      setMessage("请先粘贴公开素材链接。");
+      showNotice({ title: "还没有链接", message: "请先粘贴小红书分享文案或公开图片链接。" });
       return;
     }
     if (!authorized) {
-      setMessage("请确认你拥有或已获授权使用该素材。");
+      showNotice({ title: "请确认素材授权", message: "勾选授权确认后，才能提取、下载或编辑链接中的图片。" });
+      return;
+    }
+    if (!isAuthenticated) {
+      showNotice({
+        title: "请先登录",
+        message: "登录后才能提取并保存小红书图片，避免刷新后素材丢失。",
+        primaryLabel: "去登录",
+        onPrimary: onRequireLogin,
+      });
       return;
     }
 
@@ -47,7 +74,14 @@ export function MaterialImportPanel({
       );
     } catch (error) {
       setImages([]);
-      setMessage(error instanceof Error ? error.message : "素材链接导入失败。");
+      const errorMessage = error instanceof Error ? error.message : "素材链接导入失败。";
+      showNotice({
+        title: errorMessage.includes("登录") ? "登录状态已失效" : "图片提取失败",
+        message: errorMessage,
+        ...(errorMessage.includes("登录")
+          ? { primaryLabel: "去登录", onPrimary: onRequireLogin }
+          : {}),
+      });
     } finally {
       setIsLoading(false);
     }
@@ -58,6 +92,15 @@ export function MaterialImportPanel({
     index: number,
     role: "product" | "reference" | "cleanup" | "download",
   ) => {
+    if (!isAuthenticated) {
+      showNotice({
+        title: "请先登录",
+        message: "登录后才能保存、下载或编辑提取到的图片。",
+        primaryLabel: "去登录",
+        onPrimary: onRequireLogin,
+      });
+      return;
+    }
     setActiveAction(`${role}:${imageUrl}`);
     setMessage("正在把所选图片保存到 kroma 素材库…");
     try {
@@ -77,7 +120,11 @@ export function MaterialImportPanel({
               : "原图已保存并开始下载。",
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "素材保存失败。");
+      const errorMessage = error instanceof Error ? error.message : "素材保存失败。";
+      showNotice({
+        title: role === "download" ? "图片下载失败" : "素材处理失败",
+        message: errorMessage,
+      });
     } finally {
       setActiveAction("");
     }
@@ -148,6 +195,14 @@ export function MaterialImportPanel({
           ))}
         </div>
       ) : null}
+      <NoticeDialog
+        open={Boolean(notice)}
+        title={notice?.title ?? "提示"}
+        message={notice?.message ?? ""}
+        primaryLabel={notice?.primaryLabel}
+        onPrimary={notice?.onPrimary}
+        onClose={() => setNotice(null)}
+      />
     </section>
   );
 }

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { drawTransparentCleanupMask, ImageCleanupPage } from "./ImageCleanupPage";
 
@@ -58,5 +59,29 @@ describe("ImageCleanupPage", () => {
     expect(screen.getByRole("checkbox")).toBeChecked();
     expect(screen.getByRole("status")).toHaveTextContent("已载入提取图片");
     expect(onInitialProductConsumed).toHaveBeenCalledOnce();
+  });
+
+  it("shows a login dialog before an unauthenticated cleanup request", async () => {
+    const user = userEvent.setup();
+    const onRequireLogin = vi.fn();
+    render(
+      <ImageCleanupPage
+        isAuthenticated={false}
+        onRequireLogin={onRequireLogin}
+        onOpenPricing={vi.fn()}
+        initialProduct={{
+          id: "material-2",
+          imageUrl: "https://web-project.supabase.co/storage/material.jpg",
+          fileName: "小红书图片",
+          createdAt: "2026-09-02T00:00:00.000Z",
+          source: "upload",
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "开始清理（1 积分）" }));
+    expect(screen.getByRole("alertdialog", { name: "请先登录" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "去登录" }));
+    expect(onRequireLogin).toHaveBeenCalledOnce();
   });
 });
