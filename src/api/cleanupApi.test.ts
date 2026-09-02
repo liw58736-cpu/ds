@@ -41,6 +41,7 @@ describe("cleanupApi", () => {
       imageBase64: "data:image/png;base64,source",
       maskBase64: "data:image/png;base64,mask",
       mode: "watermark_remove",
+      size: "1088x2416",
       onTaskStarted,
     });
 
@@ -52,6 +53,7 @@ describe("cleanupApi", () => {
       task_type: "watermark_remove",
       image_base64: "data:image/png;base64,source",
       mask_base64: "data:image/png;base64,mask",
+      size: "1088x2416",
     });
     expect(onTaskStarted).toHaveBeenCalledWith("cleanup-1");
   });

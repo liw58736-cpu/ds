@@ -53,6 +53,7 @@ export async function runImageCleanup(input: {
   imageBase64: string;
   maskBase64: string;
   mode: CleanupMode;
+  size?: string;
   prompt?: string;
   onProgress?: (progress: string) => void;
   onTaskStarted?: (backendTaskId: string) => void;
@@ -69,7 +70,7 @@ export async function runImageCleanup(input: {
       style: `image_cleanup:${input.mode}:standard`,
       image_base64: input.imageBase64,
       mask_base64: input.maskBase64,
-      size: "1024x1024",
+      size: input.size?.trim() || "1024x1024",
       quality: "standard",
       use_template_mode: false,
       keep_user_outfit_pose: false,

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Brush, Download, Eraser, RotateCcw, Sparkles } from "lucide-react";
 import { consumeCredits, getCurrentAccountSnapshot } from "../api/accountApi";
 import { runImageCleanup, type CleanupMode } from "../api/cleanupApi";
@@ -10,9 +10,45 @@ interface ImageCleanupPageProps {
   isAuthenticated: boolean;
   onRequireLogin: () => void;
   onOpenPricing: () => void;
+  initialProduct?: ProductInput | null;
+  onInitialProductConsumed?: () => void;
 }
 
-interface MaskPath { size: number; points: Array<{ x: number; y: number }> }
+export interface MaskPath { size: number; points: Array<{ x: number; y: number }> }
+
+export function drawTransparentCleanupMask(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  paths: MaskPath[],
+): void {
+  context.globalCompositeOperation = "source-over";
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  context.globalCompositeOperation = "destination-out";
+  context.strokeStyle = "#000000";
+  context.fillStyle = "#000000";
+  context.lineCap = "round";
+  context.lineJoin = "round";
+
+  for (const path of paths) {
+    if (path.points.length === 0) continue;
+    context.lineWidth = path.size;
+    if (path.points.length === 1) {
+      context.beginPath();
+      context.arc(path.points[0].x, path.points[0].y, path.size / 2, 0, Math.PI * 2);
+      context.fill();
+      continue;
+    }
+    context.beginPath();
+    context.moveTo(path.points[0].x, path.points[0].y);
+    for (const point of path.points.slice(1)) context.lineTo(point.x, point.y);
+    context.stroke();
+  }
+
+  context.globalCompositeOperation = "source-over";
+}
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -55,7 +91,7 @@ async function downloadCleanupResult(url: string): Promise<void> {
   URL.revokeObjectURL(objectUrl);
 }
 
-export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricing }: ImageCleanupPageProps) {
+export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricing, initialProduct, onInitialProductConsumed }: ImageCleanupPageProps) {
   const [product, setProduct] = useState<ProductInput | null>(null);
   const [mode, setMode] = useState<CleanupMode>("watermark_remove");
   const [brushSize, setBrushSize] = useState(36);
@@ -67,6 +103,16 @@ export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricin
   const pathsRef = useRef<MaskPath[]>([]);
   const drawingRef = useRef<MaskPath | null>(null);
 
+  useEffect(() => {
+    if (!initialProduct) return;
+    setProduct(initialProduct);
+    setAuthorized(true);
+    setResultUrl("");
+    pathsRef.current = [];
+    setStatus("已载入提取图片，请用画笔涂抹需要去除的水印或文字区域。");
+    onInitialProductConsumed?.();
+  }, [initialProduct, onInitialProductConsumed]);
+
   const redrawMask = () => {
     const canvas = canvasRef.current;
     const context = canvas?.getContext("2d");
@@ -75,9 +121,16 @@ export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricin
     context.lineCap = "round";
     context.lineJoin = "round";
     context.strokeStyle = "rgba(255, 58, 92, 0.62)";
+    context.fillStyle = "rgba(255, 58, 92, 0.62)";
     for (const path of pathsRef.current) {
       if (path.points.length === 0) continue;
       context.lineWidth = path.size;
+      if (path.points.length === 1) {
+        context.beginPath();
+        context.arc(path.points[0].x, path.points[0].y, path.size / 2, 0, Math.PI * 2);
+        context.fill();
+        continue;
+      }
       context.beginPath();
       context.moveTo(path.points[0].x, path.points[0].y);
       for (const point of path.points.slice(1)) context.lineTo(point.x, point.y);
@@ -99,19 +152,7 @@ export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricin
     mask.height = source.height;
     const context = mask.getContext("2d");
     if (!context) return "";
-    context.fillStyle = "#000000";
-    context.fillRect(0, 0, mask.width, mask.height);
-    context.strokeStyle = "#ffffff";
-    context.lineCap = "round";
-    context.lineJoin = "round";
-    for (const path of pathsRef.current) {
-      if (path.points.length === 0) continue;
-      context.lineWidth = path.size;
-      context.beginPath();
-      context.moveTo(path.points[0].x, path.points[0].y);
-      for (const point of path.points.slice(1)) context.lineTo(point.x, point.y);
-      context.stroke();
-    }
+    drawTransparentCleanupMask(context, mask.width, mask.height, pathsRef.current);
     return mask.toDataURL("image/png");
   };
 
@@ -141,10 +182,14 @@ export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricin
     setIsGenerating(true);
     setStatus("正在清理标记区域…");
     try {
+      const canvas = canvasRef.current;
       const result = await runImageCleanup({
         imageBase64: product.imageUrl,
         maskBase64,
         mode,
+        size: canvas?.width && canvas?.height
+          ? `${canvas.width}x${canvas.height}`
+          : undefined,
         onProgress: setStatus,
         onTaskStarted: (backendTaskId) => {
           currentProcessingTask = { ...currentProcessingTask, backendTaskId };
@@ -197,7 +242,7 @@ export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricin
           <p className="cleanup-status" role="status">{status}</p>
         </section>
         <section className="panel cleanup-canvas-panel" aria-label="涂抹区域">
-          {product ? <div className="cleanup-canvas-wrap"><img src={product.imageUrl} alt="待清理图片" onLoad={(event) => { const canvas = canvasRef.current; if (!canvas) return; canvas.width = event.currentTarget.naturalWidth; canvas.height = event.currentTarget.naturalHeight; redrawMask(); }} /><canvas ref={canvasRef} aria-label="清理蒙版画布" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); const path = { size: brushSize * (event.currentTarget.width / event.currentTarget.getBoundingClientRect().width), points: [pointerPoint(event)] }; drawingRef.current = path; pathsRef.current.push(path); redrawMask(); }} onPointerMove={(event) => { if (!drawingRef.current) return; drawingRef.current.points.push(pointerPoint(event)); redrawMask(); }} onPointerUp={() => { drawingRef.current = null; }} onPointerCancel={() => { drawingRef.current = null; }} /></div> : <div className="cleanup-empty"><Brush aria-hidden="true" /><strong>等待图片</strong><span>上传后用红色画笔涂抹清理区域</span></div>}
+          {product ? <div className="cleanup-canvas-wrap"><img src={product.imageUrl} alt="待清理图片" referrerPolicy="no-referrer" onLoad={(event) => { const canvas = canvasRef.current; if (!canvas) return; canvas.width = event.currentTarget.naturalWidth; canvas.height = event.currentTarget.naturalHeight; redrawMask(); }} onError={() => setStatus("图片加载失败，请重新提取或手动上传。")} /><canvas ref={canvasRef} aria-label="清理蒙版画布" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); const path = { size: brushSize * (event.currentTarget.width / event.currentTarget.getBoundingClientRect().width), points: [pointerPoint(event)] }; drawingRef.current = path; pathsRef.current.push(path); redrawMask(); }} onPointerMove={(event) => { if (!drawingRef.current) return; drawingRef.current.points.push(pointerPoint(event)); redrawMask(); }} onPointerUp={() => { drawingRef.current = null; }} onPointerCancel={() => { drawingRef.current = null; }} /></div> : <div className="cleanup-empty"><Brush aria-hidden="true" /><strong>等待图片</strong><span>上传后用红色画笔涂抹清理区域</span></div>}
           {resultUrl ? <div className="cleanup-result"><img src={resultUrl} alt="图片清理结果" /><button type="button" className="primary-button" onClick={() => void downloadCleanupResult(resultUrl).catch((error) => setStatus(error instanceof Error ? error.message : "下载失败"))}><Download aria-hidden="true" />下载结果</button></div> : null}
         </section>
       </div>

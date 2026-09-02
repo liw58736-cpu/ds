@@ -152,7 +152,7 @@ describe("App", () => {
       screen.getByRole("heading", { name: "灵感创作" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("上传灵感参考图")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "从链接提取素材" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "小红书图片提取" })).toBeInTheDocument();
   });
 
   it("opens the local still-to-motion workspace", async () => {

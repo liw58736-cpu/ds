@@ -181,7 +181,7 @@ export function HomePage({ onOpenStudio }: HomePageProps) {
           <p>提取授权素材、生成新视觉、转成轻动态，再清理交付前的文字或瑕疵。</p>
         </header>
         <div className="kroma-home-content-grid">
-          <article><Link2 aria-hidden="true" /><span>01</span><h3>链接提取与灵感创作</h3><p>从公开分享链接提取图片，选择为商品图或 Image 2 灵感参考。</p><button type="button" onClick={() => onOpenStudio("inspiration")}>打开灵感创作<ArrowRight aria-hidden="true" /></button></article>
+          <article><Link2 aria-hidden="true" /><span>01</span><h3>小红书提图与灵感创作</h3><p>粘贴小红书分享文案，批量提取图片并下载、去水印或作为 Image 2 参考。</p><button type="button" onClick={() => onOpenStudio("inspiration")}>打开灵感创作<ArrowRight aria-hidden="true" /></button></article>
           <article><Film aria-hidden="true" /><span>02</span><h3>静图转轻动态</h3><p>在浏览器本地添加推进、拉远、横移或漂移动效并下载 WebM。</p><button type="button" onClick={() => onOpenStudio("motion")}>打开轻动态<ArrowRight aria-hidden="true" /></button></article>
           <article><Brush aria-hidden="true" /><span>03</span><h3>图片清理</h3><p>用画笔标出水印、文字或物体区域，只重绘被标记的部分。</p><button type="button" onClick={() => onOpenStudio("cleanup")}>打开图片清理<ArrowRight aria-hidden="true" /></button></article>
         </div>

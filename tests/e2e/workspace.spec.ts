@@ -282,7 +282,7 @@ test("new content tools render and remain usable without horizontal overflow", a
   await page.goto("/");
 
   await page.getByRole("button", { name: "灵感创作", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "从链接提取素材" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "小红书图片提取" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "灵感创作" })).toBeVisible();
   await expect(page.getByLabel("商品处理")).toHaveValue("preserve");
   await expectNoHorizontalDocumentOverflow(page);
@@ -297,6 +297,24 @@ test("new content tools render and remain usable without horizontal overflow", a
   await expect(page.getByLabel("上传待清理图片")).toBeVisible();
   await expect(page.getByRole("button", { name: "去除水印或文字" })).toBeVisible();
   await expectNoHorizontalDocumentOverflow(page);
+});
+
+test("light motion generates a real downloadable WebM in the browser", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "One browser render is enough for the local encoder.");
+  await page.goto("/");
+  await page.getByRole("button", { name: "轻动态", exact: true }).click();
+  await page
+    .getByLabel("上传动态源图")
+    .setInputFiles("src/assets/home/kroma-main-before-v2.webp");
+  await page.getByLabel("时长").selectOption("3");
+  await page.getByRole("button", { name: "生成轻动态", exact: true }).click();
+
+  const download = page.getByRole("link", { name: "下载 WebM", exact: true });
+  await expect(download).toBeVisible({ timeout: 12_000 });
+  await expect(download).toHaveAttribute("href", /^blob:/);
+  await expect(page.getByRole("status")).toContainText("已生成 3 秒");
 });
 
 test("footer legal pages render", async ({ page }) => {

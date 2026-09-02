@@ -198,6 +198,7 @@ async function handleMaterialImport(request, env, fetchImpl, resolveHost) {
       title: fileNameFromUrl(finalUrl),
       images: [finalUrl.href],
       limited: false,
+      source_platform: detectMaterialPlatform(finalUrl),
     });
   }
 
@@ -212,7 +213,13 @@ async function handleMaterialImport(request, env, fetchImpl, resolveHost) {
 
   const html = (await response.text()).slice(0, 2 * 1024 * 1024);
   const title = extractHtmlTitle(html) || finalUrl.hostname;
-  const images = extractPublicImageUrls(html, finalUrl).slice(0, 12);
+  const sourcePlatform = detectMaterialPlatform(finalUrl);
+  const extractedImages =
+    sourcePlatform === "xiaohongshu"
+      ? extractXiaohongshuImageUrls(html, finalUrl)
+      : extractPublicImageUrls(html, finalUrl);
+  const imageLimit = sourcePlatform === "xiaohongshu" ? 20 : 12;
+  const images = extractedImages.slice(0, imageLimit);
 
   if (images.length === 0) {
     throw new HttpError(422, {
@@ -224,7 +231,8 @@ async function handleMaterialImport(request, env, fetchImpl, resolveHost) {
     source_url: finalUrl.href,
     title,
     images,
-    limited: images.length >= 12,
+    limited: extractedImages.length > images.length,
+    source_platform: sourcePlatform,
   });
 }
 
@@ -342,7 +350,13 @@ async function fetchPublicMaterialPage(initialUrl, fetchImpl, resolveHost) {
 function parsePublicHttpUrl(value) {
   let parsed;
   try {
-    parsed = value instanceof URL ? value : new URL(String(value ?? "").trim());
+    if (value instanceof URL) {
+      parsed = value;
+    } else {
+      const rawValue = String(value ?? "").trim();
+      const publicUrl = rawValue.match(/https?:\/\/[^\s<>"']+/i)?.[0] ?? rawValue;
+      parsed = new URL(publicUrl.replace(/[，。！？；、）】》\]}>]+$/u, ""));
+    }
   } catch {
     throw new HttpError(422, { detail: "Enter a valid public HTTP or HTTPS URL." });
   }
@@ -425,15 +439,88 @@ function extractPublicImageUrls(html, baseUrl) {
   const urls = [];
   for (const candidate of candidates) {
     try {
-      const decoded = decodeHtmlText(candidate).replace(/\\u002F/gi, "/").replace(/\\\//g, "/");
-      const url = new URL(decoded, baseUrl);
-      if (!["http:", "https:"].includes(url.protocol)) continue;
-      if (!urls.includes(url.href)) urls.push(url.href);
+      const url = normalizeExtractedImageUrl(candidate, baseUrl);
+      if (url && !urls.includes(url)) urls.push(url);
     } catch {
       // Ignore malformed image candidates.
     }
   }
   return urls;
+}
+
+function detectMaterialPlatform(url) {
+  const hostname = String(url?.hostname ?? "").toLowerCase();
+  return hostname === "xiaohongshu.com" ||
+    hostname.endsWith(".xiaohongshu.com") ||
+    hostname.endsWith(".xhscdn.com") ||
+    hostname.endsWith(".xhscdn.net")
+    ? "xiaohongshu"
+    : "public_web";
+}
+
+function extractXiaohongshuImageUrls(html, baseUrl) {
+  const candidates = [
+    ...Array.from(
+      html.matchAll(/["']urlDefault["']\s*:\s*["']([^"']+)["']/gi),
+      (match) => match[1],
+    ),
+    ...Array.from(
+      html.matchAll(
+        /["']imageScene["']\s*:\s*["']WB_DFT["'][\s\S]{0,240}?["']url["']\s*:\s*["']([^"']+)["']/gi,
+      ),
+      (match) => match[1],
+    ),
+  ];
+  const urls = [];
+
+  for (const candidate of candidates) {
+    const url = normalizeExtractedImageUrl(candidate, baseUrl);
+    if (url && isXiaohongshuContentImage(url) && !urls.includes(url)) {
+      urls.push(url);
+    }
+  }
+
+  if (urls.length > 0) return urls;
+
+  return extractMetaContent(html, ["og:image", "og:image:url"])
+    .map((candidate) => normalizeExtractedImageUrl(candidate, baseUrl))
+    .filter((url) => url && isXiaohongshuContentImage(url))
+    .filter((url, index, allUrls) => allUrls.indexOf(url) === index);
+}
+
+function normalizeExtractedImageUrl(candidate, baseUrl) {
+  try {
+    const decoded = decodeHtmlText(candidate)
+      .replace(/\\u002F/gi, "/")
+      .replace(/\\u0026/gi, "&")
+      .replace(/\\u003D/gi, "=")
+      .replace(/\\u003A/gi, ":")
+      .replace(/\\\//g, "/");
+    const url = new URL(decoded, baseUrl);
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    if (
+      url.protocol === "http:" &&
+      (url.hostname.endsWith(".xhscdn.com") || url.hostname.endsWith(".xhscdn.net"))
+    ) {
+      url.protocol = "https:";
+    }
+    return url.href;
+  } catch {
+    return "";
+  }
+}
+
+function isXiaohongshuContentImage(value) {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return (
+      hostname.startsWith("sns-webpic-") ||
+      hostname.startsWith("ci.xiaohongshu.com") ||
+      hostname === "ci.xiaohongshu.com"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function extractMetaContent(html, keys) {

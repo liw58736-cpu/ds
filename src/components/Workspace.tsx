@@ -93,6 +93,7 @@ interface WorkspaceProps {
   isAuthenticated?: boolean;
   onOpenPricing?: () => void;
   onRequireLogin?: () => void;
+  onOpenCleanup?: (imageUrl: string, title: string) => void;
 }
 
 function getModuleDefaults(module: GenerationModule): Partial<GenerationConfig> {
@@ -127,6 +128,7 @@ export function Workspace({
   isAuthenticated = true,
   onOpenPricing,
   onRequireLogin,
+  onOpenCleanup,
 }: WorkspaceProps) {
   const [config, setConfig] = useState<GenerationConfig>(defaultConfig);
   const [product, setProduct] = useState<ProductInput | null>(null);
@@ -463,6 +465,7 @@ export function Workspace({
             <MaterialImportPanel
               onUseAsProduct={handleImportedProduct}
               onUseAsReference={handleImportedReference}
+              onUseForCleanup={onOpenCleanup}
             />
           ) : null}
           <UploadPanel product={product} onProductChange={handleProductChange} />

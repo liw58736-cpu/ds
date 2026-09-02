@@ -147,6 +147,56 @@ test("material import extracts public Open Graph and page images for an authenti
       "https://cdn.example.com/detail.png",
     ],
     limited: false,
+    source_platform: "public_web",
+  });
+});
+
+test("material import extracts every Xiaohongshu note image from pasted share text", async () => {
+  const shareUrl = "https://www.xiaohongshu.com/explore/note-1?xsec_token=public";
+  const firstImage = "https:\\u002F\\u002Fsns-webpic-qc.xhscdn.com\\u002F20260902\\u002Ffirst!nd_dft_wlteh_jpg_3";
+  const secondImage = "http:\\u002F\\u002Fsns-webpic-bd.xhscdn.com\\u002F20260902\\u002Fsecond!nd_dft_wlteh_jpg_3";
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+    },
+    resolveHost: async () => [{ address: "93.184.216.34", family: 4 }],
+    fetch: async (url) => {
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === shareUrl) {
+        return new Response(
+          `<html><head><title>商品搭配 - 小红书</title><meta property="og:image" content="https://picasso-static.xiaohongshu.com/logo.png"></head><body><img src="https://fe-static.xhscdn.com/icon.png"><script>window.__INITIAL_STATE__={"note":{"imageList":[{"urlDefault":"${firstImage}"},{"urlDefault":"${secondImage}"}]}}</script></body></html>`,
+          { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
+        );
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/materials/import", {
+      method: "POST",
+      headers: { Authorization: "Bearer access-token", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: `复制这段小红书分享文案 ${shareUrl} 打开查看`,
+        authorized: true,
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    source_url: shareUrl,
+    title: "商品搭配 - 小红书",
+    images: [
+      "https://sns-webpic-qc.xhscdn.com/20260902/first!nd_dft_wlteh_jpg_3",
+      "https://sns-webpic-bd.xhscdn.com/20260902/second!nd_dft_wlteh_jpg_3",
+    ],
+    limited: false,
+    source_platform: "xiaohongshu",
   });
 });
 

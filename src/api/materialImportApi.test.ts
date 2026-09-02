@@ -30,6 +30,7 @@ describe("materialImportApi", () => {
           title: "Public inspiration",
           images: ["https://cdn.example.com/1.png"],
           limited: false,
+          source_platform: "xiaohongshu",
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
@@ -43,6 +44,7 @@ describe("materialImportApi", () => {
       title: "Public inspiration",
       images: ["https://cdn.example.com/1.png"],
       limited: false,
+      sourcePlatform: "xiaohongshu",
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "https://web-api.example.com/api/v1/materials/import",

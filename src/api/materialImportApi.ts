@@ -6,6 +6,7 @@ export interface ImportedMaterialResult {
   title: string;
   images: string[];
   limited: boolean;
+  sourcePlatform: "xiaohongshu" | "public_web";
 }
 
 interface ImportedMaterialResponse {
@@ -13,6 +14,7 @@ interface ImportedMaterialResponse {
   title: string;
   images: string[];
   limited?: boolean;
+  source_platform?: "xiaohongshu" | "public_web";
 }
 
 interface StoredMaterialResponse {
@@ -71,6 +73,7 @@ export async function importPublicMaterial(
       title: payload.title,
       images: Array.isArray(payload.images) ? payload.images : [],
       limited: Boolean(payload.limited),
+      sourcePlatform: payload.source_platform ?? "public_web",
     };
   }
 
