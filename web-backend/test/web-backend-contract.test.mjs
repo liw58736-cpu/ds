@@ -275,6 +275,7 @@ test("material store copies an authorized public image into isolated web storage
       body: JSON.stringify({
         url: "https://cdn.example.com/material.webp",
         authorized: true,
+        title: "Summer Look",
       }),
     }),
   );
@@ -287,7 +288,64 @@ test("material store copies an authorized public image into isolated web storage
   );
   assert.equal(body.content_type, "image/webp");
   assert.equal(body.size, Buffer.byteLength("stable-material"));
+  assert.equal(body.file_name, "Summer-Look");
+  assert.match(body.id, /Summer-Look\.webp$/);
   assert.equal(calls.some((call) => call.url === "https://cdn.example.com/material.webp"), true);
+});
+
+test("material library lists only the authenticated user's saved images", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_MATERIAL_STORAGE_BUCKET: "web-materials",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://web-project.supabase.co/storage/v1/bucket") {
+        return jsonResponse({ id: "web-materials" }, 200);
+      }
+      if (url === "https://web-project.supabase.co/storage/v1/object/list/web-materials") {
+        const body = JSON.parse(init.body);
+        assert.equal(body.prefix, "web-user-1/materials");
+        return jsonResponse([
+          {
+            name: "1788300000000-123456-Summer-Look.webp",
+            created_at: "2026-09-02T00:00:00.000Z",
+            metadata: { mimetype: "image/webp", size: 1234 },
+          },
+          { name: ".emptyFolderPlaceholder" },
+        ]);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/materials?limit=60", {
+      headers: { Authorization: "Bearer access-token" },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    materials: [
+      {
+        id: "web-user-1/materials/1788300000000-123456-Summer-Look.webp",
+        stored_url: "https://web-project.supabase.co/storage/v1/object/public/web-materials/web-user-1/materials/1788300000000-123456-Summer-Look.webp",
+        file_name: "Summer Look",
+        created_at: "2026-09-02T00:00:00.000Z",
+        content_type: "image/webp",
+        size: 1234,
+      },
+    ],
+  });
+  assert.equal(calls.some((call) => String(call.url).includes("web-user-2")), false);
 });
 
 test("health endpoint reuses a short database check cache", async () => {

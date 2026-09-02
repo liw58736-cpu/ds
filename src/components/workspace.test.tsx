@@ -318,7 +318,7 @@ describe("Workspace", () => {
     await user.selectOptions(screen.getByLabelText("背景"), "studio");
     await user.selectOptions(screen.getByLabelText("构图"), "ugc");
     await user.upload(
-      screen.getByLabelText("上传灵感参考图"),
+      screen.getByLabelText("上传模特姿势参考图"),
       new File(["reference"], "inspiration.png", { type: "image/png" }),
     );
     await user.type(
@@ -327,8 +327,12 @@ describe("Workspace", () => {
     );
 
     expect(screen.getByText("inspiration.png")).toBeInTheDocument();
+    expect(screen.getByLabelText("上传服装参考图")).toBeInTheDocument();
     expect(screen.getByLabelText("背景")).toHaveValue("studio");
     expect(screen.getByLabelText("构图")).toHaveValue("ugc");
+    expect(screen.getByLabelText("背景调整幅度")).toHaveValue("medium");
+    expect(screen.getByLabelText("姿势调整幅度")).toHaveValue("low");
+    expect(screen.getByLabelText("服装比例")).toHaveValue("preserve");
     expect(screen.getByLabelText("参考说明")).toHaveValue(
       "参考模特姿态和背景，保留我的商品。",
     );

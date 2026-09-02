@@ -1,12 +1,13 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { importPublicMaterial, storeImportedMaterial } from "../api/materialImportApi";
+import { importPublicMaterial, listSavedMaterials, saveImportedMaterial } from "../api/materialImportApi";
 import { MaterialImportPanel } from "./MaterialImportPanel";
 
 vi.mock("../api/materialImportApi", () => ({
   importPublicMaterial: vi.fn(),
-  storeImportedMaterial: vi.fn(),
+  listSavedMaterials: vi.fn().mockResolvedValue([]),
+  saveImportedMaterial: vi.fn(),
 }));
 
 afterEach(() => {
@@ -41,9 +42,11 @@ describe("MaterialImportPanel", () => {
     expect(importPublicMaterial).not.toHaveBeenCalled();
   });
 
-  it("extracts pasted Xiaohongshu share text and hands a stable image to cleanup", async () => {
+  it("lets the user save only selected extracted photos and reuse them for cleanup", async () => {
     const user = userEvent.setup();
     const onUseForCleanup = vi.fn();
+    const onUseAsModelReference = vi.fn();
+    const onUseAsGarmentReference = vi.fn();
     vi.mocked(importPublicMaterial).mockResolvedValue({
       sourceUrl: "https://www.xiaohongshu.com/explore/note-1",
       title: "商品搭配 - 小红书",
@@ -54,14 +57,25 @@ describe("MaterialImportPanel", () => {
       limited: false,
       sourcePlatform: "xiaohongshu",
     });
-    vi.mocked(storeImportedMaterial).mockResolvedValue(
-      "https://web-project.supabase.co/storage/v1/object/public/web-imported-materials/user/material.jpg",
-    );
+    const savedMaterial = {
+      id: "user/material.jpg",
+      imageUrl: "https://web-project.supabase.co/storage/v1/object/public/web-imported-materials/user/material.jpg",
+      fileName: "商品搭配 1",
+      createdAt: "2026-09-02T00:00:00.000Z",
+      contentType: "image/jpeg",
+      size: 100,
+    };
+    vi.mocked(saveImportedMaterial).mockResolvedValue(savedMaterial);
+    vi.mocked(listSavedMaterials)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([savedMaterial]);
 
     render(
       <MaterialImportPanel
         onUseAsProduct={vi.fn()}
         onUseAsReference={vi.fn()}
+        onUseAsModelReference={onUseAsModelReference}
+        onUseAsGarmentReference={onUseAsGarmentReference}
         onUseForCleanup={onUseForCleanup}
       />,
     );
@@ -79,16 +93,30 @@ describe("MaterialImportPanel", () => {
 
     expect(await screen.findAllByAltText(/提取素材/)).toHaveLength(2);
     expect(screen.getByRole("status")).toHaveTextContent("小红书笔记已提取 2 张图片");
-    await user.click(screen.getAllByRole("button", { name: "去水印/文字" })[0]);
+    await user.click(screen.getByRole("checkbox", { name: "选择提取素材 1" }));
+    await user.click(screen.getByRole("button", { name: "保存选中照片（1）" }));
+    await user.click(await screen.findByRole("button", { name: "模特/姿势" }));
+    await user.click(screen.getByRole("button", { name: "服装参考" }));
+    await user.click(await screen.findByRole("button", { name: "去水印" }));
 
     await waitFor(() => {
-      expect(storeImportedMaterial).toHaveBeenCalledWith(
+      expect(saveImportedMaterial).toHaveBeenCalledWith(
         "https://sns-webpic-qc.xhscdn.com/first.jpg",
         true,
+        "商品搭配-1",
       );
+      expect(saveImportedMaterial).toHaveBeenCalledTimes(1);
       expect(onUseForCleanup).toHaveBeenCalledWith(
         "https://web-project.supabase.co/storage/v1/object/public/web-imported-materials/user/material.jpg",
-        "商品搭配 - 小红书",
+        "商品搭配 1",
+      );
+      expect(onUseAsModelReference).toHaveBeenCalledWith(
+        savedMaterial.imageUrl,
+        "商品搭配 1",
+      );
+      expect(onUseAsGarmentReference).toHaveBeenCalledWith(
+        savedMaterial.imageUrl,
+        "商品搭配 1",
       );
     });
   });

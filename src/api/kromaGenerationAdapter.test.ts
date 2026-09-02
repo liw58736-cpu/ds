@@ -165,12 +165,19 @@ describe("kromaGenerationAdapter", () => {
           productHandling: "preserve",
         },
         moduleReferenceAssets: {
-          inspiration: [
+          inspiration_model: [
             {
               id: "inspiration-ref-1",
               fileName: "model-reference.png",
               imageUrl: "data:image/png;base64,model-reference",
               note: "参考模特姿态和背景，保留我的商品。",
+            },
+          ],
+          inspiration_garment: [
+            {
+              id: "inspiration-garment-1",
+              fileName: "garment-reference.png",
+              imageUrl: "data:image/png;base64,garment-reference",
             },
           ],
         },
@@ -183,10 +190,14 @@ describe("kromaGenerationAdapter", () => {
       style: "lifestyle:standard",
       image_url: "https://cdn.example.com/product.png",
       template_image_base64: "data:image/png;base64,model-reference",
-      template_image_base64s: ["data:image/png;base64,model-reference"],
+      template_image_base64s: [
+        "data:image/png;base64,model-reference",
+        "data:image/png;base64,garment-reference",
+      ],
       use_template_mode: true,
     });
     expect(kromaRequest.prompt).toContain("background=studio");
+    expect(kromaRequest.prompt).toContain("garment_proportion=preserve");
     expect(kromaRequest.prompt).toContain(
       "Image 2 is an inspiration reference for background, pose, model, composition, or mood only",
     );

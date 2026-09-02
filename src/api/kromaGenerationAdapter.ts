@@ -109,7 +109,12 @@ function getModuleReferenceImageInput(
   request: GenerationTaskCreateRequest,
 ): Pick<KromaGenerateRequest, "template_image_base64" | "template_image_base64s"> {
   const moduleIds = request.body.prompt.modules.map((module) => module.id);
-  const imageUrls = moduleIds
+  const expandedModuleIds = moduleIds.flatMap((moduleId) =>
+    moduleId === "inspiration"
+      ? ["inspiration", "inspiration_model", "inspiration_garment"]
+      : [moduleId],
+  );
+  const imageUrls = expandedModuleIds
     .flatMap((moduleId) =>
       (request.body.config.moduleReferenceAssets?.[moduleId] ?? [])
         .map((asset) => asset.imageUrl.trim())

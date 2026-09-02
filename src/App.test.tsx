@@ -153,7 +153,8 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "灵感创作" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("上传灵感参考图")).toBeInTheDocument();
+    expect(screen.getByLabelText("上传模特姿势参考图")).toBeInTheDocument();
+    expect(screen.getByLabelText("上传服装参考图")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "小红书图片提取" })).toBeInTheDocument();
   });
 
@@ -161,11 +162,11 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "轻动态" }));
+    await user.click(screen.getByRole("button", { name: "Live图" }));
 
-    expect(screen.getByRole("heading", { name: "静图转轻动态" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Live 图生成" })).toBeInTheDocument();
     expect(screen.getByLabelText("上传动态源图")).toBeInTheDocument();
-    expect(screen.getByText(/不消耗积分/)).toBeInTheDocument();
+    expect(screen.getByLabelText("清晰度")).toHaveValue("720p");
   });
 
   it("opens the masked image cleanup workspace", async () => {
@@ -192,7 +193,7 @@ describe("App", () => {
       "详情页",
       "AI工具",
       "灵感创作",
-      "轻动态",
+      "Live图",
       "图片清理",
       "价格",
       "登录",

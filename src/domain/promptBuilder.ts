@@ -330,7 +330,16 @@ function getInspirationSettingsPrompt(config: GenerationConfig): string {
     return "Use a natural lifestyle background, natural pose, no specified model, clear hero composition, preserve the product unchanged, and use a product-listing purpose.";
   }
 
-  return `Creative controls: background=${settings.background}; pose=${settings.pose}; model=${settings.model}; composition=${settings.composition}; product_handling=${settings.productHandling}; purpose=${settings.purpose}. Follow these controls while keeping Image 1 as the sold product.`;
+  const backgroundChange = settings.backgroundChange ?? "medium";
+  const poseChange = settings.poseChange ?? "low";
+  const garmentProportion = settings.garmentProportion ?? "preserve";
+  const backgroundRule = backgroundChange === "keep"
+    ? "keep the original background unchanged"
+    : `adjust the background with ${backgroundChange} change intensity toward ${settings.background}`;
+  const poseRule = poseChange === "keep"
+    ? "keep the original pose unchanged"
+    : `adjust the pose with ${poseChange} change intensity toward ${settings.pose}`;
+  return `Creative controls: background=${settings.background}; background_change=${backgroundChange} (${backgroundRule}); pose=${settings.pose}; pose_change=${poseChange} (${poseRule}); model=${settings.model}; garment_proportion=${garmentProportion}; composition=${settings.composition}; product_handling=${settings.productHandling}; purpose=${settings.purpose}. Low means subtle change, medium means clear but identity-safe change, and high means a larger composition change without changing the sold SKU. Image 2 is the model or pose reference and Image 3 is the garment reference when provided. Follow these controls while keeping Image 1 as the sold product.`;
 }
 
 function withModuleReferencePrompt(
@@ -718,7 +727,14 @@ function getModuleReferenceAssets(
   config: GenerationConfig,
   moduleId: string,
 ): ModuleReferenceAsset[] {
-  return (config.moduleReferenceAssets?.[moduleId] ?? []).filter(
+  const assets = moduleId === "inspiration"
+    ? [
+        ...(config.moduleReferenceAssets?.inspiration ?? []),
+        ...(config.moduleReferenceAssets?.inspiration_model ?? []),
+        ...(config.moduleReferenceAssets?.inspiration_garment ?? []),
+      ]
+    : config.moduleReferenceAssets?.[moduleId] ?? [];
+  return assets.filter(
     (asset) => hasModuleReferenceImage(asset) || hasModuleReferenceNote(asset),
   );
 }

@@ -33,7 +33,7 @@ const topNavItems = [
   { page: "detail_page", label: "详情页" },
   { page: "white_background", label: "AI工具" },
   { page: "inspiration", label: "灵感创作" },
-  { page: "motion", label: "轻动态" },
+  { page: "motion", label: "Live图" },
   { page: "cleanup", label: "图片清理" },
   { page: "history", label: "历史任务" },
   { page: "pricing", label: "价格" },

@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Film, ImagePlus, Play } from "lucide-react";
 import { NoticeDialog } from "./NoticeDialog";
+import { consumeCredits, getCurrentAccountSnapshot } from "../api/accountApi";
+import type { ProductInput } from "../domain/types";
 
 type MotionStyle = "zoom_in" | "zoom_out" | "pan_left" | "float";
 type MotionRatio = "9:16" | "4:5" | "1:1";
+type MotionClarity = "720p" | "1080p" | "2k";
 
 const motionStyles: Array<{ value: MotionStyle; label: string; description: string }> = [
   { value: "zoom_in", label: "缓慢推进", description: "适合商品特写和氛围图" },
@@ -12,11 +15,24 @@ const motionStyles: Array<{ value: MotionStyle; label: string; description: stri
   { value: "float", label: "轻微漂移", description: "适合社媒内容和封面" },
 ];
 
-const ratioSize: Record<MotionRatio, { width: number; height: number }> = {
-  "9:16": { width: 720, height: 1280 },
-  "4:5": { width: 720, height: 900 },
-  "1:1": { width: 720, height: 720 },
+const clarityScale: Record<MotionClarity, number> = {
+  "720p": 720,
+  "1080p": 1080,
+  "2k": 1440,
 };
+
+const clarityCredits: Record<MotionClarity, number> = {
+  "720p": 1,
+  "1080p": 2,
+  "2k": 4,
+};
+
+function motionSize(ratio: MotionRatio, clarity: MotionClarity) {
+  const width = clarityScale[clarity];
+  if (ratio === "9:16") return { width, height: Math.round(width * 16 / 9) };
+  if (ratio === "4:5") return { width, height: Math.round(width * 5 / 4) };
+  return { width, height: width };
+}
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -30,6 +46,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
+    image.crossOrigin = "anonymous";
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error("图片加载失败"));
     image.src = src;
@@ -63,17 +80,41 @@ function drawMotionFrame(
   context.drawImage(image, x, y, drawWidth, drawHeight);
 }
 
-export function MotionStudioPage() {
+interface MotionStudioPageProps {
+  initialProduct?: ProductInput | null;
+  onInitialProductConsumed?: () => void;
+  isAuthenticated?: boolean;
+  onRequireLogin?: () => void;
+  onOpenPricing?: () => void;
+}
+
+export function MotionStudioPage({
+  initialProduct,
+  onInitialProductConsumed,
+  isAuthenticated = true,
+  onRequireLogin,
+  onOpenPricing,
+}: MotionStudioPageProps = {}) {
   const [imageUrl, setImageUrl] = useState("");
   const [fileName, setFileName] = useState("");
   const [style, setStyle] = useState<MotionStyle>("zoom_in");
   const [ratio, setRatio] = useState<MotionRatio>("9:16");
   const [duration, setDuration] = useState(5);
-  const [status, setStatus] = useState("上传一张静图后即可生成轻动态视频。");
+  const [clarity, setClarity] = useState<MotionClarity>("720p");
+  const [status, setStatus] = useState("上传静图或从生成结果进入，选择清晰度后生成 Live 图。失败不扣积分。");
   const [downloadUrl, setDownloadUrl] = useState("");
   const [isRendering, setIsRendering] = useState(false);
   const [errorNotice, setErrorNotice] = useState("");
   const activeStyle = useMemo(() => motionStyles.find((item) => item.value === style)!, [style]);
+  const creditCost = clarityCredits[clarity];
+
+  useEffect(() => {
+    if (!initialProduct) return;
+    setImageUrl(initialProduct.imageUrl);
+    setFileName(initialProduct.fileName);
+    setStatus("已载入生成结果，请选择清晰度和动效后生成 Live 图。");
+    onInitialProductConsumed?.();
+  }, [initialProduct, onInitialProductConsumed]);
 
   useEffect(() => () => {
     if (downloadUrl) URL.revokeObjectURL(downloadUrl);
@@ -91,6 +132,14 @@ export function MotionStudioPage() {
   };
 
   const renderVideo = async () => {
+    if (!isAuthenticated) {
+      setErrorNotice("登录后才能生成 Live 图并记录积分消耗。");
+      return;
+    }
+    if (getCurrentAccountSnapshot().balance < creditCost) {
+      setErrorNotice(`当前积分不足，${clarity} Live 图需要 ${creditCost} 积分。`);
+      return;
+    }
     if (!imageUrl || typeof MediaRecorder === "undefined") {
       const errorMessage = imageUrl ? "当前浏览器不支持本地视频生成，请使用最新版 Chrome。" : "请先上传静图。";
       setStatus(errorMessage);
@@ -103,7 +152,7 @@ export function MotionStudioPage() {
     try {
       const image = await loadImage(imageUrl);
       const canvas = document.createElement("canvas");
-      const size = ratioSize[ratio];
+      const size = motionSize(ratio, clarity);
       canvas.width = size.width;
       canvas.height = size.height;
       const context = canvas.getContext("2d");
@@ -112,7 +161,8 @@ export function MotionStudioPage() {
       const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
         ? "video/webm;codecs=vp9"
         : "video/webm";
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 5_000_000 });
+      const videoBitsPerSecond = clarity === "2k" ? 12_000_000 : clarity === "1080p" ? 8_000_000 : 5_000_000;
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond });
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = (event) => event.data.size > 0 && chunks.push(event.data);
       const finished = new Promise<Blob>((resolve, reject) => {
@@ -136,7 +186,12 @@ export function MotionStudioPage() {
       if (downloadUrl) URL.revokeObjectURL(downloadUrl);
       const nextUrl = URL.createObjectURL(blob);
       setDownloadUrl(nextUrl);
-      setStatus(`已生成 ${duration} 秒 ${ratio} WebM 视频，可直接下载。`);
+      try {
+        await consumeCredits({ amount: creditCost, label: `${clarity} Live 图` });
+        setStatus(`已生成 ${duration} 秒 ${ratio} ${clarity} Live 图，已扣除 ${creditCost} 积分。`);
+      } catch {
+        setStatus("Live 图已生成，但积分同步暂时失败；结果仍可下载。");
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "视频生成失败，请重试。";
       setStatus(errorMessage);
@@ -150,8 +205,8 @@ export function MotionStudioPage() {
     <main className="motion-page page-surface">
       <section className="page-heading motion-page-heading">
         <p className="eyebrow">STILL TO MOTION</p>
-        <h1>静图转轻动态</h1>
-        <p>在浏览器本地生成运镜视频，不上传图片、不消耗积分。当前是轻动态，不冒充 AI 图生视频。</p>
+        <h1>Live 图生成</h1>
+        <p>把静态图片转为适合商品展示和社媒发布的轻动态 WebM；当前为本地运镜效果，不冒充人物动作型 AI 视频。</p>
       </section>
       <div className="motion-workbench">
         <section className="panel motion-settings" aria-label="动态设置">
@@ -172,8 +227,10 @@ export function MotionStudioPage() {
           <div className="compact-fields">
             <label className="field"><span>比例</span><select value={ratio} onChange={(event) => setRatio(event.target.value as MotionRatio)}><option>9:16</option><option>4:5</option><option>1:1</option></select></label>
             <label className="field"><span>时长</span><select value={duration} onChange={(event) => setDuration(Number(event.target.value))}><option value={3}>3 秒</option><option value={5}>5 秒</option><option value={8}>8 秒</option></select></label>
+            <label className="field"><span>清晰度</span><select value={clarity} onChange={(event) => setClarity(event.target.value as MotionClarity)}><option value="720p">720P · 1 积分</option><option value="1080p">1080P · 2 积分</option><option value="2k">2K · 4 积分</option></select></label>
           </div>
-          <button type="button" className="primary-button motion-render-button" disabled={!imageUrl || isRendering} onClick={renderVideo}><Film aria-hidden="true" /><span>{isRendering ? "正在生成" : "生成轻动态"}</span></button>
+          <button type="button" className="primary-button motion-render-button" disabled={!imageUrl || isRendering} onClick={renderVideo}><Film aria-hidden="true" /><span>{isRendering ? "正在生成" : `生成 Live 图（${creditCost} 积分）`}</span></button>
+          <p className="motion-credit-hint">720P 1 积分 · 1080P 2 积分 · 2K 4 积分；成功后扣点，失败不扣点。</p>
           {downloadUrl ? <a className="secondary-button motion-download-button" href={downloadUrl} download={`${fileName.replace(/\.[^.]+$/, "") || "kroma-motion"}.webm`}><Download aria-hidden="true" />下载 WebM</a> : null}
           <p className="motion-status" role="status">{status}</p>
         </section>
@@ -185,8 +242,10 @@ export function MotionStudioPage() {
       </div>
       <NoticeDialog
         open={Boolean(errorNotice)}
-        title="轻动态生成失败"
+        title="Live 图生成失败"
         message={errorNotice}
+        primaryLabel={errorNotice.includes("登录") ? "去登录" : errorNotice.includes("积分") ? "查看价格" : undefined}
+        onPrimary={errorNotice.includes("登录") ? onRequireLogin : errorNotice.includes("积分") ? onOpenPricing : undefined}
         onClose={() => setErrorNotice("")}
       />
     </main>

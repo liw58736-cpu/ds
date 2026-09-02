@@ -3436,6 +3436,172 @@ body {
   padding: 0 16px 16px;
 }
 
+.material-pick-section,
+.saved-material-library {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid var(--hairline);
+}
+
+.material-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.material-section-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.material-section-heading strong { color: var(--ink); }
+.material-section-heading span { color: var(--ink-muted); font-size: .78rem; }
+.material-section-heading button { min-height: 38px; padding: 0 14px; }
+
+.material-pick-card {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.material-pick-card.is-selected {
+  border-color: var(--button);
+  background: var(--button-soft);
+  box-shadow: 0 0 0 2px rgba(72, 78, 166, .1);
+}
+
+.material-pick-card img,
+.saved-material-grid article > img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--surface-soft);
+}
+
+.material-pick-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  font-size: .78rem;
+  font-weight: 760;
+}
+
+.material-pick-check input { accent-color: var(--button); }
+
+.saved-material-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.saved-material-grid article {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.saved-material-grid article > strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: .78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-material-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.saved-material-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 4px 6px;
+  border: 1px solid var(--button-border);
+  border-radius: 9px;
+  color: var(--button-text);
+  background: var(--button-soft);
+  font-size: .68rem;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.saved-material-actions svg { width: 14px; height: 14px; }
+.saved-material-empty { margin: 0; color: var(--ink-muted); font-size: .82rem; line-height: 1.6; }
+
+.inspiration-reference-slots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inspiration-reference-slot {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inspiration-reference-slot .inspiration-reference-preview {
+  grid-template-columns: 52px minmax(0, 1fr);
+}
+
+.inspiration-reference-slot .inspiration-reference-preview button {
+  grid-column: 1 / -1;
+}
+
+.preview-thumbnail-list.is-comparison-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.inspiration-before-after {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inspiration-before-after .preview-thumbnail-button {
+  position: relative;
+}
+
+.inspiration-before-after .preview-thumbnail-button > span {
+  position: absolute;
+  z-index: 1;
+  top: 7px;
+  left: 7px;
+  padding: 4px 7px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(22, 27, 52, .74);
+  font-size: .68rem;
+  font-weight: 800;
+}
+
+.preview-result-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
 .material-import-grid article {
   display: grid;
   gap: 8px;
@@ -3536,6 +3702,13 @@ body {
   font-size: 0.8rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.motion-credit-hint {
+  margin: -4px 0 0;
+  color: var(--ink-muted);
+  font-size: .76rem;
+  line-height: 1.55;
 }
 
 .motion-style-grid {
@@ -3816,6 +3989,12 @@ body {
   .notice-dialog-actions {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .saved-material-grid,
+  .inspiration-reference-slots,
+  .inspiration-before-after {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

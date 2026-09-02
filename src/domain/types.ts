@@ -48,6 +48,12 @@ export type InspirationProductHandling =
   | "feature"
   | "wear"
   | "in_use";
+export type InspirationChangeIntensity = "keep" | "low" | "medium" | "high";
+export type InspirationGarmentProportion =
+  | "preserve"
+  | "fitted"
+  | "balanced"
+  | "oversized";
 
 export interface InspirationSettings {
   background: InspirationBackground;
@@ -56,6 +62,9 @@ export interface InspirationSettings {
   composition: InspirationComposition;
   purpose: InspirationPurpose;
   productHandling: InspirationProductHandling;
+  backgroundChange?: InspirationChangeIntensity;
+  poseChange?: InspirationChangeIntensity;
+  garmentProportion?: InspirationGarmentProportion;
 }
 
 export type MainImageModuleId =

@@ -95,6 +95,7 @@ interface WorkspaceProps {
   onOpenPricing?: () => void;
   onRequireLogin?: () => void;
   onOpenCleanup?: (imageUrl: string, title: string) => void;
+  onOpenMotion?: (imageUrl: string, title: string) => void;
 }
 
 function getModuleDefaults(module: GenerationModule): Partial<GenerationConfig> {
@@ -130,6 +131,7 @@ export function Workspace({
   onOpenPricing,
   onRequireLogin,
   onOpenCleanup,
+  onOpenMotion,
 }: WorkspaceProps) {
   const [config, setConfig] = useState<GenerationConfig>(defaultConfig);
   const [product, setProduct] = useState<ProductInput | null>(null);
@@ -194,17 +196,23 @@ export function Workspace({
     });
   };
 
-  const handleImportedReference = (imageUrl: string, title: string) => {
+  const handleImportedReference = (
+    imageUrl: string,
+    title: string,
+    role: "model" | "garment" = "model",
+  ) => {
     setConfig((currentConfig) => ({
       ...currentConfig,
       moduleReferenceAssets: {
         ...(currentConfig.moduleReferenceAssets ?? {}),
-        inspiration: [
+        [role === "model" ? "inspiration_model" : "inspiration_garment"]: [
           {
-            id: `imported-inspiration-${Date.now().toString(36)}`,
+            id: `imported-inspiration-${role}-${Date.now().toString(36)}`,
             imageUrl,
-            fileName: title || "imported-inspiration",
-            note: "Use this public material only as the Image 2 inspiration reference.",
+            fileName: title || `imported-${role}-reference`,
+            note: role === "model"
+              ? "Use this saved material as Image 2 for model, pose, background, and composition reference only."
+              : "Use this saved material as Image 3 for garment structure, styling, and clothing proportion reference only.",
           },
         ],
       },
@@ -467,6 +475,8 @@ export function Workspace({
             <MaterialImportPanel
               onUseAsProduct={handleImportedProduct}
               onUseAsReference={handleImportedReference}
+              onUseAsModelReference={(imageUrl, title) => handleImportedReference(imageUrl, title, "model")}
+              onUseAsGarmentReference={(imageUrl, title) => handleImportedReference(imageUrl, title, "garment")}
               onUseForCleanup={onOpenCleanup}
               isAuthenticated={isAuthenticated}
               onRequireLogin={onRequireLogin}
@@ -492,6 +502,7 @@ export function Workspace({
             tasks={previewTasks}
             onCancelTask={handleCancelTask}
             onRetryTask={handleRetryTask}
+            onOpenMotion={onOpenMotion}
           />
         </section>
       </div>

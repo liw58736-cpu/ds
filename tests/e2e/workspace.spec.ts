@@ -287,8 +287,8 @@ test("new content tools render and remain usable without horizontal overflow", a
   await expect(page.getByLabel("商品处理")).toHaveValue("preserve");
   await expectNoHorizontalDocumentOverflow(page);
 
-  await page.getByRole("button", { name: "轻动态", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "静图转轻动态" })).toBeVisible();
+  await page.getByRole("button", { name: "Live图", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Live 图生成" })).toBeVisible();
   await expect(page.getByLabel("上传动态源图")).toBeVisible();
   await expectNoHorizontalDocumentOverflow(page);
 
@@ -320,18 +320,44 @@ test("light motion generates a real downloadable WebM in the browser", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "One browser render is enough for the local encoder.");
+  await seedAuthenticatedAccount(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "轻动态", exact: true }).click();
+  await page.getByRole("button", { name: "Live图", exact: true }).click();
   await page
     .getByLabel("上传动态源图")
     .setInputFiles("src/assets/home/kroma-main-before-v2.webp");
   await page.getByLabel("时长").selectOption("3");
-  await page.getByRole("button", { name: "生成轻动态", exact: true }).click();
+  await page.getByLabel("清晰度").selectOption("1080p");
+  await expect(page.getByRole("button", { name: "生成 Live 图（2 积分）" })).toBeVisible();
+  await page.getByLabel("清晰度").selectOption("2k");
+  await expect(page.getByRole("button", { name: "生成 Live 图（4 积分）" })).toBeVisible();
+  await page.getByLabel("清晰度").selectOption("720p");
+  await page.getByRole("button", { name: "生成 Live 图（1 积分）", exact: true }).click();
 
   const download = page.getByRole("link", { name: "下载 WebM", exact: true });
   await expect(download).toBeVisible({ timeout: 12_000 });
   await expect(download).toHaveAttribute("href", /^blob:/);
   await expect(page.getByRole("status")).toContainText("已生成 3 秒");
+  await expect.poll(() => page.evaluate(() => {
+    const value = localStorage.getItem("commerce-studio-account-v1");
+    return value ? JSON.parse(value).balance : null;
+  })).toBe(99);
+});
+
+test("inspiration results compare original and generated images and can open Live creation", async ({ page }) => {
+  await seedAuthenticatedAccount(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "灵感创作", exact: true }).click();
+  await page.getByRole("button", { name: "使用示例商品", exact: true }).click();
+  await page.locator(".version-grid button").first().click();
+  await page.getByRole("button", { name: "生成灵感创作", exact: true }).click();
+
+  await expect(page.getByAltText("创作原图")).toBeVisible();
+  await expect(page.getByAltText("生成结果")).toBeVisible();
+  await page.getByRole("button", { name: "生成 Live 图", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Live 图生成" })).toBeVisible();
+  await expect(page.getByText(/已载入生成结果/)).toBeVisible();
+  await expect(page.getByLabel("清晰度")).toHaveValue("720p");
 });
 
 test("footer legal pages render", async ({ page }) => {

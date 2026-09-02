@@ -13,6 +13,7 @@ interface ResultPreviewProps {
   tasks?: GenerationTask[];
   onCancelTask?: (task: GenerationTask) => void;
   onRetryTask?: (task: GenerationTask) => void;
+  onOpenMotion?: (imageUrl: string, title: string) => void;
 }
 
 interface LightboxState {
@@ -65,6 +66,7 @@ export function ResultPreview({
   tasks,
   onCancelTask,
   onRetryTask,
+  onOpenMotion,
 }: ResultPreviewProps) {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const newestTaskRef = useRef<HTMLDivElement | null>(null);
@@ -113,6 +115,7 @@ export function ResultPreview({
               onCancelTask={onCancelTask}
               onRetryTask={onRetryTask}
               onOpenImage={(asset, index) => setLightbox({ asset, task, index })}
+              onOpenMotion={onOpenMotion}
             />
           ))}
           <div ref={newestTaskRef} aria-hidden="true" />
@@ -166,11 +169,13 @@ function PreviewTaskCard({
   onCancelTask,
   onRetryTask,
   onOpenImage,
+  onOpenMotion,
 }: {
   task: GenerationTask;
   onCancelTask?: (task: GenerationTask) => void;
   onRetryTask?: (task: GenerationTask) => void;
   onOpenImage: (asset: GenerationResultAsset, index: number) => void;
+  onOpenMotion?: (imageUrl: string, title: string) => void;
 }) {
   const isTaskRunning = task.status === "queued" || task.status === "processing";
   const resultAssets = task.status === "completed" ? getTaskResultAssets(task) : [];
@@ -205,25 +210,30 @@ function PreviewTaskCard({
               </button>
             ) : null}
           </div>
-          <div className="preview-result-list preview-thumbnail-list">
+          <div className={`preview-result-list preview-thumbnail-list${task.config.module === "lifestyle" ? " is-comparison-list" : ""}`}>
             {resultAssets.map((asset, index) => (
               <figure className="preview-result-item" key={`${asset.url}-${index}`}>
-                <button
-                  type="button"
-                  className="preview-thumbnail-button"
-                  aria-label={`放大查看 ${asset.label}`}
-                  onClick={() => onOpenImage(asset, index)}
-                >
-                  <img src={asset.url} alt="生成结果" />
-                </button>
+                {task.config.module === "lifestyle" ? (
+                  <div className="inspiration-before-after">
+                    <button type="button" className="preview-thumbnail-button" aria-label="放大查看原图" onClick={() => onOpenImage({ url: task.productInput.imageUrl, label: "原图" }, index)}>
+                      <span>原图</span><img src={task.productInput.imageUrl} alt="创作原图" />
+                    </button>
+                    <button type="button" className="preview-thumbnail-button" aria-label={`放大查看 ${asset.label}`} onClick={() => onOpenImage(asset, index)}>
+                      <span>生成图</span><img src={asset.url} alt="生成结果" />
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" className="preview-thumbnail-button" aria-label={`放大查看 ${asset.label}`} onClick={() => onOpenImage(asset, index)}>
+                    <img src={asset.url} alt="生成结果" />
+                  </button>
+                )}
                 <figcaption>{asset.label}</figcaption>
-                <button
-                  type="button"
-                  className="ghost-action-button"
-                  onClick={() => downloadTaskAsset(task, asset, index)}
-                >
-                  下载
-                </button>
+                <div className="preview-result-actions">
+                  <button type="button" className="ghost-action-button" onClick={() => downloadTaskAsset(task, asset, index)}>下载</button>
+                  {task.config.module === "lifestyle" && onOpenMotion ? (
+                    <button type="button" className="ghost-action-button" onClick={() => onOpenMotion(asset.url, asset.label)}>生成 Live 图</button>
+                  ) : null}
+                </div>
               </figure>
             ))}
           </div>

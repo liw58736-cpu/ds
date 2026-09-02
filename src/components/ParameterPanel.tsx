@@ -15,8 +15,10 @@ import type {
   GenerationResolution,
   GenerationVersion,
   InspirationBackground,
+  InspirationChangeIntensity,
   InspirationComposition,
   InspirationModel,
+  InspirationGarmentProportion,
   InspirationPose,
   InspirationPurpose,
   InspirationProductHandling,
@@ -230,6 +232,9 @@ const defaultInspirationSettings: InspirationSettings = {
   composition: "hero",
   purpose: "product_listing",
   productHandling: "preserve",
+  backgroundChange: "medium",
+  poseChange: "low",
+  garmentProportion: "preserve",
 };
 
 const inspirationControls: Array<{
@@ -249,6 +254,16 @@ const inspirationControls: Array<{
     ],
   },
   {
+    key: "backgroundChange",
+    label: "背景调整幅度",
+    options: [
+      { value: "keep", label: "保持不变" },
+      { value: "low", label: "低 · 轻微调整" },
+      { value: "medium", label: "中 · 明显变化" },
+      { value: "high", label: "高 · 大幅重构" },
+    ],
+  },
+  {
     key: "pose",
     label: "姿态",
     options: [
@@ -256,6 +271,16 @@ const inspirationControls: Array<{
       { value: "static", label: "稳定展示" },
       { value: "dynamic", label: "动态动作" },
       { value: "closeup", label: "局部近景" },
+    ],
+  },
+  {
+    key: "poseChange",
+    label: "姿势调整幅度",
+    options: [
+      { value: "keep", label: "保持不变" },
+      { value: "low", label: "低 · 轻微调整" },
+      { value: "medium", label: "中 · 明显变化" },
+      { value: "high", label: "高 · 大幅重构" },
     ],
   },
   {
@@ -289,6 +314,16 @@ const inspirationControls: Array<{
     ],
   },
   {
+    key: "garmentProportion",
+    label: "服装比例",
+    options: [
+      { value: "preserve", label: "保持参考比例" },
+      { value: "fitted", label: "修身比例" },
+      { value: "balanced", label: "标准比例" },
+      { value: "oversized", label: "宽松比例" },
+    ],
+  },
+  {
     key: "purpose",
     label: "用途",
     options: [
@@ -313,6 +348,41 @@ function readImageFile(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error("Reference image could not be read."));
     reader.readAsDataURL(file);
   });
+}
+
+function InspirationReferenceSlot({
+  label,
+  description,
+  inputLabel,
+  image,
+  imageAlt,
+  onChange,
+  onRemove,
+}: {
+  label: string;
+  description: string;
+  inputLabel: string;
+  image?: ModuleReferenceAsset;
+  imageAlt: string;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="inspiration-reference-slot">
+      <label className="inspiration-reference-upload">
+        <span>{label}</span>
+        <small>{description}</small>
+        <input type="file" accept="image/*" aria-label={inputLabel} onChange={onChange} />
+      </label>
+      {image ? (
+        <div className="inspiration-reference-preview">
+          <img src={image.imageUrl} alt={imageAlt} />
+          <div><strong>{image.fileName}</strong><span>{description}</span></div>
+          <button type="button" className="secondary-button" onClick={onRemove}>删除</button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function ParameterPanel({
@@ -348,11 +418,16 @@ export function ParameterPanel({
   const selectedMainModules = config.selectedMainModules ?? [];
   const detailCounts = config.detailModuleCounts ?? {};
   const moduleReferenceAssets = config.moduleReferenceAssets ?? {};
-  const inspirationReferenceAssets = moduleReferenceAssets.inspiration ?? [];
-  const inspirationReferenceImage = inspirationReferenceAssets.find(
+  const inspirationModelAssets =
+    moduleReferenceAssets.inspiration_model ?? moduleReferenceAssets.inspiration ?? [];
+  const inspirationModelImage = inspirationModelAssets.find(
     hasModuleReferenceImage,
   );
-  const inspirationNote = inspirationReferenceAssets
+  const inspirationGarmentAssets = moduleReferenceAssets.inspiration_garment ?? [];
+  const inspirationGarmentImage = inspirationGarmentAssets.find(
+    hasModuleReferenceImage,
+  );
+  const inspirationNote = inspirationModelAssets
     .map((asset) => asset.note?.trim() ?? "")
     .filter(Boolean)
     .join("\n");
@@ -501,7 +576,7 @@ export function ParameterPanel({
 
   const updateInspirationNote = (note: string) => {
     const trimmedNote = note.trim();
-    const imageAssets = inspirationReferenceAssets.filter(hasModuleReferenceImage);
+    const imageAssets = inspirationModelAssets.filter(hasModuleReferenceImage);
     const nextAssets = imageAssets.length > 0
       ? imageAssets.map((asset) => ({
           ...asset,
@@ -510,11 +585,12 @@ export function ParameterPanel({
       : trimmedNote
         ? [createNoteOnlyReferenceAsset(trimmedNote)]
         : [];
-    saveModuleReferenceAssets("inspiration", nextAssets);
+    saveModuleReferenceAssets("inspiration_model", nextAssets);
   };
 
   const handleInspirationReferenceFileChange = async (
     event: ChangeEvent<HTMLInputElement>,
+    role: "model" | "garment",
   ) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -528,19 +604,26 @@ export function ParameterPanel({
 
     const imageUrl = await readImageFile(file);
     const asset: ModuleReferenceAsset = {
-      id: `inspiration-ref-${Date.now().toString(36)}-${Math.random()
+      id: `inspiration-${role}-${Date.now().toString(36)}-${Math.random()
         .toString(36)
         .slice(2, 8)}`,
       fileName: file.name,
       imageUrl,
-      ...(inspirationNote ? { note: inspirationNote } : {}),
+      ...(role === "model" && inspirationNote ? { note: inspirationNote } : {}),
     };
-    saveModuleReferenceAssets("inspiration", [asset]);
+    saveModuleReferenceAssets(
+      role === "model" ? "inspiration_model" : "inspiration_garment",
+      [asset],
+    );
   };
 
-  const removeInspirationReference = () => {
+  const removeInspirationReference = (role: "model" | "garment") => {
+    if (role === "garment") {
+      saveModuleReferenceAssets("inspiration_garment", []);
+      return;
+    }
     saveModuleReferenceAssets(
-      "inspiration",
+      "inspiration_model",
       inspirationNote ? [createNoteOnlyReferenceAsset(inspirationNote)] : [],
     );
   };
@@ -971,7 +1054,7 @@ export function ParameterPanel({
         <section className="setting-group inspiration-creator-group" aria-labelledby="inspiration-controls">
           <div className="setting-group-heading">
             <span id="inspiration-controls">创作控制</span>
-            <small>Image 1 是商品，Image 2 只作为灵感参考</small>
+            <small>Image 1 商品 · Image 2 模特/姿势 · Image 3 服装参考</small>
           </div>
           <div className="inspiration-control-grid">
             {inspirationControls.map((control) => (
@@ -988,6 +1071,9 @@ export function ParameterPanel({
                     if (control.key === "composition") updateInspirationSetting("composition", value as InspirationComposition);
                     if (control.key === "purpose") updateInspirationSetting("purpose", value as InspirationPurpose);
                     if (control.key === "productHandling") updateInspirationSetting("productHandling", value as InspirationProductHandling);
+                    if (control.key === "backgroundChange") updateInspirationSetting("backgroundChange", value as InspirationChangeIntensity);
+                    if (control.key === "poseChange") updateInspirationSetting("poseChange", value as InspirationChangeIntensity);
+                    if (control.key === "garmentProportion") updateInspirationSetting("garmentProportion", value as InspirationGarmentProportion);
                   }}
                 >
                   {control.options.map((option) => (
@@ -997,26 +1083,26 @@ export function ParameterPanel({
               </div>
             ))}
           </div>
-          <label className="inspiration-reference-upload">
-            <span>上传灵感参考图</span>
-            <small>可上传模特、背景、姿态或构图参考，最多 1 张</small>
-            <input
-              type="file"
-              accept="image/*"
-              aria-label="上传灵感参考图"
-              onChange={handleInspirationReferenceFileChange}
+          <div className="inspiration-reference-slots">
+            <InspirationReferenceSlot
+              label="模特 / 姿势参考图"
+              description="Image 2：参考模特、姿势、构图或背景"
+              inputLabel="上传模特姿势参考图"
+              image={inspirationModelImage}
+              imageAlt="已上传的模特姿势参考图"
+              onChange={(event) => void handleInspirationReferenceFileChange(event, "model")}
+              onRemove={() => removeInspirationReference("model")}
             />
-          </label>
-          {inspirationReferenceImage ? (
-            <div className="inspiration-reference-preview">
-              <img src={inspirationReferenceImage.imageUrl} alt="已上传的灵感参考图" />
-              <div>
-                <strong>{inspirationReferenceImage.fileName}</strong>
-                <span>作为 Image 2 参考，不替换商品</span>
-              </div>
-              <button type="button" className="secondary-button" onClick={removeInspirationReference}>删除</button>
-            </div>
-          ) : null}
+            <InspirationReferenceSlot
+              label="服装参考图"
+              description="Image 3：参考服装款式、结构和穿着比例"
+              inputLabel="上传服装参考图"
+              image={inspirationGarmentImage}
+              imageAlt="已上传的服装参考图"
+              onChange={(event) => void handleInspirationReferenceFileChange(event, "garment")}
+              onRemove={() => removeInspirationReference("garment")}
+            />
+          </div>
           <div className="field">
             <label htmlFor="inspiration-reference-note">参考说明</label>
             <textarea

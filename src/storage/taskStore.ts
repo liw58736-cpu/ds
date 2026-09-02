@@ -5,8 +5,10 @@ import type {
   GenerationResolution,
   GenerationModule,
   InspirationBackground,
+  InspirationChangeIntensity,
   InspirationComposition,
   InspirationModel,
+  InspirationGarmentProportion,
   InspirationPose,
   InspirationPurpose,
   InspirationProductHandling,
@@ -149,6 +151,18 @@ const inspirationProductHandling = new Set<InspirationProductHandling>([
   "wear",
   "in_use",
 ]);
+const inspirationChangeIntensities = new Set<InspirationChangeIntensity>([
+  "keep",
+  "low",
+  "medium",
+  "high",
+]);
+const inspirationGarmentProportions = new Set<InspirationGarmentProportion>([
+  "preserve",
+  "fitted",
+  "balanced",
+  "oversized",
+]);
 const statuses = new Set<TaskStatus>([
   "queued",
   "processing",
@@ -259,7 +273,17 @@ function parseInspirationSettings(value: unknown): InspirationSettings | undefin
     return undefined;
   }
 
-  const { background, pose, model, composition, purpose, productHandling } = value;
+  const {
+    background,
+    pose,
+    model,
+    composition,
+    purpose,
+    productHandling,
+    backgroundChange,
+    poseChange,
+    garmentProportion,
+  } = value;
 
   if (
     !isString(background) ||
@@ -285,6 +309,18 @@ function parseInspirationSettings(value: unknown): InspirationSettings | undefin
     composition: composition as InspirationComposition,
     purpose: purpose as InspirationPurpose,
     productHandling: productHandling as InspirationProductHandling,
+    backgroundChange:
+      isString(backgroundChange) && inspirationChangeIntensities.has(backgroundChange as InspirationChangeIntensity)
+        ? (backgroundChange as InspirationChangeIntensity)
+        : "medium",
+    poseChange:
+      isString(poseChange) && inspirationChangeIntensities.has(poseChange as InspirationChangeIntensity)
+        ? (poseChange as InspirationChangeIntensity)
+        : "low",
+    garmentProportion:
+      isString(garmentProportion) && inspirationGarmentProportions.has(garmentProportion as InspirationGarmentProportion)
+        ? (garmentProportion as InspirationGarmentProportion)
+        : "preserve",
   };
 }
 

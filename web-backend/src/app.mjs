@@ -113,6 +113,10 @@ async function handleRequest(
       return await handleMaterialStore(request, env, fetchImpl, resolveHost);
     }
 
+    if (url.pathname === "/api/v1/materials" && request.method === "GET") {
+      return await handleListMaterials(request, url, env, fetchImpl);
+    }
+
     if (url.pathname === "/api/v1/billing/paddle/webhook" && request.method === "POST") {
       return await handlePaddleWebhook(request, env, fetchImpl);
     }
@@ -285,10 +289,14 @@ async function handleMaterialStore(request, env, fetchImpl, resolveHost) {
   const bucket = env.WEB_MATERIAL_STORAGE_BUCKET?.trim() || "web-imported-materials";
   await ensureGenerationStorageBucket(fetchImpl, env, bucket);
   const extension = imageExtension(contentType, requestedUrl.href);
+  const materialTitle = sanitizeMaterialTitle(
+    String(body.title ?? fileNameFromUrl(requestedUrl)).replace(/\.[a-z0-9]{2,5}$/i, ""),
+  ).slice(0, 48);
+  const objectName = `${Date.now()}-${randomInt(100000, 999999)}-${materialTitle}.${extension}`;
   const objectPath = [
     sanitizeStoragePathSegment(authUser.id),
     "materials",
-    `${Date.now()}-${randomInt(100000, 999999)}.${extension}`,
+    objectName,
   ].join("/");
   const upload = await fetchImpl(
     `${supabaseUrl(env)}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath}`,
@@ -306,10 +314,78 @@ async function handleMaterialStore(request, env, fetchImpl, resolveHost) {
   await parseSupabaseResponse(upload);
 
   return jsonResponse({
+    id: objectPath,
     stored_url: `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath}`,
+    file_name: materialTitle || "saved-material",
+    created_at: new Date().toISOString(),
     content_type: contentType,
     size: buffer.length,
   });
+}
+
+async function handleListMaterials(request, url, env, fetchImpl) {
+  const authUser = await requireAuthUser(request, env, fetchImpl);
+  const bucket = env.WEB_MATERIAL_STORAGE_BUCKET?.trim() || "web-imported-materials";
+  const limit = Math.min(
+    100,
+    Math.max(1, Number.parseInt(url.searchParams.get("limit") ?? "60", 10) || 60),
+  );
+  await ensureGenerationStorageBucket(fetchImpl, env, bucket);
+  const prefix = `${sanitizeStoragePathSegment(authUser.id)}/materials`;
+  const response = await fetchImpl(
+    `${supabaseUrl(env)}/storage/v1/object/list/${encodeURIComponent(bucket)}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prefix,
+        limit,
+        offset: 0,
+        sortBy: { column: "created_at", order: "desc" },
+      }),
+    },
+  );
+  const rows = await parseSupabaseResponse(response);
+  const materials = (Array.isArray(rows) ? rows : [])
+    .filter((row) => row && typeof row.name === "string" && /\.(png|jpe?g|webp)$/i.test(row.name))
+    .map((row) => {
+      const objectPath = row.name.startsWith(`${prefix}/`)
+        ? row.name
+        : `${prefix}/${row.name}`;
+      const objectName = objectPath.slice(prefix.length + 1);
+      return {
+        id: objectPath,
+        stored_url: `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath}`,
+        file_name: materialDisplayName(objectName),
+        created_at: row.created_at ?? row.updated_at ?? new Date().toISOString(),
+        content_type: row.metadata?.mimetype ?? imageMimeTypeFromName(objectName),
+        size: Number(row.metadata?.size ?? 0),
+      };
+    });
+
+  return jsonResponse({ materials });
+}
+
+function materialDisplayName(objectName) {
+  const withoutExtension = String(objectName).replace(/\.(png|jpe?g|webp)$/i, "");
+  return withoutExtension.replace(/^\d{10,}-\d{6}-/, "").replaceAll("-", " ") || "已保存素材";
+}
+
+function sanitizeMaterialTitle(value) {
+  return String(value ?? "saved-material")
+    .trim()
+    .replace(/[^\p{L}\p{N}_-]+/gu, "-")
+    .replace(/^-+|-+$/g, "") || "saved-material";
+}
+
+function imageMimeTypeFromName(name) {
+  if (/\.webp$/i.test(name)) return "image/webp";
+  if (/\.png$/i.test(name)) return "image/png";
+  return "image/jpeg";
 }
 
 async function fetchPublicMaterialPage(initialUrl, fetchImpl, resolveHost) {

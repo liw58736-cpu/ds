@@ -17,8 +17,26 @@ interface ImportedMaterialResponse {
   source_platform?: "xiaohongshu" | "public_web";
 }
 
+export interface SavedMaterial {
+  id: string;
+  imageUrl: string;
+  fileName: string;
+  createdAt: string;
+  contentType: string;
+  size: number;
+}
+
 interface StoredMaterialResponse {
+  id?: string;
   stored_url: string;
+  file_name?: string;
+  created_at?: string;
+  content_type?: string;
+  size?: number;
+}
+
+interface SavedMaterialListResponse {
+  materials?: StoredMaterialResponse[];
 }
 
 function getMaterialApiBaseUrl(): string | null {
@@ -83,7 +101,17 @@ export async function importPublicMaterial(
 export async function storeImportedMaterial(
   url: string,
   authorized: boolean,
+  title?: string,
 ): Promise<string> {
+  const material = await saveImportedMaterial(url, authorized, title);
+  return material.imageUrl;
+}
+
+export async function saveImportedMaterial(
+  url: string,
+  authorized: boolean,
+  title?: string,
+): Promise<SavedMaterial> {
   const baseUrl = getMaterialApiBaseUrl();
   let token = getAccountAccessToken();
 
@@ -97,7 +125,7 @@ export async function storeImportedMaterial(
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ url, authorized }),
+      body: JSON.stringify({ url, authorized, ...(title ? { title } : {}) }),
     });
 
     if (response.status === 401 && attempt === 0) {
@@ -119,8 +147,43 @@ export async function storeImportedMaterial(
 
     const payload = (await response.json()) as StoredMaterialResponse;
     if (!payload.stored_url) throw new Error("素材保存接口没有返回稳定地址。");
-    return payload.stored_url;
+    return normalizeSavedMaterial(payload);
   }
 
   throw new Error("登录状态已失效，请重新登录后保存素材。");
+}
+
+export async function listSavedMaterials(limit = 60): Promise<SavedMaterial[]> {
+  const baseUrl = getMaterialApiBaseUrl();
+  let token = getAccountAccessToken();
+  if (!baseUrl || !token) return [];
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(`${baseUrl}/materials?limit=${Math.max(1, Math.min(100, limit))}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.status === 401 && attempt === 0) {
+      token = await refreshKromaSession();
+      if (token) continue;
+    }
+    if (!response.ok) throw new Error(`素材库读取失败（HTTP ${response.status}）`);
+    const payload = (await response.json()) as SavedMaterialListResponse;
+    return (payload.materials ?? []).filter((item) => item.stored_url).map(normalizeSavedMaterial);
+  }
+  return [];
+}
+
+function normalizeSavedMaterial(payload: StoredMaterialResponse): SavedMaterial {
+  const fallbackName = decodeURIComponent(payload.stored_url.split("/").pop() ?? "已保存素材")
+    .replace(/^\d{10,}-\d{6}-/, "")
+    .replace(/\.(png|jpe?g|webp)$/i, "")
+    .replace(/-/g, " ");
+  return {
+    id: payload.id ?? payload.stored_url,
+    imageUrl: payload.stored_url,
+    fileName: payload.file_name ?? fallbackName,
+    createdAt: payload.created_at ?? new Date().toISOString(),
+    contentType: payload.content_type ?? "image/jpeg",
+    size: Number(payload.size ?? 0),
+  };
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initializeSession } from "../storage/accountStore";
-import { importPublicMaterial, storeImportedMaterial } from "./materialImportApi";
+import { importPublicMaterial, listSavedMaterials, storeImportedMaterial } from "./materialImportApi";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -93,6 +93,53 @@ describe("materialImportApi", () => {
           authorized: true,
         }),
       }),
+    );
+  });
+
+  it("lists previously saved account materials", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1/");
+    initializeSession({
+      identifier: "seller@example.com",
+      authView: "login",
+      mode: "password",
+      storeName: "",
+      inviteCode: "",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      provider: "kroma",
+      userId: "user-1",
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          materials: [{
+            id: "user-1/materials/photo.webp",
+            stored_url: "https://web-project.supabase.co/storage/photo.webp",
+            file_name: "以前保存的照片",
+            created_at: "2026-09-01T00:00:00.000Z",
+            content_type: "image/webp",
+            size: 128,
+          }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listSavedMaterials()).resolves.toEqual([
+      {
+        id: "user-1/materials/photo.webp",
+        imageUrl: "https://web-project.supabase.co/storage/photo.webp",
+        fileName: "以前保存的照片",
+        createdAt: "2026-09-01T00:00:00.000Z",
+        contentType: "image/webp",
+        size: 128,
+      },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://web-api.example.com/api/v1/materials?limit=60",
+      expect.objectContaining({ headers: { Authorization: "Bearer access-token" } }),
     );
   });
 });
