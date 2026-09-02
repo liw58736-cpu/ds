@@ -17,6 +17,12 @@ create table if not exists public.web_credit_transactions (
   created_at timestamptz not null default now()
 );
 
+create index if not exists web_users_email_idx
+on public.web_users (email);
+
+create index if not exists web_credit_transactions_user_created_idx
+on public.web_credit_transactions (user_id, created_at desc);
+
 create table if not exists public.web_generations (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references public.web_users(id) on delete set null,
@@ -59,6 +65,9 @@ on public.web_generations (user_id, task_id);
 create index if not exists web_generations_user_created_idx
 on public.web_generations (user_id, created_at desc);
 
+create index if not exists web_generations_status_updated_idx
+on public.web_generations (status, updated_at desc);
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'web-generation-results',
@@ -85,6 +94,9 @@ create table if not exists public.web_auth_codes (
 
 create index if not exists web_auth_codes_lookup_idx
 on public.web_auth_codes (email, type, code, expires_at);
+
+create index if not exists web_auth_codes_email_type_created_idx
+on public.web_auth_codes (email, type, created_at desc);
 
 create table if not exists public.web_billing_events (
   id uuid primary key default gen_random_uuid(),

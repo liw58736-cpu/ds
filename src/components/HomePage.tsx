@@ -1,15 +1,20 @@
-import heroImage from "../assets/home/kroma-home-hero.webp";
-import detailAfterImage from "../assets/home/kroma-detail-after.webp";
-import detailBeforeImage from "../assets/home/kroma-detail-before.webp";
-import mainAfterImage from "../assets/home/kroma-main-after.webp";
-import mainBeforeImage from "../assets/home/kroma-main-before.webp";
-import scaleShowcaseImage from "../assets/home/kroma-scale-showcase.webp";
-import whiteAfterImage from "../assets/home/kroma-white-after.webp";
-import whiteBeforeImage from "../assets/home/kroma-white-before.webp";
+import { ArrowRight, Brush, Film, Images, Layers3, Link2, Sparkles } from "lucide-react";
+import { useState } from "react";
+import detailAfterImage from "../assets/home/kroma-detail-after-v2.webp";
+import detailBeforeImage from "../assets/home/kroma-detail-before-v2.webp";
+import heroV2Image from "../assets/home/kroma-home-hero-v2.webp";
+import mainBeforeImage from "../assets/home/kroma-main-before-v2.webp";
+import scaleShowcaseImage from "../assets/home/kroma-scale-showcase-v2.webp";
+import whiteAfterImage from "../assets/home/kroma-white-after-v2.webp";
 import type { AppPage } from "./AppShell";
 
 interface HomePageProps {
-  onOpenStudio: (page: Extract<AppPage, "main_image" | "white_background" | "detail_page">) => void;
+  onOpenStudio: (
+    page: Extract<
+      AppPage,
+      "main_image" | "white_background" | "detail_page" | "inspiration" | "motion" | "cleanup"
+    >,
+  ) => void;
 }
 
 type StudioPage = Extract<AppPage, "main_image" | "white_background" | "detail_page">;
@@ -35,7 +40,7 @@ const featureModules: FeatureModule[] = [
     beforeLabel: "卖家原始图",
     afterLabel: "kroma 主图",
     beforeImage: mainBeforeImage,
-    afterImage: mainAfterImage,
+    afterImage: heroV2Image,
     bullets: ["卖点视觉化", "高端棚拍光感", "多模块批量出图"],
   },
   {
@@ -45,7 +50,7 @@ const featureModules: FeatureModule[] = [
     summary: "保留商品结构和材质，整理成平台审核友好的白底图、目录图和 SKU 图。",
     beforeLabel: "场景商品图",
     afterLabel: "白底成片",
-    beforeImage: whiteBeforeImage,
+    beforeImage: heroV2Image,
     afterImage: whiteAfterImage,
     bullets: ["干净边缘", "自然接触阴影", "适合目录和广告"],
   },
@@ -62,157 +67,150 @@ const featureModules: FeatureModule[] = [
   },
 ];
 
-const capabilityCards = [
-  {
-    title: "上传商品图",
-    text: "用商品图片作为核心输入，生成结果围绕真实商品展开。",
-  },
-  {
-    title: "选择出图模块",
-    text: "主图、白底图和详情页分开配置，每个页面只保留对应设置。",
-  },
-  {
-    title: "生成可用素材",
-    text: "失败不扣点，成功任务进入历史记录，方便复用和继续编辑。",
-  },
-  {
-    title: "适配真实运营",
-    text: "支持 1K、2K、4K 路由，适合上架、投放和详情页制作。",
-  },
-];
-
-const audienceCards = [
-  ["跨境卖家", "快速补齐新品主图、白底图和详情页素材。"],
-  ["品牌小团队", "保持统一视觉调性，减少外包沟通成本。"],
-  ["代运营团队", "把重复修图和详情页组图流程标准化。"],
-];
-
 export function HomePage({ onOpenStudio }: HomePageProps) {
+  const [activeShowcase, setActiveShowcase] = useState<StudioPage>("main_image");
+
   return (
-    <main className="home-page pr-home">
-      <section className="pr-hero" aria-labelledby="home-title">
-        <div className="pr-hero-copy">
-          <p className="pr-eyebrow">KROMA AI COMMERCE STUDIO</p>
-          <h1 id="home-title">AI 商品图，一键生成可上架素材</h1>
+    <main className="home-page kroma-home">
+      <section className="kroma-home-hero" aria-labelledby="home-title">
+        <div className="kroma-home-hero-copy">
+          <p className="kroma-home-eyebrow"><Sparkles aria-hidden="true" /> KROMA · AI COMMERCE STUDIO</p>
+          <h1 id="home-title" aria-label="AI 商品图，一键生成可上架素材">
+            <span>一张商品图</span>
+            <span>完成全套上新</span>
+          </h1>
           <p>
-            参考专业商品图工作流，为电商卖家生成主图、白底图和服装详情页组图。
-            上传商品图，选择模块，几分钟内拿到能用于店铺、广告和独立站的图片。
+            从主图、白底图到详情页与社媒内容，围绕真实商品持续生成可直接使用的电商素材。
           </p>
-          <div className="pr-hero-actions">
+          <div className="kroma-home-hero-actions">
             <button type="button" className="primary-button" onClick={() => onOpenStudio("main_image")}>
-              开始生成商品图
+              <Sparkles aria-hidden="true" />
+              <span>开始生成商品图</span>
             </button>
             <button type="button" className="secondary-button" onClick={() => onOpenStudio("detail_page")}>
-              生成详情页组图
+              <Layers3 aria-hidden="true" />
+              <span>生成详情页组图</span>
             </button>
           </div>
-          <div className="pr-hero-proof" aria-label="kroma 数据概览">
-            <span>
-              <strong>3</strong>
-              核心页面
-            </span>
-            <span>
-              <strong>20+</strong>
-              详情模块
-            </span>
-            <span>
-              <strong>4K</strong>
-              高清输出
-            </span>
+          <div className="kroma-home-hero-benefits" aria-label="kroma 服务保证">
+            <span>商品身份优先</span>
+            <span>失败任务不扣点</span>
+            <span>最高 4K 输出</span>
           </div>
         </div>
-
-        <div className="pr-hero-visual" aria-label="kroma 商品图生成展示">
-          <figure className="pr-hero-main-shot">
-            <img src={heroImage} alt="kroma 商品图生成首页主视觉" />
-          </figure>
-          <figure className="pr-floating-shot pr-floating-shot-main">
-            <img src={mainAfterImage} alt="商品主图生成效果" />
-            <figcaption>主图 KV</figcaption>
-          </figure>
-          <figure className="pr-floating-shot pr-floating-shot-white">
-            <img src={whiteAfterImage} alt="白底图生成效果" />
-            <figcaption>白底图</figcaption>
+        <div className="kroma-home-hero-stage" aria-label="kroma 商品图生成展示">
+          <figure className="kroma-home-stage-primary">
+            <img src={heroV2Image} alt="kroma 商品图生成首页主视觉" />
           </figure>
         </div>
       </section>
 
-      <section className="pr-capability-section" aria-labelledby="capability-title">
-        <div className="pr-section-heading">
-          <p className="pr-eyebrow">PRODUCT WORKFLOW</p>
-          <h2 id="capability-title">从商品图到完整电商素材</h2>
-          <p>首页只展示核心能力，具体生成设置都进入对应工作台完成。</p>
-        </div>
-        <div className="pr-capability-grid">
-          {capabilityCards.map((card) => (
-            <article className="pr-capability-card" key={card.title}>
-              <h3>{card.title}</h3>
-              <p>{card.text}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+      <section className="kroma-home-showcase" aria-labelledby="showcase-title">
+        <header className="kroma-home-section-heading">
+          <div>
+            <p className="kroma-home-eyebrow">PRODUCTION DESK</p>
+            <h2 id="showcase-title">一套视觉，覆盖上架到投放</h2>
+          </div>
+          <p>从商品身份出发，让不同页面的素材保持同一套产品细节与品牌调性。</p>
+        </header>
 
-      <section className="pr-feature-stack" aria-label="kroma 核心功能">
-        {featureModules.map((module, index) => (
-          <article className="pr-feature-panel" key={module.page}>
-            <div className="pr-feature-copy">
-              <span className="pr-feature-number">{String(index + 1).padStart(2, "0")}</span>
-              <p className="pr-eyebrow">{module.eyebrow}</p>
-              <h2>{module.title}</h2>
-              <p>{module.summary}</p>
-              <ul>
-                {module.bullets.map((bullet) => (
-                  <li key={bullet}>{bullet}</li>
-                ))}
-              </ul>
-              <button type="button" className="secondary-button" onClick={() => onOpenStudio(module.page)}>
-                进入{module.title}
+        <div className="kroma-home-showcase-layout">
+          <div className="kroma-home-showcase-tabs" role="tablist" aria-label="kroma 核心功能">
+            {featureModules.map((module, index) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={module.page === activeShowcase}
+                className={module.page === activeShowcase ? "is-active" : undefined}
+                key={module.page}
+                onClick={() => setActiveShowcase(module.page)}
+              >
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <strong>{module.title}</strong>
+                <small>{module.summary}</small>
               </button>
-            </div>
-            <div className="pr-before-after" aria-label={`${module.title}前后对比`}>
-              <figure>
-                <span>{module.beforeLabel}</span>
-                <img src={module.beforeImage} alt={`${module.title}出图前`} />
-              </figure>
-              <figure className="is-after">
-                <span>{module.afterLabel}</span>
-                <img src={module.afterImage} alt={`${module.title}出图后`} />
-              </figure>
-            </div>
-          </article>
-        ))}
+            ))}
+          </div>
+
+          <div className="kroma-home-showcase-panels">
+            {featureModules.map((module) => (
+              <article
+                className={`kroma-home-showcase-panel${module.page === activeShowcase ? " is-active" : ""}`}
+                role="tabpanel"
+                hidden={module.page !== activeShowcase}
+                key={module.page}
+                aria-label={module.title}
+              >
+                <div className="kroma-home-showcase-toolbar">
+                  <div>
+                    <p className="kroma-home-eyebrow">{module.eyebrow}</p>
+                    <h3>{module.title}</h3>
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => onOpenStudio(module.page)}>
+                    <span>打开工作台</span>
+                    <ArrowRight aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="kroma-home-before-after" aria-label={`${module.title}前后对比`}>
+                  <figure>
+                    <span>{module.beforeLabel}</span>
+                    <img src={module.beforeImage} alt={`${module.title}出图前`} />
+                  </figure>
+                  <figure className="is-after">
+                    <span>{module.afterLabel}</span>
+                    <img src={module.afterImage} alt={`${module.title}出图后`} />
+                  </figure>
+                </div>
+                <ul className="kroma-home-showcase-points">
+                  {module.bullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+        </div>
       </section>
 
-      <section className="pr-audience-section" aria-labelledby="audience-title">
-        <div className="pr-section-heading">
-          <p className="pr-eyebrow">WHO USES KROMA</p>
-          <h2 id="audience-title">适合每天都要出图的电商团队</h2>
-        </div>
-        <div className="pr-audience-grid">
-          {audienceCards.map(([title, text]) => (
-            <article className="pr-audience-card" key={title}>
-              <h3>{title}</h3>
-              <p>{text}</p>
-            </article>
-          ))}
+      <section className="kroma-home-content-tools" aria-labelledby="content-tools-title">
+        <header className="kroma-home-section-heading">
+          <div>
+            <p className="kroma-home-eyebrow">CONTENT WORKFLOW</p>
+            <h2 id="content-tools-title">从参考素材到动态内容</h2>
+          </div>
+          <p>提取授权素材、生成新视觉、转成轻动态，再清理交付前的文字或瑕疵。</p>
+        </header>
+        <div className="kroma-home-content-grid">
+          <article><Link2 aria-hidden="true" /><span>01</span><h3>链接提取与灵感创作</h3><p>从公开分享链接提取图片，选择为商品图或 Image 2 灵感参考。</p><button type="button" onClick={() => onOpenStudio("inspiration")}>打开灵感创作<ArrowRight aria-hidden="true" /></button></article>
+          <article><Film aria-hidden="true" /><span>02</span><h3>静图转轻动态</h3><p>在浏览器本地添加推进、拉远、横移或漂移动效并下载 WebM。</p><button type="button" onClick={() => onOpenStudio("motion")}>打开轻动态<ArrowRight aria-hidden="true" /></button></article>
+          <article><Brush aria-hidden="true" /><span>03</span><h3>图片清理</h3><p>用画笔标出水印、文字或物体区域，只重绘被标记的部分。</p><button type="button" onClick={() => onOpenStudio("cleanup")}>打开图片清理<ArrowRight aria-hidden="true" /></button></article>
         </div>
       </section>
 
-      <section className="pr-scale-section" aria-labelledby="scale-title">
-        <div className="pr-scale-copy">
-          <p className="pr-eyebrow">BATCH READY</p>
-          <h2 id="scale-title">把单张商品图扩展成一整套运营素材</h2>
-          <p>
-            kroma 的重点不是做一张好看的图，而是把主图、白底图、详情页和历史任务串成稳定的电商生产流程。
-          </p>
-          <button type="button" className="primary-button" onClick={() => onOpenStudio("main_image")}>
-            打开工作台
-          </button>
+      <section className="kroma-home-output" aria-labelledby="output-title">
+        <img src={scaleShowcaseImage} alt="kroma 批量商品图展示" />
+        <div className="kroma-home-output-copy">
+          <p className="kroma-home-eyebrow">BATCH READY</p>
+          <h2 id="output-title">不是一张效果图，是一整套可交付素材</h2>
+          <p>主图、白底图、详情模块和历史任务保持连续，让上新素材能够按同一套标准持续产出。</p>
+          <div className="kroma-home-output-facts">
+            <span><strong>1K / 2K / 4K</strong>多分辨率输出</span>
+            <span><strong>失败不扣点</strong>任务结果可追溯</span>
+          </div>
         </div>
-        <figure className="pr-scale-visual">
-          <img src={scaleShowcaseImage} alt="kroma 批量商品图展示" />
-        </figure>
+      </section>
+
+      <section className="kroma-home-cta" aria-labelledby="home-cta-title">
+        <div>
+          <Images aria-hidden="true" />
+          <p className="kroma-home-eyebrow">READY TO CREATE</p>
+          <h2 id="home-cta-title">从下一张商品图开始</h2>
+          <p>进入工作台，按当前店铺需要选择主图、白底图或详情页模块。</p>
+        </div>
+        <button type="button" className="primary-button" onClick={() => onOpenStudio("main_image")}>
+          <span>打开商品主图工作台</span>
+          <ArrowRight aria-hidden="true" />
+        </button>
       </section>
     </main>
   );

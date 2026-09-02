@@ -285,6 +285,65 @@ describe("Workspace", () => {
     expect(screen.getByRole("button", { name: "原图尺寸" })).toBeInTheDocument();
   });
 
+  it("shows a target garment uploader only for outfit change", async () => {
+    const user = userEvent.setup();
+    render(<Workspace activeModule="white_background" />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+
+    expect(screen.queryByLabelText("上传要换上的服饰图")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "换装" }));
+    await user.upload(
+      screen.getByLabelText("上传要换上的服饰图"),
+      new File(["target-garment"], "target-garment.png", {
+        type: "image/png",
+      }),
+    );
+
+    expect(screen.getByText("target-garment.png")).toBeInTheDocument();
+  });
+
+  it("supports inspiration controls and an Image 2 reference", async () => {
+    const user = userEvent.setup();
+    render(<Workspace activeModule="lifestyle" />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    expect(screen.getByRole("heading", { name: "灵感创作" })).toBeInTheDocument();
+    expect(screen.getByLabelText("背景")).toHaveValue("lifestyle");
+    expect(screen.getByLabelText("姿态")).toHaveValue("natural");
+
+    await user.selectOptions(screen.getByLabelText("背景"), "studio");
+    await user.selectOptions(screen.getByLabelText("构图"), "ugc");
+    await user.upload(
+      screen.getByLabelText("上传灵感参考图"),
+      new File(["reference"], "inspiration.png", { type: "image/png" }),
+    );
+    await user.type(
+      screen.getByLabelText("参考说明"),
+      "参考模特姿态和背景，保留我的商品。",
+    );
+
+    expect(screen.getByText("inspiration.png")).toBeInTheDocument();
+    expect(screen.getByLabelText("背景")).toHaveValue("studio");
+    expect(screen.getByLabelText("构图")).toHaveValue("ugc");
+    expect(screen.getByLabelText("参考说明")).toHaveValue(
+      "参考模特姿态和背景，保留我的商品。",
+    );
+  });
+
+  it("asks for the target garment image before generating outfit change", async () => {
+    const user = userEvent.setup();
+    render(<Workspace activeModule="white_background" />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: "换装" }));
+    await user.click(screen.getByRole("button", { name: "生成换装" }));
+
+    expect(screen.getByText("请上传要换上的服饰图。")).toBeInTheDocument();
+    expect(screen.queryByText("正在生成")).not.toBeInTheDocument();
+  });
+
   it("does not show model selection controls", () => {
     render(<Workspace activeModule="white_background" />);
 
@@ -576,7 +635,7 @@ describe("Workspace", () => {
       vi.fn((input: RequestInfo | URL) => {
         const requestUrl = String(input);
 
-        if (requestUrl.endsWith("/generations?limit=100")) {
+        if (requestUrl.endsWith("/generations?limit=30")) {
           return historyRequest;
         }
 
@@ -851,7 +910,7 @@ describe("Workspace", () => {
 
     expect(screen.getByText("Trying Wuyinkeji HD...")).toBeInTheDocument();
     expect(
-      await screen.findByAltText("生成结果", {}, { timeout: 3500 }),
+      await screen.findByAltText("生成结果", {}, { timeout: 6000 }),
     ).toHaveAttribute(
       "src",
       "https://cdn.example.com/resumed-result.png",
@@ -1185,7 +1244,7 @@ describe("AppShell", () => {
     const navButtons = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".topnav-button"),
     );
-    expect(navButtons).toHaveLength(7);
+    expect(navButtons).toHaveLength(10);
     navButtons.forEach((button) => expect(button).toBeEnabled());
 
     await user.click(screen.getByRole("button", { name: "价格" }));

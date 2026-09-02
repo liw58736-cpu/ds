@@ -1,4 +1,6 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import {
   createImageRouter,
   hasConfiguredImageProviders,
@@ -10,10 +12,15 @@ const defaultSender = "kroma <no-reply@i18.pro>";
 export function createWebBackend({
   env = process.env,
   fetch: fetchImpl = globalThis.fetch,
+  resolveHost = (hostname) => lookup(hostname, { all: true }),
 } = {}) {
   const imageRouter = createImageRouter({ env, fetch: fetchImpl });
+  const state = {
+    databaseHealthCache: { value: null, expiresAt: 0 },
+  };
   return {
-    handle: (request) => handleRequest(request, env, fetchImpl, imageRouter),
+    handle: (request) =>
+      handleRequest(request, env, fetchImpl, imageRouter, state, resolveHost),
   };
 }
 
@@ -35,7 +42,14 @@ export function isAllowedAuthRedirect(value, env = process.env) {
   return allowed.has(parsed.origin);
 }
 
-async function handleRequest(request, env, fetchImpl, imageRouter) {
+async function handleRequest(
+  request,
+  env,
+  fetchImpl,
+  imageRouter,
+  state,
+  resolveHost,
+) {
   if (request.method === "OPTIONS") {
     return emptyResponse(204);
   }
@@ -44,7 +58,7 @@ async function handleRequest(request, env, fetchImpl, imageRouter) {
 
   try {
     if (url.pathname === "/api/v1/health") {
-      return jsonResponse(await buildHealthResponse(env, fetchImpl));
+      return jsonResponse(await buildHealthResponse(env, fetchImpl, state));
     }
 
     if (url.pathname === "/api/v1/auth/signup" && request.method === "POST") {
@@ -89,6 +103,14 @@ async function handleRequest(request, env, fetchImpl, imageRouter) {
 
     if (url.pathname === "/api/v1/generations" && request.method === "POST") {
       return await handleSaveGeneration(request, env, fetchImpl);
+    }
+
+    if (url.pathname === "/api/v1/materials/import" && request.method === "POST") {
+      return await handleMaterialImport(request, env, fetchImpl, resolveHost);
+    }
+
+    if (url.pathname === "/api/v1/materials/store" && request.method === "POST") {
+      return await handleMaterialStore(request, env, fetchImpl, resolveHost);
     }
 
     if (url.pathname === "/api/v1/billing/paddle/webhook" && request.method === "POST") {
@@ -146,6 +168,296 @@ async function handleRequest(request, env, fetchImpl, imageRouter) {
     }
     return jsonResponse({ detail: error?.message ?? "Internal Server Error" }, 500);
   }
+}
+
+async function handleMaterialImport(request, env, fetchImpl, resolveHost) {
+  await requireAuthUser(request, env, fetchImpl);
+  const body = await readJsonBody(request);
+
+  if (body.authorized !== true) {
+    throw new HttpError(422, {
+      detail: "Confirm that you have permission to use the source material.",
+    });
+  }
+
+  const requestedUrl = parsePublicHttpUrl(body.url);
+  const response = await fetchPublicMaterialPage(
+    requestedUrl,
+    fetchImpl,
+    resolveHost,
+  );
+  const contentType = String(response.headers.get("content-type") ?? "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+  const finalUrl = parsePublicHttpUrl(response.url || requestedUrl.href);
+
+  if (contentType.startsWith("image/")) {
+    return jsonResponse({
+      source_url: finalUrl.href,
+      title: fileNameFromUrl(finalUrl),
+      images: [finalUrl.href],
+      limited: false,
+    });
+  }
+
+  if (contentType && !contentType.includes("html") && !contentType.includes("text")) {
+    throw new HttpError(415, { detail: "The supplied URL is not an image or public webpage." });
+  }
+
+  const contentLength = Number.parseInt(response.headers.get("content-length") ?? "0", 10);
+  if (Number.isFinite(contentLength) && contentLength > 2 * 1024 * 1024) {
+    throw new HttpError(413, { detail: "The public page is too large to import." });
+  }
+
+  const html = (await response.text()).slice(0, 2 * 1024 * 1024);
+  const title = extractHtmlTitle(html) || finalUrl.hostname;
+  const images = extractPublicImageUrls(html, finalUrl).slice(0, 12);
+
+  if (images.length === 0) {
+    throw new HttpError(422, {
+      detail: "No public images were found. The platform may require login; upload the image manually instead.",
+    });
+  }
+
+  return jsonResponse({
+    source_url: finalUrl.href,
+    title,
+    images,
+    limited: images.length >= 12,
+  });
+}
+
+async function handleMaterialStore(request, env, fetchImpl, resolveHost) {
+  const authUser = await requireAuthUser(request, env, fetchImpl);
+  const body = await readJsonBody(request);
+
+  if (body.authorized !== true) {
+    throw new HttpError(422, {
+      detail: "Confirm that you have permission to store the source material.",
+    });
+  }
+
+  const requestedUrl = parsePublicHttpUrl(body.url);
+  const response = await fetchPublicMaterialPage(
+    requestedUrl,
+    fetchImpl,
+    resolveHost,
+  );
+  const contentType = String(response.headers.get("content-type") ?? "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+
+  if (!["image/png", "image/jpeg", "image/webp"].includes(contentType)) {
+    throw new HttpError(415, {
+      detail: "Only PNG, JPEG, and WebP material images can be stored.",
+    });
+  }
+
+  const maxBytes = 20 * 1024 * 1024;
+  const declaredBytes = Number.parseInt(
+    response.headers.get("content-length") ?? "0",
+    10,
+  );
+  if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+    throw new HttpError(413, { detail: "The material image exceeds 20 MB." });
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length === 0 || buffer.length > maxBytes) {
+    throw new HttpError(buffer.length === 0 ? 422 : 413, {
+      detail:
+        buffer.length === 0
+          ? "The material image is empty."
+          : "The material image exceeds 20 MB.",
+    });
+  }
+
+  const bucket = env.WEB_MATERIAL_STORAGE_BUCKET?.trim() || "web-imported-materials";
+  await ensureGenerationStorageBucket(fetchImpl, env, bucket);
+  const extension = imageExtension(contentType, requestedUrl.href);
+  const objectPath = [
+    sanitizeStoragePathSegment(authUser.id),
+    "materials",
+    `${Date.now()}-${randomInt(100000, 999999)}.${extension}`,
+  ].join("/");
+  const upload = await fetchImpl(
+    `${supabaseUrl(env)}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath}`,
+    {
+      method: "PUT",
+      headers: {
+        apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": contentType,
+        "x-upsert": "false",
+      },
+      body: new Blob([buffer], { type: contentType }),
+    },
+  );
+  await parseSupabaseResponse(upload);
+
+  return jsonResponse({
+    stored_url: `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath}`,
+    content_type: contentType,
+    size: buffer.length,
+  });
+}
+
+async function fetchPublicMaterialPage(initialUrl, fetchImpl, resolveHost) {
+  let currentUrl = initialUrl;
+
+  for (let redirect = 0; redirect <= 5; redirect += 1) {
+    await assertPublicHostname(currentUrl.hostname, resolveHost);
+    const response = await fetchImpl(currentUrl.href, {
+      method: "GET",
+      redirect: "manual",
+      headers: {
+        Accept: "text/html,application/xhtml+xml,image/*;q=0.9,*/*;q=0.5",
+        "User-Agent": "KromaPublicMaterialImporter/1.0",
+      },
+    });
+
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.get("location");
+      if (!location || redirect === 5) {
+        throw new HttpError(422, { detail: "The public material link has too many redirects." });
+      }
+      currentUrl = parsePublicHttpUrl(new URL(location, currentUrl).href);
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new HttpError(422, {
+        detail: `The public material page could not be read (HTTP ${response.status}).`,
+      });
+    }
+
+    return response;
+  }
+
+  throw new HttpError(422, { detail: "The public material link could not be resolved." });
+}
+
+function parsePublicHttpUrl(value) {
+  let parsed;
+  try {
+    parsed = value instanceof URL ? value : new URL(String(value ?? "").trim());
+  } catch {
+    throw new HttpError(422, { detail: "Enter a valid public HTTP or HTTPS URL." });
+  }
+
+  if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) {
+    throw new HttpError(422, { detail: "Only public HTTP or HTTPS URLs are supported." });
+  }
+
+  return parsed;
+}
+
+async function assertPublicHostname(hostname, resolveHost) {
+  const normalized = String(hostname ?? "").toLowerCase().replace(/^\[|\]$/g, "");
+  if (!normalized || normalized === "localhost" || normalized.endsWith(".local")) {
+    throw new HttpError(422, { detail: "Private network URLs are not supported." });
+  }
+
+  const literalType = isIP(normalized);
+  const addresses = literalType
+    ? [{ address: normalized, family: literalType }]
+    : await resolveHost(normalized);
+
+  if (!Array.isArray(addresses) || addresses.length === 0) {
+    throw new HttpError(422, { detail: "The material host could not be resolved." });
+  }
+
+  if (addresses.some((entry) => isPrivateAddress(entry.address))) {
+    throw new HttpError(422, { detail: "Private network URLs are not supported." });
+  }
+}
+
+function isPrivateAddress(value) {
+  const address = String(value ?? "").toLowerCase();
+  if (address.includes(":")) {
+    return (
+      address === "::" ||
+      address === "::1" ||
+      address.startsWith("fc") ||
+      address.startsWith("fd") ||
+      address.startsWith("fe8") ||
+      address.startsWith("fe9") ||
+      address.startsWith("fea") ||
+      address.startsWith("feb") ||
+      address.startsWith("::ffff:127.") ||
+      address.startsWith("::ffff:10.") ||
+      address.startsWith("::ffff:192.168.")
+    );
+  }
+
+  const octets = address.split(".").map((part) => Number.parseInt(part, 10));
+  if (octets.length !== 4 || octets.some((part) => !Number.isFinite(part))) {
+    return true;
+  }
+
+  return (
+    octets[0] === 0 ||
+    octets[0] === 10 ||
+    octets[0] === 127 ||
+    (octets[0] === 169 && octets[1] === 254) ||
+    (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+    (octets[0] === 192 && octets[1] === 168) ||
+    octets[0] >= 224
+  );
+}
+
+function extractHtmlTitle(html) {
+  const metaTitle = extractMetaContent(html, ["og:title", "twitter:title"])[0];
+  if (metaTitle) return decodeHtmlText(metaTitle).slice(0, 180);
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return titleMatch ? decodeHtmlText(titleMatch[1]).trim().slice(0, 180) : "";
+}
+
+function extractPublicImageUrls(html, baseUrl) {
+  const candidates = [
+    ...extractMetaContent(html, ["og:image", "og:image:url", "twitter:image", "twitter:image:src"]),
+    ...Array.from(html.matchAll(/<(?:img|source)\b[^>]*(?:src|data-src|data-original)\s*=\s*["']([^"']+)["'][^>]*>/gi), (match) => match[1]),
+    ...Array.from(html.matchAll(/["'](?:image|image_url|imageUrl|cover|cover_url)["']\s*:\s*["']([^"']+)["']/gi), (match) => match[1]),
+  ];
+
+  const urls = [];
+  for (const candidate of candidates) {
+    try {
+      const decoded = decodeHtmlText(candidate).replace(/\\u002F/gi, "/").replace(/\\\//g, "/");
+      const url = new URL(decoded, baseUrl);
+      if (!["http:", "https:"].includes(url.protocol)) continue;
+      if (!urls.includes(url.href)) urls.push(url.href);
+    } catch {
+      // Ignore malformed image candidates.
+    }
+  }
+  return urls;
+}
+
+function extractMetaContent(html, keys) {
+  const values = [];
+  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
+    const key = tag.match(/(?:property|name|itemprop)\s*=\s*["']([^"']+)["']/i)?.[1]?.toLowerCase();
+    const content = tag.match(/content\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (key && content && keys.includes(key)) values.push(content);
+  }
+  return values;
+}
+
+function decodeHtmlText(value) {
+  return String(value ?? "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+function fileNameFromUrl(url) {
+  const name = decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() ?? "imported-image");
+  return name.slice(0, 180) || "imported-image";
 }
 
 async function handleImageGenerate(request, env, fetchImpl, imageRouter) {
@@ -1535,7 +1847,7 @@ function parseAllowedRedirects(env) {
   );
 }
 
-async function buildHealthResponse(env, fetchImpl) {
+async function buildHealthResponse(env, fetchImpl, state) {
   const optionalConfigKeys = new Set(["internalBillingKey", "authCodeSecret"]);
   const usesMobileAppImageRouter = isMobileAppImageRouter(
     env.WEB_IMAGE_API_BASE_URL,
@@ -1562,7 +1874,12 @@ async function buildHealthResponse(env, fetchImpl) {
   const optionalMissing = Object.entries(config)
     .filter(([key, configured]) => !configured && optionalConfigKeys.has(key))
     .map(([key]) => key);
-  const database = await checkDatabaseHealth(fetchImpl, env, config);
+  const database = await getCachedDatabaseHealth(
+    fetchImpl,
+    env,
+    config,
+    state?.databaseHealthCache,
+  );
   const databaseOk = Object.values(database).every(Boolean);
 
   return {
@@ -1575,6 +1892,33 @@ async function buildHealthResponse(env, fetchImpl) {
     missing,
     optionalMissing,
   };
+}
+
+async function getCachedDatabaseHealth(fetchImpl, env, config, cache) {
+  const ttlMs = getDatabaseHealthCacheTtlMs(env);
+  const now = Date.now();
+
+  if (cache?.value && ttlMs > 0 && cache.expiresAt > now) {
+    return { ...cache.value };
+  }
+
+  const database = await checkDatabaseHealth(fetchImpl, env, config);
+
+  if (cache && ttlMs > 0) {
+    cache.value = { ...database };
+    cache.expiresAt = now + ttlMs;
+  }
+
+  return database;
+}
+
+function getDatabaseHealthCacheTtlMs(env) {
+  const configured = Number.parseInt(
+    env.WEB_DATABASE_HEALTH_CACHE_MS ?? "30000",
+    10,
+  );
+
+  return Number.isFinite(configured) ? Math.max(0, configured) : 30000;
 }
 
 function isMobileAppImageRouter(value) {

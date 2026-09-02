@@ -77,6 +77,21 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("switches the homepage production showcase", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const whiteBackgroundTab = screen.getByRole("tab", {
+      name: /白底图和平台抠图/,
+    });
+    await user.click(whiteBackgroundTab);
+
+    expect(whiteBackgroundTab).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("tabpanel", { name: "白底图和平台抠图" }),
+    ).toBeVisible();
+  });
+
   it("opens the workspace from the homepage", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -127,6 +142,41 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens the inspiration creator from top navigation", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "灵感创作" }));
+
+    expect(
+      screen.getByRole("heading", { name: "灵感创作" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("上传灵感参考图")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "从链接提取素材" })).toBeInTheDocument();
+  });
+
+  it("opens the local still-to-motion workspace", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "轻动态" }));
+
+    expect(screen.getByRole("heading", { name: "静图转轻动态" })).toBeInTheDocument();
+    expect(screen.getByLabelText("上传动态源图")).toBeInTheDocument();
+    expect(screen.getByText(/不消耗积分/)).toBeInTheDocument();
+  });
+
+  it("opens the masked image cleanup workspace", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "图片清理" }));
+
+    expect(screen.getByRole("heading", { name: "图片清理" })).toBeInTheDocument();
+    expect(screen.getByLabelText("上传待清理图片")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "去除水印或文字" })).toBeInTheDocument();
+  });
+
   it("places AI tools after the detail page in the top navigation", () => {
     const { container } = render(<App />);
     const navLabels = Array.from(
@@ -139,6 +189,9 @@ describe("App", () => {
       "商品主图",
       "详情页",
       "AI工具",
+      "灵感创作",
+      "轻动态",
+      "图片清理",
       "价格",
       "登录",
     ]);
@@ -514,7 +567,7 @@ describe("App", () => {
     );
     expect(screen.queryByText("Account Settings")).not.toBeInTheDocument();
     expect(container.querySelector(".login-form")).toBeNull();
-    expect(container.querySelectorAll(".topnav-button")).toHaveLength(7);
+    expect(container.querySelectorAll(".topnav-button")).toHaveLength(10);
 
     const logoutButton = container.querySelector<HTMLButtonElement>(
       ".account-logout-button",

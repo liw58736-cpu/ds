@@ -50,7 +50,7 @@ export function HistoryPage() {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
   useEffect(() => {
-    void listGenerationTasks().then(setTasks);
+    void listGenerationTasks({ limit: 100 }).then(setTasks);
   }, []);
 
   const stats = useMemo(() => {

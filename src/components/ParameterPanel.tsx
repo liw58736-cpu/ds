@@ -14,6 +14,13 @@ import type {
   GenerationModule,
   GenerationResolution,
   GenerationVersion,
+  InspirationBackground,
+  InspirationComposition,
+  InspirationModel,
+  InspirationPose,
+  InspirationPurpose,
+  InspirationProductHandling,
+  InspirationSettings,
   MainImageModuleId,
   ModuleReferenceAsset,
   WhiteBackgroundMode,
@@ -21,7 +28,7 @@ import type {
 
 type StudioModule = Extract<
   GenerationModule,
-  "main_image" | "white_background" | "detail_page"
+  "main_image" | "white_background" | "detail_page" | "lifestyle"
 >;
 
 interface ParameterPanelProps {
@@ -52,6 +59,11 @@ const pageMeta = {
     title: "服装详情页生成",
     description: "按服装详情页模块生成组图，适合搭建完整商品详情内容。",
   },
+  lifestyle: {
+    eyebrow: "INSPIRATION CREATOR",
+    title: "灵感创作",
+    description: "用商品图搭配灵感参考，调整背景、姿态、模特和构图，生成新的电商视觉。",
+  },
 } as const satisfies Record<
   StudioModule,
   { eyebrow: string; title: string; description: string }
@@ -61,6 +73,7 @@ const moduleDisplayLabels: Record<StudioModule, string> = {
   main_image: "商品主图",
   white_background: "AI工具",
   detail_page: "详情页",
+  lifestyle: "灵感创作",
 };
 
 const aspectRatioOptions: Array<{ value: AspectRatio; label: string }> = [
@@ -208,6 +221,99 @@ const whiteBackgroundModes: Array<{
   { value: "outfit_change", label: "换装" },
   { value: "product_showcase", label: "产品展示" },
 ];
+
+const defaultInspirationSettings: InspirationSettings = {
+  background: "lifestyle",
+  pose: "natural",
+  model: "none",
+  composition: "hero",
+  purpose: "product_listing",
+  productHandling: "preserve",
+};
+
+const inspirationControls: Array<{
+  key: keyof InspirationSettings;
+  label: string;
+  options: Array<{ value: string; label: string }>;
+}> = [
+  {
+    key: "background",
+    label: "背景",
+    options: [
+      { value: "original", label: "保留原场景" },
+      { value: "studio", label: "高级棚拍" },
+      { value: "lifestyle", label: "生活方式" },
+      { value: "minimal", label: "极简留白" },
+      { value: "seasonal", label: "节日氛围" },
+    ],
+  },
+  {
+    key: "pose",
+    label: "姿态",
+    options: [
+      { value: "natural", label: "自然状态" },
+      { value: "static", label: "稳定展示" },
+      { value: "dynamic", label: "动态动作" },
+      { value: "closeup", label: "局部近景" },
+    ],
+  },
+  {
+    key: "model",
+    label: "模特",
+    options: [
+      { value: "none", label: "不添加模特" },
+      { value: "female", label: "女性模特" },
+      { value: "male", label: "男性模特" },
+      { value: "diverse", label: "多元模特" },
+    ],
+  },
+  {
+    key: "composition",
+    label: "构图",
+    options: [
+      { value: "hero", label: "主视觉" },
+      { value: "editorial", label: "杂志感" },
+      { value: "split", label: "多画面" },
+      { value: "ugc", label: "真实分享" },
+    ],
+  },
+  {
+    key: "productHandling",
+    label: "商品处理",
+    options: [
+      { value: "preserve", label: "原样保留" },
+      { value: "feature", label: "突出商品" },
+      { value: "wear", label: "模特穿戴" },
+      { value: "in_use", label: "场景使用" },
+    ],
+  },
+  {
+    key: "purpose",
+    label: "用途",
+    options: [
+      { value: "product_listing", label: "商品上架" },
+      { value: "social_post", label: "社媒笔记" },
+      { value: "ad_creative", label: "广告素材" },
+      { value: "brand_story", label: "品牌内容" },
+    ],
+  },
+];
+
+function readImageFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Reference image could not be read."));
+      }
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Reference image could not be read."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function ParameterPanel({
   activeModule,
   config,
@@ -232,11 +338,30 @@ export function ParameterPanel({
   const [draftReferenceNote, setDraftReferenceNote] = useState("");
   const [showProductRequiredNotice, setShowProductRequiredNotice] =
     useState(false);
+  const [
+    showOutfitChangeRequiredNotice,
+    setShowOutfitChangeRequiredNotice,
+  ] = useState(false);
   const resolution = config.resolution ?? "1K";
   const generationVersion = config.generationVersion ?? "brand";
   const selectedMainModules = config.selectedMainModules ?? [];
   const detailCounts = config.detailModuleCounts ?? {};
   const moduleReferenceAssets = config.moduleReferenceAssets ?? {};
+  const inspirationReferenceAssets = moduleReferenceAssets.inspiration ?? [];
+  const inspirationReferenceImage = inspirationReferenceAssets.find(
+    hasModuleReferenceImage,
+  );
+  const inspirationNote = inspirationReferenceAssets
+    .map((asset) => asset.note?.trim() ?? "")
+    .filter(Boolean)
+    .join("\n");
+  const inspirationSettings = {
+    ...defaultInspirationSettings,
+    ...(config.inspirationSettings ?? {}),
+  };
+  const outfitChangeReferenceAssets = moduleReferenceAssets.outfit_change ?? [];
+  const outfitChangeTargetAsset =
+    outfitChangeReferenceAssets.find(hasModuleReferenceImage) ?? null;
   const draftImageReferenceAssets = draftReferenceAssets.filter(
     hasModuleReferenceImage,
   );
@@ -270,6 +395,12 @@ export function ParameterPanel({
       setShowProductRequiredNotice(false);
     }
   }, [hasProduct]);
+
+  useEffect(() => {
+    if (whiteBackgroundMode !== "outfit_change" || outfitChangeTargetAsset) {
+      setShowOutfitChangeRequiredNotice(false);
+    }
+  }, [whiteBackgroundMode, outfitChangeTargetAsset]);
 
   const requireProductBeforeModuleSelection = () => {
     if (hasProduct) {
@@ -336,6 +467,83 @@ export function ParameterPanel({
   const getReferenceAssets = (moduleId: string): ModuleReferenceAsset[] =>
     moduleReferenceAssets[moduleId] ?? [];
 
+  const saveModuleReferenceAssets = (
+    moduleId: string,
+    assets: ModuleReferenceAsset[],
+  ) => {
+    const nextReferenceAssets = { ...moduleReferenceAssets };
+
+    if (assets.length > 0) {
+      nextReferenceAssets[moduleId] = assets;
+    } else {
+      delete nextReferenceAssets[moduleId];
+    }
+
+    onChange({
+      ...config,
+      moduleReferenceAssets:
+        Object.keys(nextReferenceAssets).length > 0
+          ? nextReferenceAssets
+          : undefined,
+    });
+  };
+
+  const updateInspirationSetting = <Key extends keyof InspirationSettings>(
+    key: Key,
+    value: InspirationSettings[Key],
+  ) => {
+    updateConfig("inspirationSettings", {
+      ...inspirationSettings,
+      [key]: value,
+    });
+  };
+
+  const updateInspirationNote = (note: string) => {
+    const trimmedNote = note.trim();
+    const imageAssets = inspirationReferenceAssets.filter(hasModuleReferenceImage);
+    const nextAssets = imageAssets.length > 0
+      ? imageAssets.map((asset) => ({
+          ...asset,
+          ...(trimmedNote ? { note: trimmedNote } : { note: undefined }),
+        }))
+      : trimmedNote
+        ? [createNoteOnlyReferenceAsset(trimmedNote)]
+        : [];
+    saveModuleReferenceAssets("inspiration", nextAssets);
+  };
+
+  const handleInspirationReferenceFileChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file || !hasProduct) {
+      if (!hasProduct) {
+        requireProductBeforeModuleSelection();
+      }
+      return;
+    }
+
+    const imageUrl = await readImageFile(file);
+    const asset: ModuleReferenceAsset = {
+      id: `inspiration-ref-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+      fileName: file.name,
+      imageUrl,
+      ...(inspirationNote ? { note: inspirationNote } : {}),
+    };
+    saveModuleReferenceAssets("inspiration", [asset]);
+  };
+
+  const removeInspirationReference = () => {
+    saveModuleReferenceAssets(
+      "inspiration",
+      inspirationNote ? [createNoteOnlyReferenceAsset(inspirationNote)] : [],
+    );
+  };
+
   const openReferenceEditor = (moduleId: string, title: string) => {
     if (requireProductBeforeModuleSelection()) {
       return;
@@ -398,6 +606,42 @@ export function ParameterPanel({
       [...currentAssets, ...assets].slice(0, maxModuleReferenceAssets),
     );
     event.target.value = "";
+  };
+
+  const handleOutfitChangeTargetFileChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const asset = await new Promise<ModuleReferenceAsset>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        resolve({
+          id: `outfit-change-target-${Date.now().toString(36)}-${Math.random()
+            .toString(36)
+            .slice(2, 8)}`,
+          fileName: file.name,
+          imageUrl: String(reader.result ?? ""),
+          note: "Use this uploaded garment as the target clothing for outfit change.",
+        });
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+    saveModuleReferenceAssets("outfit_change", [asset]);
+    setShowOutfitChangeRequiredNotice(false);
+    event.target.value = "";
+  };
+
+  const removeOutfitChangeTargetAsset = () => {
+    saveModuleReferenceAssets("outfit_change", []);
+    setShowOutfitChangeRequiredNotice(true);
   };
 
   const saveReferenceAssets = () => {
@@ -466,6 +710,19 @@ export function ParameterPanel({
     setDraftReferenceAssets((currentAssets) =>
       currentAssets.filter((asset) => asset.id !== assetId),
     );
+  };
+
+  const handleGenerateClick = () => {
+    if (
+      activeModule === "white_background" &&
+      whiteBackgroundMode === "outfit_change" &&
+      !outfitChangeTargetAsset
+    ) {
+      setShowOutfitChangeRequiredNotice(true);
+      return;
+    }
+
+    onGenerate();
   };
 
   return (
@@ -682,6 +939,113 @@ export function ParameterPanel({
               );
             })}
           </div>
+          {whiteBackgroundMode === "outfit_change" ? (
+            <div className="outfit-change-target-card">
+              <div className="setting-group-heading">
+                <span>换装服饰</span>
+                <small>多上传 1 张要换上的衣服，作为 Image 2 参考</small>
+              </div>
+              {showOutfitChangeRequiredNotice ? (
+                <p className="module-product-required-notice" role="status">
+                  请上传要换上的服饰图。
+                </p>
+              ) : null}
+              <label className="outfit-change-upload">
+                <span>上传要换上的服饰图</span>
+                <small>建议使用清晰正面或半身服饰图</small>
+                <input
+                  aria-label="上传要换上的服饰图"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleOutfitChangeTargetFileChange}
+                />
+              </label>
+              {outfitChangeTargetAsset ? (
+                <div className="outfit-change-target-preview">
+                  <img
+                    src={outfitChangeTargetAsset.imageUrl}
+                    alt="要换上的服饰图"
+                  />
+                  <div>
+                    <p className="file-label">已选择服饰</p>
+                    <p className="file-name">
+                      {outfitChangeTargetAsset.fileName}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={removeOutfitChangeTargetAsset}
+                  >
+                    删除
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {activeModule === "lifestyle" ? (
+        <section className="setting-group inspiration-creator-group" aria-labelledby="inspiration-controls">
+          <div className="setting-group-heading">
+            <span id="inspiration-controls">创作控制</span>
+            <small>Image 1 是商品，Image 2 只作为灵感参考</small>
+          </div>
+          <div className="inspiration-control-grid">
+            {inspirationControls.map((control) => (
+              <div className="field" key={control.key}>
+                <label htmlFor={`inspiration-${control.key}`}>{control.label}</label>
+                <select
+                  id={`inspiration-${control.key}`}
+                  value={inspirationSettings[control.key]}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (control.key === "background") updateInspirationSetting("background", value as InspirationBackground);
+                    if (control.key === "pose") updateInspirationSetting("pose", value as InspirationPose);
+                    if (control.key === "model") updateInspirationSetting("model", value as InspirationModel);
+                    if (control.key === "composition") updateInspirationSetting("composition", value as InspirationComposition);
+                    if (control.key === "purpose") updateInspirationSetting("purpose", value as InspirationPurpose);
+                    if (control.key === "productHandling") updateInspirationSetting("productHandling", value as InspirationProductHandling);
+                  }}
+                >
+                  {control.options.map((option) => (
+                    <option value={option.value} key={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+          <label className="inspiration-reference-upload">
+            <span>上传灵感参考图</span>
+            <small>可上传模特、背景、姿态或构图参考，最多 1 张</small>
+            <input
+              type="file"
+              accept="image/*"
+              aria-label="上传灵感参考图"
+              onChange={handleInspirationReferenceFileChange}
+            />
+          </label>
+          {inspirationReferenceImage ? (
+            <div className="inspiration-reference-preview">
+              <img src={inspirationReferenceImage.imageUrl} alt="已上传的灵感参考图" />
+              <div>
+                <strong>{inspirationReferenceImage.fileName}</strong>
+                <span>作为 Image 2 参考，不替换商品</span>
+              </div>
+              <button type="button" className="secondary-button" onClick={removeInspirationReference}>删除</button>
+            </div>
+          ) : null}
+          <div className="field">
+            <label htmlFor="inspiration-reference-note">参考说明</label>
+            <textarea
+              id="inspiration-reference-note"
+              rows={3}
+              value={inspirationNote}
+              onChange={(event) => updateInspirationNote(event.target.value)}
+              placeholder="例如：参考这张图的模特姿态和室内背景，但保留我的商品款式、颜色和细节。"
+            />
+          </div>
         </section>
       ) : null}
 
@@ -751,28 +1115,31 @@ export function ParameterPanel({
         <>
           <div className="field">
             <label htmlFor="selling-points">
-              {activeModule === "detail_page" ? "组图要求" : "设计简报"}
+              {activeModule === "detail_page"
+                ? "组图要求"
+                : activeModule === "lifestyle"
+                  ? "创作要求"
+                  : "设计简报"}
             </label>
             <textarea
               id="selling-points"
               value={config.sellingPoints}
-              rows={activeModule === "detail_page" ? 6 : 4}
+              rows={activeModule === "detail_page" ? 6 : activeModule === "lifestyle" ? 4 : 4}
               onChange={(event) => updateConfig("sellingPoints", event.target.value)}
               placeholder={
                 activeModule === "detail_page"
                   ? "描述您的产品信息和期望的图片风格。例如：这是一款法式复古连衣裙，采用重磅真丝面料，特色是蕾丝拼接和珍珠扣设计，适合25-35岁都市女性通勤或约会穿。"
+                  : activeModule === "lifestyle"
+                    ? "补充你希望保留或强调的商品细节、画面气质和内容要求。"
                   : "描述产品核心卖点、视觉方向和希望强调的主图风格。"
               }
             />
-            {activeModule === "detail_page" ? (
-              <p className="field-hint">
-                建议输入：款式名称、面料材质、设计亮点、适合人群、风格调性等。输入组图要求并选择输出语言后，系统会自动分析产品并生成共享文案。
-              </p>
-            ) : null}
           </div>
 
           <div className="field">
-            <label htmlFor="promotion-info">促销信息</label>
+            <label htmlFor="promotion-info">
+              {activeModule === "lifestyle" ? "画面文字" : "促销信息"}
+            </label>
             <textarea
               id="promotion-info"
               value={config.specifications}
@@ -780,7 +1147,7 @@ export function ParameterPanel({
               onChange={(event) =>
                 updateConfig("specifications", event.target.value)
               }
-              placeholder="填写促销活动详情，如折扣信息、活动名称、优惠力度等。"
+              placeholder={activeModule === "lifestyle" ? "需要出现在画面中的商品名称、卖点或短文案。" : "填写促销活动详情，如折扣信息、活动名称、优惠力度等。"}
             />
           </div>
         </>
@@ -829,7 +1196,7 @@ export function ParameterPanel({
         <button
           type="button"
           className="primary-button generate-button"
-          onClick={isOutOfCredits ? onBuyCredits : onGenerate}
+          onClick={isOutOfCredits ? onBuyCredits : handleGenerateClick}
           disabled={!isOutOfCredits && isGenerateDisabled}
         >
           {isOutOfCredits

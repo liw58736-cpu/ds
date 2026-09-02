@@ -225,6 +225,7 @@ function isEditToolRequest(requestBody) {
     "watermark_remove",
     "background_remove",
     "ghost_model",
+    "outfit_change",
     "retouch",
     "restoration",
     "image_edit",
@@ -297,6 +298,16 @@ async function requestPackyTemplateEdit({ key, requestBody, env, fetchImpl }) {
       };
     }
     form.append("image", file, `image_${index + 1}.${extensionFromContentType(file.type)}`);
+  }
+
+  if (requestBody.mask_base64) {
+    const mask = await imageInputToBlob(String(requestBody.mask_base64), fetchImpl);
+    if (!mask) {
+      return {
+        error: "input_mask_upload_failed: painted mask could not be prepared for PackyAPI",
+      };
+    }
+    form.append("mask", mask, `mask.${extensionFromContentType(mask.type)}`);
   }
 
   const response = await fetchImpl(`${key.baseUrl}/images/edits`, {

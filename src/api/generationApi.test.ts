@@ -172,7 +172,7 @@ describe("generationApi", () => {
     );
   });
 
-  it("lists generation tasks from the web backend when logged in", async () => {
+  it("lists recent generation tasks from the web backend when logged in", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1");
     vi.stubEnv("VITE_API_BASE_URL", "");
     replaceAccountSnapshot({
@@ -211,6 +211,45 @@ describe("generationApi", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(listGenerationTasks()).resolves.toEqual(remoteTasks);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://web-api.example.com/api/v1/generations?limit=30",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Authorization: "Bearer web-access-token",
+          "X-Kroma-Client": "web",
+        }),
+      }),
+    );
+  });
+
+  it("allows the history page to request a larger generation task window", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1");
+    vi.stubEnv("VITE_API_BASE_URL", "");
+    replaceAccountSnapshot({
+      session: {
+        identifier: "seller@example.com",
+        authView: "login",
+        mode: "password",
+        storeName: "",
+        inviteCode: "",
+        createdAt: "2026-06-17T00:00:00.000Z",
+        provider: "kroma",
+        userId: "web-user-1",
+        accessToken: "web-access-token",
+        refreshToken: "web-refresh-token",
+      },
+      balance: 5,
+      transactions: [],
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listGenerationTasks({ limit: 100 });
+
     expect(fetchMock).toHaveBeenCalledWith(
       "https://web-api.example.com/api/v1/generations?limit=100",
       expect.objectContaining({

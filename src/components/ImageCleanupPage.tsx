@@ -1,0 +1,206 @@
+import { useRef, useState } from "react";
+import { Brush, Download, Eraser, RotateCcw, Sparkles } from "lucide-react";
+import { consumeCredits, getCurrentAccountSnapshot } from "../api/accountApi";
+import { runImageCleanup, type CleanupMode } from "../api/cleanupApi";
+import { saveGenerationTaskHistory, saveGenerationTasks, getGenerationTaskSnapshot } from "../api/generationApi";
+import { completeTask, createTask, failTask, markProcessing } from "../domain/taskState";
+import type { GenerationConfig, ProductInput } from "../domain/types";
+
+interface ImageCleanupPageProps {
+  isAuthenticated: boolean;
+  onRequireLogin: () => void;
+  onOpenPricing: () => void;
+}
+
+interface MaskPath { size: number; points: Array<{ x: number; y: number }> }
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("图片读取失败"));
+    reader.onerror = () => reject(reader.error ?? new Error("图片读取失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function cleanupConfig(mode: CleanupMode): GenerationConfig {
+  return {
+    module: "white_background",
+    platform: "independent_store",
+    aspectRatio: "original",
+    style: "minimal",
+    outputFormat: "png",
+    sellingPoints: "仅清理用户画笔标记区域，未标记区域保持不变。",
+    specifications: "",
+    outputLanguage: "中文",
+    resolution: "1K",
+    generationVersion: "standard",
+    whiteBackgroundMode: mode,
+    shadowMode: "none",
+  };
+}
+
+async function downloadCleanupResult(url: string): Promise<void> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`下载失败（HTTP ${response.status}）`);
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = "kroma-cleanup.png";
+  anchor.rel = "noreferrer";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+export function ImageCleanupPage({ isAuthenticated, onRequireLogin, onOpenPricing }: ImageCleanupPageProps) {
+  const [product, setProduct] = useState<ProductInput | null>(null);
+  const [mode, setMode] = useState<CleanupMode>("watermark_remove");
+  const [brushSize, setBrushSize] = useState(36);
+  const [authorized, setAuthorized] = useState(false);
+  const [status, setStatus] = useState("上传图片后，用画笔涂抹需要清理的区域。");
+  const [resultUrl, setResultUrl] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pathsRef = useRef<MaskPath[]>([]);
+  const drawingRef = useRef<MaskPath | null>(null);
+
+  const redrawMask = () => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = "rgba(255, 58, 92, 0.62)";
+    for (const path of pathsRef.current) {
+      if (path.points.length === 0) continue;
+      context.lineWidth = path.size;
+      context.beginPath();
+      context.moveTo(path.points[0].x, path.points[0].y);
+      for (const point of path.points.slice(1)) context.lineTo(point.x, point.y);
+      context.stroke();
+    }
+  };
+
+  const pointerPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = event.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    return { x: (event.clientX - rect.left) * (canvas.width / rect.width), y: (event.clientY - rect.top) * (canvas.height / rect.height) };
+  };
+
+  const exportMask = (): string => {
+    const source = canvasRef.current;
+    if (!source || pathsRef.current.length === 0) return "";
+    const mask = document.createElement("canvas");
+    mask.width = source.width;
+    mask.height = source.height;
+    const context = mask.getContext("2d");
+    if (!context) return "";
+    context.fillStyle = "#000000";
+    context.fillRect(0, 0, mask.width, mask.height);
+    context.strokeStyle = "#ffffff";
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    for (const path of pathsRef.current) {
+      if (path.points.length === 0) continue;
+      context.lineWidth = path.size;
+      context.beginPath();
+      context.moveTo(path.points[0].x, path.points[0].y);
+      for (const point of path.points.slice(1)) context.lineTo(point.x, point.y);
+      context.stroke();
+    }
+    return mask.toDataURL("image/png");
+  };
+
+  const handleImage = async (file: File | undefined) => {
+    if (!file) return;
+    const imageUrl = await readFileAsDataUrl(file);
+    setProduct({ id: `cleanup-${Date.now().toString(36)}`, imageUrl, fileName: file.name, createdAt: new Date().toISOString(), source: "upload" });
+    pathsRef.current = [];
+    setResultUrl("");
+    setStatus("图片已载入，请涂抹需要清理的区域。");
+  };
+
+  const handleGenerate = async () => {
+    if (!isAuthenticated) return onRequireLogin();
+    if (getCurrentAccountSnapshot().balance < 1) return onOpenPricing();
+    if (!product) return setStatus("请先上传图片。");
+    if (!authorized) return setStatus("请确认你拥有或已获授权处理该图片。");
+    const maskBase64 = exportMask();
+    if (!maskBase64) return setStatus("请先用画笔涂抹需要清理的区域。");
+
+    const processingTask = markProcessing(createTask({ product, config: cleanupConfig(mode), now: new Date().toISOString() }));
+    let currentProcessingTask = processingTask;
+    void saveGenerationTasks([
+      processingTask,
+      ...getGenerationTaskSnapshot().filter((task) => task.id !== processingTask.id),
+    ]);
+    setIsGenerating(true);
+    setStatus("正在清理标记区域…");
+    try {
+      const result = await runImageCleanup({
+        imageBase64: product.imageUrl,
+        maskBase64,
+        mode,
+        onProgress: setStatus,
+        onTaskStarted: (backendTaskId) => {
+          currentProcessingTask = { ...currentProcessingTask, backendTaskId };
+          void saveGenerationTasks([
+            currentProcessingTask,
+            ...getGenerationTaskSnapshot().filter((task) => task.id !== currentProcessingTask.id),
+          ]);
+        },
+      });
+      const completed = completeTask(currentProcessingTask, {
+        resultUrls: [result.imageUrl],
+        resultAssets: [{ url: result.imageUrl, label: mode === "watermark_remove" ? "去除水印或文字" : "移除物体", ...(result.channelUsed ? { channelUsed: result.channelUsed } : {}) }],
+        ...(result.channelUsed ? { channelUsed: result.channelUsed, channelUsedByAsset: [result.channelUsed] } : {}),
+        creditCost: 1,
+        completedAt: new Date().toISOString(),
+      });
+      setResultUrl(result.imageUrl);
+      await saveGenerationTaskHistory(completed);
+      await saveGenerationTasks([completed, ...getGenerationTaskSnapshot().filter((task) => task.id !== completed.id)]);
+      try {
+        await consumeCredits({ amount: 1, label: "图片清理" });
+        setStatus("清理完成，已扣除 1 积分并保存到历史任务。");
+      } catch {
+        setStatus("清理完成并已保存结果，但积分同步暂时失败；结果不会被标记为失败。");
+      }
+    } catch (error) {
+      const failed = failTask(currentProcessingTask, { errorCode: "image_cleanup_failed", errorMessage: error instanceof Error ? error.message : "图片清理失败", completedAt: new Date().toISOString() });
+      await saveGenerationTaskHistory(failed);
+      await saveGenerationTasks([failed, ...getGenerationTaskSnapshot().filter((task) => task.id !== failed.id)]);
+      setStatus(failed.errorMessage ?? "图片清理失败，未扣除积分。");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <main className="cleanup-page page-surface">
+      <section className="page-heading"><p className="eyebrow">MASKED IMAGE CLEANUP</p><h1>图片清理</h1><p>涂抹水印、文字、标记或不需要的物体，只修改画笔覆盖区域。仅处理你拥有或获授权的图片。</p></section>
+      <div className="cleanup-workbench">
+        <section className="panel cleanup-settings" aria-label="图片清理设置">
+          <label className="cleanup-upload"><Brush aria-hidden="true" /><span>上传待清理图片</span><small>支持 JPG、PNG、WebP</small><input type="file" accept="image/*" aria-label="上传待清理图片" onChange={(event) => void handleImage(event.target.files?.[0])} /></label>
+          <div className="segmented-control" aria-label="清理类型">
+            <button type="button" className={mode === "watermark_remove" ? "is-active" : undefined} aria-pressed={mode === "watermark_remove"} onClick={() => setMode("watermark_remove")}>去除水印或文字</button>
+            <button type="button" className={mode === "remove_object" ? "is-active" : undefined} aria-pressed={mode === "remove_object"} onClick={() => setMode("remove_object")}>移除物体</button>
+          </div>
+          <label className="cleanup-brush-size"><span>画笔大小</span><input type="range" min={12} max={120} value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} /></label>
+          <div className="cleanup-actions"><button type="button" className="secondary-button" onClick={() => { pathsRef.current.pop(); redrawMask(); }}><RotateCcw aria-hidden="true" />撤销</button><button type="button" className="secondary-button" onClick={() => { pathsRef.current = []; redrawMask(); }}><Eraser aria-hidden="true" />清空蒙版</button></div>
+          <label className="material-import-confirm"><input type="checkbox" checked={authorized} onChange={(event) => setAuthorized(event.target.checked)} /><span>我确认拥有或已获授权处理该图片</span></label>
+          <button type="button" className="primary-button cleanup-generate" disabled={!product || isGenerating} onClick={handleGenerate}><Sparkles aria-hidden="true" />{isGenerating ? "正在清理" : "开始清理（1 积分）"}</button>
+          <p className="cleanup-status" role="status">{status}</p>
+        </section>
+        <section className="panel cleanup-canvas-panel" aria-label="涂抹区域">
+          {product ? <div className="cleanup-canvas-wrap"><img src={product.imageUrl} alt="待清理图片" onLoad={(event) => { const canvas = canvasRef.current; if (!canvas) return; canvas.width = event.currentTarget.naturalWidth; canvas.height = event.currentTarget.naturalHeight; redrawMask(); }} /><canvas ref={canvasRef} aria-label="清理蒙版画布" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); const path = { size: brushSize * (event.currentTarget.width / event.currentTarget.getBoundingClientRect().width), points: [pointerPoint(event)] }; drawingRef.current = path; pathsRef.current.push(path); redrawMask(); }} onPointerMove={(event) => { if (!drawingRef.current) return; drawingRef.current.points.push(pointerPoint(event)); redrawMask(); }} onPointerUp={() => { drawingRef.current = null; }} onPointerCancel={() => { drawingRef.current = null; }} /></div> : <div className="cleanup-empty"><Brush aria-hidden="true" /><strong>等待图片</strong><span>上传后用红色画笔涂抹清理区域</span></div>}
+          {resultUrl ? <div className="cleanup-result"><img src={resultUrl} alt="图片清理结果" /><button type="button" className="primary-button" onClick={() => void downloadCleanupResult(resultUrl).catch((error) => setStatus(error instanceof Error ? error.message : "下载失败"))}><Download aria-hidden="true" />下载结果</button></div> : null}
+        </section>
+      </div>
+    </main>
+  );
+}

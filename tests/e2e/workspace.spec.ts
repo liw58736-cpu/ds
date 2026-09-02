@@ -84,9 +84,17 @@ async function chooseStandardOneK(page: Page) {
 }
 
 async function generateAndExpectResults(page: Page, count: number) {
+  const existingImages = await page.locator(".preview-result-item img").count();
+  const existingDownloads = await page
+    .locator(".preview-result-item .ghost-action-button")
+    .count();
   await page.locator(".generate-button").click();
-  await expect(page.locator(".preview-result-item img")).toHaveCount(count);
-  await expect(page.locator(".preview-result-item .ghost-action-button")).toHaveCount(count);
+  await expect(page.locator(".preview-result-item img")).toHaveCount(
+    existingImages + count,
+  );
+  await expect(
+    page.locator(".preview-result-item .ghost-action-button"),
+  ).toHaveCount(existingDownloads + count);
 }
 
 test("sample product generates a mock ecommerce image", async ({ page }) => {
@@ -112,7 +120,7 @@ test("main image multi-select creates one result per selected function and recor
 
   await generateAndExpectResults(page, 2);
 
-  await page.locator(".topnav-button").nth(4).click();
+  await page.getByRole("button", { name: "历史任务", exact: true }).click();
   await expect(page.locator(".history-task-row")).toHaveCount(1);
   await expect(page.locator(".history-task-row strong")).toContainText("/");
   await expect(page.locator(".history-task-row strong")).toContainText("KV");
@@ -149,6 +157,12 @@ test("AI tool modes all connect to generation and return a downloadable result",
 
   for (let index = 0; index < toolCount; index += 1) {
     await toolButtons.nth(index).click();
+    if ((await toolButtons.nth(index).textContent())?.trim() === "换装") {
+      await page
+        .getByLabel("上传要换上的服饰图")
+        .setInputFiles("src/assets/home/kroma-detail-before-v2.webp");
+      await expect(page.getByAltText("要换上的服饰图")).toBeVisible();
+    }
     await generateAndExpectResults(page, 1);
   }
 });
@@ -161,7 +175,7 @@ test("preview canvas uses an opaque surface behind generated results", async ({
 
   await expect(page.getByAltText("生成结果")).toBeVisible();
 
-  const previewBackground = await page.locator(".preview-grid").evaluate((node) => {
+  const previewBackground = await page.locator(".preview-task-card").evaluate((node) => {
     const style = window.getComputedStyle(node);
     return {
       backgroundColor: style.backgroundColor,
@@ -218,7 +232,7 @@ test("navigation surfaces render and preserve generated history", async ({
   await expect(payButtons).toHaveCount(3);
   await payButtons.nth(2).click();
   await expect(page.getByRole("status")).toContainText(
-    "已确认 专业包，950 积分已入账，当前余额 951 积分。",
+    "已确认 专业包，10,500 积分已入账，当前余额 10,501 积分。",
   );
   await page.getByRole("button", { name: "订阅方案" }).click();
   await expect(page.getByRole("button", { name: "订阅方案" })).toHaveAttribute(
@@ -235,10 +249,10 @@ test("navigation surfaces render and preserve generated history", async ({
   await expect(
     page.getByRole("heading", { name: "账户与用量", level: 2 }),
   ).toBeVisible();
-  await expect(page.getByText("951 credits")).toBeVisible();
+  await expect(page.getByText("10,501 credits")).toBeVisible();
   await expect(page.getByText("购买 专业包")).toHaveCount(0);
 
-  await expect(page.locator(".topnav-button")).toHaveCount(7);
+  await expect(page.locator(".topnav-button")).toHaveCount(10);
   await expect(page.locator(".account-email")).toBeVisible();
   await expect(page.locator(".account-logout-button")).toBeVisible();
   await expectNoHorizontalDocumentOverflow(page);
@@ -252,10 +266,37 @@ test("navigation surfaces render and preserve generated history", async ({
     page.getByRole("heading", { name: "最近任务", level: 2 }),
   ).toBeVisible();
   await expect(page.getByAltText("当前商品图")).toHaveCount(0);
-  await expect(page.getByAltText("生成结果")).toHaveCount(0);
+  await expect(page.getByAltText("生成结果")).toBeVisible();
+  await expect(
+    page.locator(".history-result-grid").getByRole("button", { name: "下载" }),
+  ).toBeVisible();
   await expect(
     page.locator(".history-task-list").getByText("已完成"),
   ).toBeVisible();
+});
+
+test("new content tools render and remain usable without horizontal overflow", async ({
+  page,
+}) => {
+  await seedAuthenticatedAccount(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "灵感创作", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "从链接提取素材" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "灵感创作" })).toBeVisible();
+  await expect(page.getByLabel("商品处理")).toHaveValue("preserve");
+  await expectNoHorizontalDocumentOverflow(page);
+
+  await page.getByRole("button", { name: "轻动态", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "静图转轻动态" })).toBeVisible();
+  await expect(page.getByLabel("上传动态源图")).toBeVisible();
+  await expectNoHorizontalDocumentOverflow(page);
+
+  await page.getByRole("button", { name: "图片清理", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "图片清理" })).toBeVisible();
+  await expect(page.getByLabel("上传待清理图片")).toBeVisible();
+  await expect(page.getByRole("button", { name: "去除水印或文字" })).toBeVisible();
+  await expectNoHorizontalDocumentOverflow(page);
 });
 
 test("footer legal pages render", async ({ page }) => {
@@ -273,7 +314,7 @@ test("footer legal pages render", async ({ page }) => {
   await expect(page.getByRole("button", { name: "企业采购" })).toHaveCount(0);
 
   for (const item of pages) {
-    await page.getByRole("button", { name: item.button }).click();
+    await page.getByRole("link", { name: item.button }).click();
     await expect(
       page.getByRole("heading", { name: item.title, level: 1 }),
     ).toBeVisible();

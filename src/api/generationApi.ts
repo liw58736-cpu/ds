@@ -34,6 +34,13 @@ interface GenerationApiOptions {
   shouldContinue?: () => boolean;
 }
 
+interface ListGenerationTasksOptions {
+  limit?: number;
+}
+
+const defaultRecentTaskLimit = 30;
+const maxTaskHistoryLimit = 100;
+
 export async function createGenerationTask(
   input: GenerateInput,
   options: GenerationApiOptions = {},
@@ -276,16 +283,19 @@ export async function cancelGenerationTask(
   return results.some(Boolean);
 }
 
-export async function listGenerationTasks(): Promise<GenerationTask[]> {
+export async function listGenerationTasks(
+  options: ListGenerationTasksOptions = {},
+): Promise<GenerationTask[]> {
   const request = buildTaskListRequest();
   const localTasks = loadTasks({
     keepResumableTasks: shouldUseKromaGenerationBackend(),
   });
+  const limit = clampTaskHistoryLimit(options.limit);
 
   if (shouldUseWebGenerationHistoryBackend()) {
     try {
       const cloudTasks = await requestWebGenerationJson<GenerationTask[]>(
-        "/generations?limit=100",
+        `/generations?limit=${limit}`,
         { method: "GET" },
       );
 
@@ -300,6 +310,14 @@ export async function listGenerationTasks(): Promise<GenerationTask[]> {
   }
 
   return localTasks;
+}
+
+function clampTaskHistoryLimit(value?: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultRecentTaskLimit;
+  }
+
+  return Math.max(1, Math.min(maxTaskHistoryLimit, Math.floor(value)));
 }
 
 export function getGenerationTaskSnapshot(): GenerationTask[] {

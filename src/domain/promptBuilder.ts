@@ -165,6 +165,12 @@ const detailPrompts: Record<
   },
 };
 
+const inspirationPrompt = {
+  title: "灵感创作",
+  prompt:
+    "Create a fresh ecommerce visual by combining the exact Image 1 product with the selected creative direction. Image 2 is an inspiration reference for background, pose, model, composition, or mood only. Preserve Image 1 product identity, category, shape, material, color, logos, and recognisable details. Do not replace Image 1 with the product or garment shown in Image 2, and do not render upload instructions as visible text.",
+};
+
 const shadowCopy: Record<ShadowMode, string> = {
   natural: "natural soft studio shadow",
   none: "no shadow, crisp ecommerce cutout",
@@ -181,9 +187,13 @@ const aiToolPromptCopy: Record<WhiteBackgroundMode, string> = {
   retouch:
     "Retouch the uploaded product image while keeping the same product, pose, framing, and identity. Improve fabric cleanliness, wrinkles, lighting balance, edge clarity, color consistency, and commercial polish. Do not redesign the product, do not change the model pose, and do not add a new scene.",
   outfit_change:
-    "Create a visible outfit styling variation around the uploaded garment. Preserve the main garment's color, collar, pocket, buttons, fabric texture, and silhouette, but change the surrounding outfit styling such as pants, layering, shoes, accessories, and presentation context. The result should clearly look like a new styled look, not the same plain cutout.",
+    "Create an outfit-change edit. Use Image 1 as the base person or model photo, and use Image 2 as the target clothing to put onto the person in Image 1. Preserve the Image 1 person's identity, pose, body proportions, camera angle, and scene where appropriate. Replace only the visible outfit with the Image 2 garment while preserving the Image 2 garment category, color, collar, sleeves, silhouette, fabric texture, pattern, seams, buttons, logos, and recognisable design.",
   product_showcase:
     "Create a premium product showcase composition for ecommerce. Preserve the product identity, then stage it with refined studio lighting, a pedestal, hanger, folded detail, tasteful props, depth, and a polished retail display setup. The result must look like a designed product showcase, not a plain white-background cutout.",
+  watermark_remove:
+    "Remove only the user-painted watermark, overlaid text, or mark from the authorized source image. Reconstruct the masked pixels from the immediate surrounding texture, lighting, and structure. Preserve every unmasked pixel and do not redesign the product or scene.",
+  remove_object:
+    "Remove only the user-painted unwanted object from the source image. Reconstruct the masked area from the immediate surrounding background, texture, lighting, and perspective. Preserve every unmasked pixel and the sold product identity.",
   pure_white:
     "Create a strict pure white background product image with preserved product geometry, clean edges, and only minimal natural contact shadow.",
   transparent:
@@ -221,8 +231,10 @@ export function buildGenerationPrompt(
     `output format: ${config.outputFormat}`,
     `output language: ${config.outputLanguage ?? "中文"}`,
     config.sellingPoints ? `product requirements: ${config.sellingPoints}` : "",
-    config.specifications ? `promotion information: ${config.specifications}` : "",
-    "Preserve Image 1 product identity: same product category, garment shape, material, color, seams, lace, buttons, logos, packaging, camera-facing details, and recognisable design. A blouse or shirt must remain a blouse or shirt; never turn a top into a dress, lingerie, lace costume, packaging-only mockup, or unrelated SKU. Do not replace it with a different product.",
+    config.specifications
+      ? `${config.module === "lifestyle" ? "on-image copy" : "promotion information"}: ${config.specifications}`
+      : "",
+    getSharedImageIdentityInstruction(config),
     exactTextInstruction,
     moduleReferenceTextInstruction,
     "avoid loud domestic promotional poster aesthetics, fake tiny unreadable text, distorted logos, changed product identity, invented discounts, invented sizes, and invented materials",
@@ -247,6 +259,8 @@ function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
       retouch: "精修",
       outfit_change: "换装",
       product_showcase: "产品展示",
+      watermark_remove: "去除水印或文字",
+      remove_object: "移除物体",
       pure_white: "白底图",
       transparent: "透明底",
       light_gray: "浅灰检测",
@@ -283,6 +297,20 @@ function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
       }));
   }
 
+  if (config.module === "lifestyle") {
+    return [
+      {
+        id: "inspiration",
+        title: inspirationPrompt.title,
+        prompt: withModuleReferencePrompt(
+          `${inspirationPrompt.prompt} ${getInspirationSettingsPrompt(config)}`,
+          "inspiration",
+          config,
+        ),
+      },
+    ];
+  }
+
   const selectedMainModules: MainImageModuleId[] =
     config.selectedMainModules && config.selectedMainModules.length > 0
       ? config.selectedMainModules
@@ -295,12 +323,25 @@ function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
   }));
 }
 
+function getInspirationSettingsPrompt(config: GenerationConfig): string {
+  const settings = config.inspirationSettings;
+
+  if (!settings) {
+    return "Use a natural lifestyle background, natural pose, no specified model, clear hero composition, preserve the product unchanged, and use a product-listing purpose.";
+  }
+
+  return `Creative controls: background=${settings.background}; pose=${settings.pose}; model=${settings.model}; composition=${settings.composition}; product_handling=${settings.productHandling}; purpose=${settings.purpose}. Follow these controls while keeping Image 1 as the sold product.`;
+}
+
 function withModuleReferencePrompt(
   prompt: string,
   moduleId: string,
   config: GenerationConfig,
 ): string {
-  const guardedPrompt = withProductIdentityGuard(prompt);
+  const guardedPrompt =
+    moduleId === "outfit_change"
+      ? withOutfitChangeIdentityGuard(prompt)
+      : withProductIdentityGuard(prompt);
   const assets = getModuleReferenceAssets(config, moduleId);
 
   if (assets.length === 0) {
@@ -358,7 +399,9 @@ function withModuleReferencePrompt(
 
   if (imageAssets.length > 0) {
     promptParts.push(
-      "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
+      moduleId === "outfit_change"
+        ? "Image 2 reference assets are the target clothing for outfit change. Use the uploaded Image 2 garment as the clothing to wear on Image 1. Do not render the upload note as visible text. Do not invent extra garments or extra colorways."
+        : "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
     );
   }
 
@@ -429,6 +472,25 @@ function withProductIdentityGuard(prompt: string): string {
   }
 
   return `${prompt} The Image 1 product is the sold SKU for this module; preserve its exact category, silhouette or shape, material or fabric, colorway, seams, buttons, logos, packaging, hardware, proportions, camera-facing details, and recognisable design. Do not swap in a different product, model garment, stock item, or invented SKU. When placing it on a model, in hands, in packaging, or in a scene, use the exact Image 1 product; only the background, layout, camera framing, styling context, or allowed colorway may change.`;
+}
+
+function withOutfitChangeIdentityGuard(prompt: string): string {
+  if (prompt.includes("Image 2 is the target clothing")) {
+    return prompt;
+  }
+
+  return `${prompt} Image 1 is the base photo. Image 2 is the target clothing. Keep the person, pose, hands, face, body proportions, camera angle, and scene from Image 1 stable, but replace the outfit with Image 2 clothing. Preserve Image 2 garment details exactly; do not keep the old Image 1 outfit unless it is not part of the clothing being replaced.`;
+}
+
+function getSharedImageIdentityInstruction(config: GenerationConfig): string {
+  if (
+    config.module === "white_background" &&
+    config.whiteBackgroundMode === "outfit_change"
+  ) {
+    return "For outfit change, Image 1 is the base person or model photo and Image 2 is the target clothing. Preserve Image 1 person, pose, body shape, camera angle, and scene; replace the visible outfit with Image 2 clothing while preserving Image 2 garment details. Do not render upload notes as visible text.";
+  }
+
+  return "Preserve Image 1 product identity: same product category, garment shape, material, color, seams, lace, buttons, logos, packaging, camera-facing details, and recognisable design. A blouse or shirt must remain a blouse or shirt; never turn a top into a dress, lingerie, lace costume, packaging-only mockup, or unrelated SKU. Do not replace it with a different product.";
 }
 
 function getExactTextInstruction(config: GenerationConfig): string {

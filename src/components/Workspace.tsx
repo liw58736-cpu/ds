@@ -33,6 +33,7 @@ import { GenerationProviderError } from "../providers/generationProvider";
 import { ParameterPanel } from "./ParameterPanel";
 import { ResultPreview } from "./ResultPreview";
 import { UploadPanel } from "./UploadPanel";
+import { MaterialImportPanel } from "./MaterialImportPanel";
 
 function moveTaskToTop(
   tasks: GenerationTask[],
@@ -86,7 +87,7 @@ function getFailureDetails(error: unknown): {
 interface WorkspaceProps {
   activeModule?: Extract<
     GenerationModule,
-    "main_image" | "white_background" | "detail_page"
+    "main_image" | "white_background" | "detail_page" | "lifestyle"
   >;
   isVisible?: boolean;
   isAuthenticated?: boolean;
@@ -105,6 +106,15 @@ function getModuleDefaults(module: GenerationModule): Partial<GenerationConfig> 
       aspectRatio: "original",
       outputFormat: "png",
       whiteBackgroundMode: "white_background",
+    };
+  }
+
+  if (module === "lifestyle") {
+    return {
+      module,
+      aspectRatio: "4:5",
+      outputFormat: "jpg",
+      style: "lifestyle",
     };
   }
 
@@ -168,6 +178,33 @@ export function Workspace({
 
     productRef.current = nextProduct;
     setProduct(nextProduct);
+  };
+
+  const handleImportedProduct = (imageUrl: string, title: string) => {
+    handleProductChange({
+      id: `imported-product-${Date.now().toString(36)}`,
+      imageUrl,
+      fileName: title || "imported-product",
+      createdAt: new Date().toISOString(),
+      source: "upload",
+    });
+  };
+
+  const handleImportedReference = (imageUrl: string, title: string) => {
+    setConfig((currentConfig) => ({
+      ...currentConfig,
+      moduleReferenceAssets: {
+        ...(currentConfig.moduleReferenceAssets ?? {}),
+        inspiration: [
+          {
+            id: `imported-inspiration-${Date.now().toString(36)}`,
+            imageUrl,
+            fileName: title || "imported-inspiration",
+            note: "Use this public material only as the Image 2 inspiration reference.",
+          },
+        ],
+      },
+    }));
   };
 
   const runProcessingTask = useCallback(
@@ -422,6 +459,12 @@ export function Workspace({
     <main className="workspace">
       <div className="studio-split">
         <section className="studio-settings" aria-label="生成设置">
+          {activeModule === "lifestyle" ? (
+            <MaterialImportPanel
+              onUseAsProduct={handleImportedProduct}
+              onUseAsReference={handleImportedReference}
+            />
+          ) : null}
           <UploadPanel product={product} onProductChange={handleProductChange} />
           <ParameterPanel
             activeModule={activeModule}

@@ -60,6 +60,40 @@ describe("buildGenerationPrompt", () => {
     expect(prompt.modules[0].prompt).toContain("subtle contact shadow");
   });
 
+  it("builds inspiration prompts with Image 1, Image 2, and creative controls", () => {
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "lifestyle",
+      inspirationSettings: {
+        background: "studio",
+        pose: "dynamic",
+        model: "female",
+        composition: "ugc",
+        purpose: "social_post",
+        productHandling: "preserve",
+      },
+      moduleReferenceAssets: {
+        inspiration: [
+          {
+            id: "inspiration-ref-1",
+            fileName: "reference.png",
+            imageUrl: "data:image/png;base64,reference",
+            note: "参考模特姿态和背景，保留我的商品。",
+          },
+        ],
+      },
+    });
+
+    expect(prompt.modules).toHaveLength(1);
+    expect(prompt.modules[0]?.id).toBe("inspiration");
+    expect(prompt.modules[0]?.prompt).toContain("Image 2 reference assets");
+    expect(prompt.modules[0]?.prompt).toContain("background=studio");
+    expect(prompt.modules[0]?.prompt).toContain("purpose=social_post");
+    expect(prompt.modules[0]?.prompt).toContain(
+      "Do not replace Image 1 with the product or garment shown in Image 2",
+    );
+  });
+
   it("creates distinct AI tool prompts for scene and showcase modes", () => {
     const backgroundPrompt = buildGenerationPrompt({
       ...baseConfig,

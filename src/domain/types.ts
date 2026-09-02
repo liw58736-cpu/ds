@@ -29,6 +29,35 @@ export type GenerationVersion = "standard" | "brand";
 
 export type GenerationQuality = "standard" | "2k" | "4k";
 
+export type InspirationBackground =
+  | "original"
+  | "studio"
+  | "lifestyle"
+  | "minimal"
+  | "seasonal";
+export type InspirationPose = "natural" | "static" | "dynamic" | "closeup";
+export type InspirationModel = "none" | "female" | "male" | "diverse";
+export type InspirationComposition = "hero" | "editorial" | "split" | "ugc";
+export type InspirationPurpose =
+  | "product_listing"
+  | "social_post"
+  | "ad_creative"
+  | "brand_story";
+export type InspirationProductHandling =
+  | "preserve"
+  | "feature"
+  | "wear"
+  | "in_use";
+
+export interface InspirationSettings {
+  background: InspirationBackground;
+  pose: InspirationPose;
+  model: InspirationModel;
+  composition: InspirationComposition;
+  purpose: InspirationPurpose;
+  productHandling: InspirationProductHandling;
+}
+
 export type MainImageModuleId =
   | "hero_kv"
   | "overall_show"
@@ -67,6 +96,8 @@ export type WhiteBackgroundMode =
   | "retouch"
   | "outfit_change"
   | "product_showcase"
+  | "watermark_remove"
+  | "remove_object"
   | "pure_white"
   | "transparent"
   | "light_gray";
@@ -97,6 +128,7 @@ export interface GenerationConfig {
   selectedMainModules?: MainImageModuleId[];
   detailModuleCounts?: Partial<Record<DetailPageModuleId, number>>;
   moduleReferenceAssets?: Partial<Record<string, ModuleReferenceAsset[]>>;
+  inspirationSettings?: InspirationSettings;
   whiteBackgroundMode?: WhiteBackgroundMode;
   shadowMode?: ShadowMode;
 }

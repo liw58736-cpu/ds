@@ -8,19 +8,32 @@ import { LegalPage } from "./components/LegalPage";
 import { LoginPage } from "./components/LoginPage";
 import { PricingPage } from "./components/PricingPage";
 import { Workspace } from "./components/Workspace";
+import { MotionStudioPage } from "./components/MotionStudioPage";
+import { ImageCleanupPage } from "./components/ImageCleanupPage";
 import { getCurrentAccountSnapshot } from "./api/accountApi";
 import { ACCOUNT_CHANGED_EVENT, clearAccountSession } from "./storage/accountStore";
+import type { GenerationModule } from "./domain/types";
 
 const studioPages = [
   "main_image",
   "white_background",
   "detail_page",
+  "inspiration",
 ] as const satisfies readonly AppPage[];
 
 type StudioPage = (typeof studioPages)[number];
 
 function isStudioPage(page: AppPage): page is StudioPage {
   return (studioPages as readonly AppPage[]).includes(page);
+}
+
+function getWorkspaceModule(
+  page: StudioPage,
+): Extract<
+  GenerationModule,
+  "main_image" | "white_background" | "detail_page" | "lifestyle"
+> {
+  return page === "inspiration" ? "lifestyle" : page;
 }
 
 export default function App() {
@@ -84,6 +97,14 @@ export default function App() {
       <HistoryPage />
     ) : page === "pricing" ? (
       <PricingPage />
+    ) : page === "motion" ? (
+      <MotionStudioPage />
+    ) : page === "cleanup" ? (
+      <ImageCleanupPage
+        isAuthenticated={isAuthenticated}
+        onRequireLogin={() => handlePageChange("login")}
+        onOpenPricing={() => handlePageChange("pricing")}
+      />
     ) : page === "account" ? (
       <AccountPage paymentStatus={initialPaymentStatus} onLogout={handleLogout} />
     ) : page === "login" ? (
@@ -168,7 +189,7 @@ export default function App() {
       >
         {shouldMountWorkspace ? (
           <Workspace
-            activeModule={activeStudioModule}
+            activeModule={getWorkspaceModule(activeStudioModule)}
             isVisible={isWorkspaceVisible}
             isAuthenticated={isAuthenticated}
             onOpenPricing={() => handlePageChange("pricing")}

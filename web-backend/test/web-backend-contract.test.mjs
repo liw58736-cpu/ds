@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -22,6 +23,17 @@ function paddleSignature(rawBody, secret, timestamp = Math.floor(Date.now() / 10
   const h1 = createHmac("sha256", secret).update(`${timestamp}:${rawBody}`).digest("hex");
   return `ts=${timestamp};h1=${h1}`;
 }
+
+test("schema indexes common account and history lookup paths", () => {
+  const schema = readFileSync(
+    new URL("../supabase/schema.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(schema, /web_users_email_idx/i);
+  assert.match(schema, /web_credit_transactions_user_created_idx/i);
+  assert.match(schema, /web_auth_codes_email_type_created_idx/i);
+});
 
 test("health endpoint reports deployment commit and missing configuration", async () => {
   const tablePaths = [
@@ -94,6 +106,179 @@ test("health endpoint reports deployment commit and missing configuration", asyn
     missing: [],
     optionalMissing: [],
   });
+});
+
+test("material import extracts public Open Graph and page images for an authenticated user", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+    },
+    resolveHost: async () => [{ address: "93.184.216.34", family: 4 }],
+    fetch: async (url) => {
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://public.example.com/post/1") {
+        return new Response(
+          '<html><head><meta property="og:title" content="Summer product inspiration"><meta property="og:image" content="/images/cover.jpg"></head><body><img data-src="https://cdn.example.com/detail.png"></body></html>',
+          { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
+        );
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/materials/import", {
+      method: "POST",
+      headers: { Authorization: "Bearer access-token", "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://public.example.com/post/1", authorized: true }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    source_url: "https://public.example.com/post/1",
+    title: "Summer product inspiration",
+    images: [
+      "https://public.example.com/images/cover.jpg",
+      "https://cdn.example.com/detail.png",
+    ],
+    limited: false,
+  });
+});
+
+test("material import rejects private network URLs and missing authorization confirmation", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+    },
+    fetch: async (url) => {
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const privateResponse = await app.handle(
+    new Request("http://local.test/api/v1/materials/import", {
+      method: "POST",
+      headers: { Authorization: "Bearer access-token", "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "http://127.0.0.1/private", authorized: true }),
+    }),
+  );
+  assert.equal(privateResponse.status, 422);
+
+  const permissionResponse = await app.handle(
+    new Request("http://local.test/api/v1/materials/import", {
+      method: "POST",
+      headers: { Authorization: "Bearer access-token", "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://public.example.com/post/1", authorized: false }),
+    }),
+  );
+  assert.equal(permissionResponse.status, 422);
+});
+
+test("material store copies an authorized public image into isolated web storage", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_MATERIAL_STORAGE_BUCKET: "web-materials",
+    },
+    resolveHost: async () => [{ address: "93.184.216.34", family: 4 }],
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://cdn.example.com/material.webp") {
+        return new Response(Buffer.from("stable-material"), {
+          status: 200,
+          headers: { "Content-Type": "image/webp" },
+        });
+      }
+      if (url === "https://web-project.supabase.co/storage/v1/bucket") {
+        return jsonResponse({ id: "web-materials" }, 200);
+      }
+      if (url.startsWith("https://web-project.supabase.co/storage/v1/object/web-materials/")) {
+        assert.equal(init.method, "PUT");
+        assert.equal(init.headers["Content-Type"], "image/webp");
+        assert.equal(await init.body.text(), "stable-material");
+        return jsonResponse({ Key: "stored" }, 200);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/materials/store", {
+      method: "POST",
+      headers: { Authorization: "Bearer access-token", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://cdn.example.com/material.webp",
+        authorized: true,
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  assert.match(
+    body.stored_url,
+    /^https:\/\/web-project\.supabase\.co\/storage\/v1\/object\/public\/web-materials\/web-user-1\/materials\//,
+  );
+  assert.equal(body.content_type, "image/webp");
+  assert.equal(body.size, Buffer.byteLength("stable-material"));
+  assert.equal(calls.some((call) => call.url === "https://cdn.example.com/material.webp"), true);
+});
+
+test("health endpoint reuses a short database check cache", async () => {
+  const tablePaths = [
+    "/rest/v1/web_users?select=id&limit=1",
+    "/rest/v1/web_credit_transactions?select=id&limit=1",
+    "/rest/v1/web_generations?select=id&limit=1",
+    "/rest/v1/web_auth_codes?select=id&limit=1",
+    "/rest/v1/web_billing_events?select=id&limit=1",
+  ];
+  const databaseCalls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_RESEND_API_KEY: "resend-key",
+      WEB_AUTH_EMAIL_FROM: "kroma <no-reply@example.com>",
+      WEB_AUTH_REDIRECT_URL: "https://kromaai.app",
+      WEB_ALLOWED_AUTH_REDIRECTS: "https://kromaai.app",
+      WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+      WEB_PADDLE_PRICE_CREDITS_JSON: '{"pri_test":{"credits":120}}',
+      WEB_IMAGE_API_BASE_URL: "https://image-web.example.com/api/v1",
+      WEB_IMAGE_API_KEY: "image-secret",
+    },
+    fetch: async (url) => {
+      if (tablePaths.some((path) => url.endsWith(path))) {
+        databaseCalls.push(url);
+        return jsonResponse([]);
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const first = await app.handle(new Request("http://local.test/api/v1/health"));
+  const second = await app.handle(new Request("http://local.test/api/v1/health"));
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.equal(databaseCalls.length, tablePaths.length);
 });
 
 test("health endpoint accepts the mobile app image router without an image api key", async () => {
@@ -1232,6 +1417,127 @@ test("PackyAPI source-image jobs use the edit endpoint and omit unsupported resp
   assert.equal(calls.some((call) => call.url.includes("/images/edits")), true);
 });
 
+test("PackyAPI masked cleanup sends the painted mask as a multipart file", async () => {
+  const sourceImage = `data:image/png;base64,${Buffer.from("source-image").toString("base64")}`;
+  const paintedMask = `data:image/png;base64,${Buffer.from("painted-mask").toString("base64")}`;
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      PACKYAPI_BASE_URL: "https://packyapi.example.com/v1",
+      PACKYAPI_KEY_1: "packy-key",
+      PACKYAPI_IMAGE_MODEL: "gpt-image-2",
+    },
+    fetch: async (url, init = {}) => {
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://packyapi.example.com/v1/images/edits") {
+        assert.equal(init.body instanceof FormData, true);
+        assert.equal(init.body.getAll("image").length, 1);
+        const mask = init.body.get("mask");
+        assert.equal(mask instanceof Blob, true);
+        assert.equal(await mask.text(), "painted-mask");
+        return jsonResponse({
+          data: [{ url: "https://cdn.example.com/cleaned.png" }],
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "Remove only the painted watermark.",
+        image_base64: sourceImage,
+        mask_base64: paintedMask,
+        quality: "standard",
+        size: "1024x1024",
+        task_type: "watermark_remove",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+  assert.equal((await readJson(task)).image_url, "https://cdn.example.com/cleaned.png");
+});
+
+test("AI outfit change uses edit routing with the uploaded target garment image", async () => {
+  const calls = [];
+  const productImage = `data:image/png;base64,${Buffer.from("person").toString("base64")}`;
+  const targetGarmentImage = `data:image/png;base64,${Buffer.from("target-garment").toString("base64")}`;
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      PACKYAPI_BASE_URL: "https://packyapi.example.com/v1",
+      PACKYAPI_KEY_1: "packy-key",
+      PACKYAPI_IMAGE_MODEL: "gpt-image-2",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://packyapi.example.com/v1/images/edits") {
+        assert.equal(init.method, "POST");
+        assert.equal(init.body instanceof FormData, true);
+        assert.equal(init.body.get("prompt"), "Use Image 2 as the target clothing.");
+        assert.equal(init.body.getAll("image").length, 2);
+        return jsonResponse({
+          data: [{ url: "https://cdn.example.com/outfit-change.png" }],
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "Use Image 2 as the target clothing.",
+        image_base64: productImage,
+        template_image_base64: targetGarmentImage,
+        template_image_base64s: [targetGarmentImage],
+        quality: "standard",
+        size: "1024x1024",
+        task_type: "image_edit",
+        style: "white_background:outfit_change:standard",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+  const taskBody = await readJson(task);
+
+  assert.equal(taskBody.status, "done");
+  assert.equal(taskBody.image_url, "https://cdn.example.com/outfit-change.png");
+  assert.equal(calls.some((call) => call.url.includes("/images/generations")), false);
+  assert.equal(calls.some((call) => call.url.includes("/images/edits")), true);
+});
+
 test("AI edit tools fall back to standard providers when PackyAPI edit fails", async () => {
   const calls = [];
   const app = createWebBackend({
@@ -1941,6 +2247,89 @@ test("paddle webhook derives credits from server-side price mapping", async () =
     description: "Paddle purchase: 标准包",
     reference_id: "txn_price_map",
   });
+});
+
+test("paddle webhook ignores client supplied credits when price mapping exists", async () => {
+  const users = [{ id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" }];
+  const transactions = [];
+  const billingEvents = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
+      WEB_PADDLE_PRICE_CREDITS_JSON: JSON.stringify({
+        pri_standard: {
+          credits: 420,
+          plan_id: "standard-top-up",
+          plan_name: "Standard package",
+        },
+      }),
+    },
+    fetch: async (url, init = {}) => {
+      if (url.endsWith("/rest/v1/web_billing_events")) {
+        const body = JSON.parse(init.body);
+        billingEvents.push(body);
+        return jsonResponse([body]);
+      }
+      if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_tampered_credits")) {
+        if (init.method !== "PATCH") {
+          return jsonResponse(billingEvents.map((event) => ({ status: event.status })));
+        }
+        Object.assign(billingEvents[0], JSON.parse(init.body));
+        return jsonResponse([billingEvents[0]]);
+      }
+      if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
+        if (init.method === "PATCH") {
+          users[0].credits = JSON.parse(init.body).credits;
+          return jsonResponse([users[0]]);
+        }
+        return jsonResponse(users);
+      }
+      if (url.endsWith("/rest/v1/web_credit_transactions")) {
+        transactions.push(JSON.parse(init.body));
+        return jsonResponse([transactions.at(-1)]);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const payload = {
+    event_id: "evt_tampered_credits",
+    event_type: "transaction.completed",
+    data: {
+      id: "txn_tampered_credits",
+      custom_data: {
+        user_id: "web-user-1",
+        credits: 999999,
+      },
+      items: [
+        {
+          price: {
+            id: "pri_standard",
+          },
+        },
+      ],
+    },
+  };
+  const rawBody = JSON.stringify(payload);
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/billing/paddle/webhook", {
+      method: "POST",
+      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      body: rawBody,
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await readJson(response), {
+    received: true,
+    credited: 420,
+    credits_remaining: 425,
+  });
+  assert.equal(users[0].credits, 425);
+  assert.equal(transactions[0].amount, 420);
 });
 
 test("paddle webhook rejects invalid signatures before crediting", async () => {

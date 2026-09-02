@@ -63,6 +63,8 @@ services:
         sync: false
       - key: WEB_GENERATION_STORAGE_BUCKET
         value: web-generation-results
+      - key: WEB_MATERIAL_STORAGE_BUCKET
+        value: web-imported-materials
 
   - type: web
     name: kroma-web

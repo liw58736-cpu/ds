@@ -4,6 +4,13 @@ import type {
   GenerationConfig,
   GenerationResolution,
   GenerationModule,
+  InspirationBackground,
+  InspirationComposition,
+  InspirationModel,
+  InspirationPose,
+  InspirationPurpose,
+  InspirationProductHandling,
+  InspirationSettings,
   ModuleReferenceAsset,
   GenerationResultAsset,
   MainImageModuleId,
@@ -98,11 +105,50 @@ const whiteBackgroundModes = new Set<WhiteBackgroundMode>([
   "retouch",
   "outfit_change",
   "product_showcase",
+  "watermark_remove",
+  "remove_object",
   "pure_white",
   "transparent",
   "light_gray",
 ]);
 const shadowModes = new Set<ShadowMode>(["natural", "none", "contact_shadow"]);
+const inspirationBackgrounds = new Set<InspirationBackground>([
+  "original",
+  "studio",
+  "lifestyle",
+  "minimal",
+  "seasonal",
+]);
+const inspirationPoses = new Set<InspirationPose>([
+  "natural",
+  "static",
+  "dynamic",
+  "closeup",
+]);
+const inspirationModels = new Set<InspirationModel>([
+  "none",
+  "female",
+  "male",
+  "diverse",
+]);
+const inspirationCompositions = new Set<InspirationComposition>([
+  "hero",
+  "editorial",
+  "split",
+  "ugc",
+]);
+const inspirationPurposes = new Set<InspirationPurpose>([
+  "product_listing",
+  "social_post",
+  "ad_creative",
+  "brand_story",
+]);
+const inspirationProductHandling = new Set<InspirationProductHandling>([
+  "preserve",
+  "feature",
+  "wear",
+  "in_use",
+]);
 const statuses = new Set<TaskStatus>([
   "queued",
   "processing",
@@ -208,6 +254,40 @@ function parseModuleReferenceAssets(
   );
 }
 
+function parseInspirationSettings(value: unknown): InspirationSettings | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const { background, pose, model, composition, purpose, productHandling } = value;
+
+  if (
+    !isString(background) ||
+    !inspirationBackgrounds.has(background as InspirationBackground) ||
+    !isString(pose) ||
+    !inspirationPoses.has(pose as InspirationPose) ||
+    !isString(model) ||
+    !inspirationModels.has(model as InspirationModel) ||
+    !isString(composition) ||
+    !inspirationCompositions.has(composition as InspirationComposition) ||
+    !isString(purpose) ||
+    !inspirationPurposes.has(purpose as InspirationPurpose) ||
+    !isString(productHandling) ||
+    !inspirationProductHandling.has(productHandling as InspirationProductHandling)
+  ) {
+    return undefined;
+  }
+
+  return {
+    background: background as InspirationBackground,
+    pose: pose as InspirationPose,
+    model: model as InspirationModel,
+    composition: composition as InspirationComposition,
+    purpose: purpose as InspirationPurpose,
+    productHandling: productHandling as InspirationProductHandling,
+  };
+}
+
 function parseProductInput(value: unknown): ProductInput | null {
   if (!isRecord(value)) {
     return null;
@@ -277,6 +357,7 @@ function parseConfig(value: unknown): GenerationConfig | null {
     selectedMainModules,
     detailModuleCounts,
     moduleReferenceAssets,
+    inspirationSettings,
     whiteBackgroundMode,
     shadowMode,
   } = value;
@@ -300,6 +381,7 @@ function parseConfig(value: unknown): GenerationConfig | null {
 
   const parsedModuleReferenceAssets =
     parseModuleReferenceAssets(moduleReferenceAssets);
+  const parsedInspirationSettings = parseInspirationSettings(inspirationSettings);
 
   return {
     module: module as GenerationModule,
@@ -318,6 +400,9 @@ function parseConfig(value: unknown): GenerationConfig | null {
     detailModuleCounts: parseDetailModuleCounts(detailModuleCounts),
     ...(Object.keys(parsedModuleReferenceAssets).length > 0
       ? { moduleReferenceAssets: parsedModuleReferenceAssets }
+      : {}),
+    ...(parsedInspirationSettings
+      ? { inspirationSettings: parsedInspirationSettings }
       : {}),
     whiteBackgroundMode:
       isString(whiteBackgroundMode) &&

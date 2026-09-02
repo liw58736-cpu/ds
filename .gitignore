@@ -4,6 +4,7 @@ public/version.json
 coverage
 playwright-report
 test-results
+output
 tmp
 .superpowers
 .env
