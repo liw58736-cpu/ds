@@ -290,6 +290,9 @@ test("new content tools render and remain usable without horizontal overflow", a
   await page.getByRole("button", { name: "Live图", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Live 图生成" })).toBeVisible();
   await expect(page.getByLabel("上传动态源图")).toBeVisible();
+  await expect(page.getByLabel("动态提示词")).toBeVisible();
+  await expect(page.getByText("固定 3 秒", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("运镜方式")).toHaveCount(0);
   await expectNoHorizontalDocumentOverflow(page);
 
   await page.getByRole("button", { name: "图片库", exact: true }).click();
@@ -325,7 +328,8 @@ test("light motion generates a real downloadable WebM in the browser", async ({
   await page
     .getByLabel("上传动态源图")
     .setInputFiles("src/assets/home/kroma-main-before-v2.webp");
-  await page.getByLabel("时长").selectOption("3");
+  await page.getByLabel("动态提示词").fill("画面缓慢拉远，逐步展示完整商品。");
+  await expect(page.locator(".motion-preview-frame")).toHaveClass(/is-zoom_out/);
   await page.getByLabel("清晰度").selectOption("1080p");
   await expect(page.getByRole("button", { name: "生成 Live 图（2 积分）" })).toBeVisible();
   await page.getByLabel("清晰度").selectOption("2k");

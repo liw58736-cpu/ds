@@ -166,6 +166,10 @@ describe("App", () => {
 
     expect(screen.getByRole("heading", { name: "Live 图生成" })).toBeInTheDocument();
     expect(screen.getByLabelText("上传动态源图")).toBeInTheDocument();
+    expect(screen.getByLabelText("动态提示词")).toHaveValue("画面缓慢自然推进，主体保持居中，整体稳定流畅。");
+    expect(screen.getByText("固定 3 秒")).toBeInTheDocument();
+    expect(screen.queryByLabelText("运镜方式")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("时长")).not.toBeInTheDocument();
     expect(screen.getByLabelText("清晰度")).toHaveValue("720p");
   });
 

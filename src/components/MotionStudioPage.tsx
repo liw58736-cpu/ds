@@ -8,12 +8,16 @@ type MotionStyle = "zoom_in" | "zoom_out" | "pan_left" | "float";
 type MotionRatio = "9:16" | "4:5" | "1:1";
 type MotionClarity = "720p" | "1080p" | "2k";
 
-const motionStyles: Array<{ value: MotionStyle; label: string; description: string }> = [
-  { value: "zoom_in", label: "缓慢推进", description: "适合商品特写和氛围图" },
-  { value: "zoom_out", label: "缓慢拉远", description: "逐步展示完整画面" },
-  { value: "pan_left", label: "横向运镜", description: "适合宽场景和陈列图" },
-  { value: "float", label: "轻微漂移", description: "适合社媒内容和封面" },
-];
+const livePhotoDurationSeconds = 3;
+const defaultMotionPrompt = "画面缓慢自然推进，主体保持居中，整体稳定流畅。";
+
+function resolveMotionStyle(prompt: string): MotionStyle {
+  const normalizedPrompt = prompt.trim().toLowerCase();
+  if (/拉远|缩小|远景|全景|zoom\s*out/.test(normalizedPrompt)) return "zoom_out";
+  if (/横移|侧移|向左|向右|左右|平移|pan/.test(normalizedPrompt)) return "pan_left";
+  if (/漂移|浮动|呼吸|轻摆|摇曳|float/.test(normalizedPrompt)) return "float";
+  return "zoom_in";
+}
 
 const clarityScale: Record<MotionClarity, number> = {
   "720p": 720,
@@ -97,22 +101,21 @@ export function MotionStudioPage({
 }: MotionStudioPageProps = {}) {
   const [imageUrl, setImageUrl] = useState("");
   const [fileName, setFileName] = useState("");
-  const [style, setStyle] = useState<MotionStyle>("zoom_in");
+  const [motionPrompt, setMotionPrompt] = useState(defaultMotionPrompt);
   const [ratio, setRatio] = useState<MotionRatio>("9:16");
-  const [duration, setDuration] = useState(5);
   const [clarity, setClarity] = useState<MotionClarity>("720p");
-  const [status, setStatus] = useState("上传静图或从生成结果进入，选择清晰度后生成 Live 图。失败不扣积分。");
+  const [status, setStatus] = useState("上传静图、填写动态提示词并选择清晰度，即可生成固定 3 秒 Live 图。失败不扣积分。");
   const [downloadUrl, setDownloadUrl] = useState("");
   const [isRendering, setIsRendering] = useState(false);
   const [errorNotice, setErrorNotice] = useState("");
-  const activeStyle = useMemo(() => motionStyles.find((item) => item.value === style)!, [style]);
+  const style = useMemo(() => resolveMotionStyle(motionPrompt), [motionPrompt]);
   const creditCost = clarityCredits[clarity];
 
   useEffect(() => {
     if (!initialProduct) return;
     setImageUrl(initialProduct.imageUrl);
     setFileName(initialProduct.fileName);
-    setStatus("已载入生成结果，请选择清晰度和动效后生成 Live 图。");
+    setStatus("已载入生成结果，请填写动态提示词并选择清晰度。");
     onInitialProductConsumed?.();
   }, [initialProduct, onInitialProductConsumed]);
 
@@ -124,7 +127,7 @@ export function MotionStudioPage({
     if (!file) return;
     setImageUrl(await readFileAsDataUrl(file));
     setFileName(file.name);
-    setStatus("已选择静图。可先预览运镜，再生成 WebM 视频。");
+    setStatus("已选择静图。填写动态提示词后即可生成 3 秒 Live 图。");
     if (downloadUrl) {
       URL.revokeObjectURL(downloadUrl);
       setDownloadUrl("");
@@ -173,7 +176,7 @@ export function MotionStudioPage({
       const startedAt = performance.now();
       await new Promise<void>((resolve) => {
         const frame = (now: number) => {
-          const progress = Math.min(1, (now - startedAt) / (duration * 1000));
+          const progress = Math.min(1, (now - startedAt) / (livePhotoDurationSeconds * 1000));
           drawMotionFrame(context, image, size.width, size.height, progress, style);
           if (progress < 1) requestAnimationFrame(frame);
           else resolve();
@@ -188,7 +191,7 @@ export function MotionStudioPage({
       setDownloadUrl(nextUrl);
       try {
         await consumeCredits({ amount: creditCost, label: `${clarity} Live 图` });
-        setStatus(`已生成 ${duration} 秒 ${ratio} ${clarity} Live 图，已扣除 ${creditCost} 积分。`);
+        setStatus(`已生成 ${livePhotoDurationSeconds} 秒 ${ratio} ${clarity} Live 图，已扣除 ${creditCost} 积分。`);
       } catch {
         setStatus("Live 图已生成，但积分同步暂时失败；结果仍可下载。");
       }
@@ -217,18 +220,22 @@ export function MotionStudioPage({
             <input type="file" accept="image/*" aria-label="上传动态源图" onChange={(event) => void handleFile(event.target.files?.[0])} />
           </label>
           {fileName ? <p className="motion-file-name">当前图片：{fileName}</p> : null}
-          <div className="motion-style-grid" aria-label="运镜方式">
-            {motionStyles.map((item) => (
-              <button type="button" key={item.value} className={style === item.value ? "is-active" : undefined} aria-pressed={style === item.value} onClick={() => setStyle(item.value)}>
-                <strong>{item.label}</strong><span>{item.description}</span>
-              </button>
-            ))}
-          </div>
+          <label className="field motion-prompt-field">
+            <span>动态提示词</span>
+            <textarea
+              rows={4}
+              value={motionPrompt}
+              aria-label="动态提示词"
+              onChange={(event) => setMotionPrompt(event.target.value)}
+              placeholder="例如：画面缓慢推进，主体保持居中，动作自然稳定。"
+            />
+            <small>可描述推进、拉远、横移或轻微漂移；当前生成固定 3 秒轻动态。</small>
+          </label>
           <div className="compact-fields">
             <label className="field"><span>比例</span><select value={ratio} onChange={(event) => setRatio(event.target.value as MotionRatio)}><option>9:16</option><option>4:5</option><option>1:1</option></select></label>
-            <label className="field"><span>时长</span><select value={duration} onChange={(event) => setDuration(Number(event.target.value))}><option value={3}>3 秒</option><option value={5}>5 秒</option><option value={8}>8 秒</option></select></label>
             <label className="field"><span>清晰度</span><select value={clarity} onChange={(event) => setClarity(event.target.value as MotionClarity)}><option value="720p">720P · 1 积分</option><option value="1080p">1080P · 2 积分</option><option value="2k">2K · 4 积分</option></select></label>
           </div>
+          <p className="motion-fixed-duration"><span>时长</span><strong>固定 3 秒</strong></p>
           <button type="button" className="primary-button motion-render-button" disabled={!imageUrl || isRendering} onClick={renderVideo}><Film aria-hidden="true" /><span>{isRendering ? "正在生成" : `生成 Live 图（${creditCost} 积分）`}</span></button>
           <p className="motion-credit-hint">720P 1 积分 · 1080P 2 积分 · 2K 4 积分；成功后扣点，失败不扣点。</p>
           {downloadUrl ? <a className="secondary-button motion-download-button" href={downloadUrl} download={`${fileName.replace(/\.[^.]+$/, "") || "kroma-motion"}.webm`}><Download aria-hidden="true" />下载 WebM</a> : null}
@@ -236,7 +243,7 @@ export function MotionStudioPage({
         </section>
         <section className="panel motion-preview-panel" aria-label="动态预览">
           <div className={`motion-preview-frame is-${style}`} data-ratio={ratio}>
-            {imageUrl ? <img src={imageUrl} alt="动态源图预览" /> : <div><Play aria-hidden="true" /><strong>等待静图</strong><span>上传后这里会循环预览 {activeStyle.label}</span></div>}
+            {imageUrl ? <img src={imageUrl} alt="动态源图预览" /> : <div><Play aria-hidden="true" /><strong>等待静图</strong><span>上传后这里会按提示词循环预览</span></div>}
           </div>
         </section>
       </div>

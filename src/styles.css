@@ -3429,6 +3429,40 @@ body {
   line-height: 1.6;
 }
 
+.motion-prompt-field {
+  padding: 0;
+}
+
+.motion-prompt-field textarea {
+  width: 100%;
+  min-height: 104px;
+  resize: vertical;
+}
+
+.motion-prompt-field small {
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.motion-fixed-duration {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  color: var(--ink-muted);
+  background: var(--surface-soft);
+  font-size: 0.82rem;
+}
+
+.motion-fixed-duration strong {
+  color: var(--ink);
+}
+
 .material-import-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
