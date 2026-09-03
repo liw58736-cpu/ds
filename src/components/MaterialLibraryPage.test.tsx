@@ -1,11 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { importPublicMaterial, saveImportedMaterial } from "../api/materialImportApi";
+import { importPublicMaterial, saveImportedMaterial, uploadLocalMaterial } from "../api/materialImportApi";
 import { listMaterialLibraryAssets } from "../api/materialLibraryApi";
 import { MaterialLibraryPage } from "./MaterialLibraryPage";
 
-vi.mock("../api/materialImportApi", () => ({ importPublicMaterial: vi.fn(), saveImportedMaterial: vi.fn() }));
+vi.mock("../api/materialImportApi", () => ({ importPublicMaterial: vi.fn(), saveImportedMaterial: vi.fn(), uploadLocalMaterial: vi.fn() }));
 vi.mock("../api/materialLibraryApi", () => ({ listMaterialLibraryAssets: vi.fn() }));
 
 afterEach(() => vi.clearAllMocks());
@@ -40,5 +40,29 @@ describe("MaterialLibraryPage", () => {
 
     expect(await screen.findByText("图片库暂时无法同步。点击“重新读取”重试。")).toBeVisible();
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("is the only surface that accepts multiple local image uploads", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listMaterialLibraryAssets).mockResolvedValue([]);
+    vi.mocked(uploadLocalMaterial).mockImplementation(async (file) => ({
+      id: `saved-${file.name}`,
+      imageUrl: `https://cdn.example.com/${file.name}`,
+      fileName: file.name,
+      createdAt: "2026-09-03T00:00:00.000Z",
+      contentType: file.type,
+      size: file.size,
+    }));
+    render(<MaterialLibraryPage isAuthenticated onRequireLogin={vi.fn()} />);
+
+    const input = screen.getByLabelText("从本地批量上传图片");
+    expect(input).toHaveAttribute("multiple");
+    await user.upload(input, [
+      new File(["one"], "one.png", { type: "image/png" }),
+      new File(["two"], "two.webp", { type: "image/webp" }),
+    ]);
+
+    await waitFor(() => expect(uploadLocalMaterial).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("已上传 2 张图片。")).toBeVisible();
   });
 });

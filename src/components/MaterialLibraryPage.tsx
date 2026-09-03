@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useState } from "react";
 import { Download, ImagePlus, Link2, LoaderCircle, RefreshCw } from "lucide-react";
 import {
   importPublicMaterial,
   saveImportedMaterial,
+  uploadLocalMaterial,
 } from "../api/materialImportApi";
 import { listMaterialLibraryAssets, type MaterialLibraryAsset } from "../api/materialLibraryApi";
 import { NoticeDialog } from "./NoticeDialog";
@@ -27,6 +28,8 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
   const [assets, setAssets] = useState<MaterialLibraryAsset[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("可一次选择多张图片，每张不超过 20MB。");
   const [libraryStatus, setLibraryStatus] = useState("");
   const [message, setMessage] = useState("粘贴小红书分享文案或公开链接，提取后只保存需要的照片。");
   const [notice, setNotice] = useState<PageNotice | null>(null);
@@ -87,6 +90,41 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
     }
   };
 
+  const handleLocalUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []).slice(0, 30);
+    event.target.value = "";
+    if (files.length === 0 || requireLogin()) return;
+
+    setIsUploading(true);
+    setUploadStatus(`正在上传 0 / ${files.length} 张…`);
+    let uploadedCount = 0;
+    const failedNames: string[] = [];
+
+    for (const file of files) {
+      try {
+        await uploadLocalMaterial(file);
+        uploadedCount += 1;
+      } catch {
+        failedNames.push(file.name);
+      }
+      setUploadStatus(`正在上传 ${uploadedCount + failedNames.length} / ${files.length} 张…`);
+    }
+
+    setIsUploading(false);
+    setUploadStatus(
+      failedNames.length === 0
+        ? `已上传 ${uploadedCount} 张图片。`
+        : `已上传 ${uploadedCount} 张，${failedNames.length} 张失败。`,
+    );
+    await loadLibrary();
+    if (failedNames.length > 0) {
+      setNotice({
+        title: "部分图片上传失败",
+        message: `以下图片未能上传：${failedNames.join("、")}。请确认格式为 JPG、PNG 或 WebP，且单张不超过 20MB。`,
+      });
+    }
+  };
+
   const toggleImage = (imageUrl: string) => {
     setSelectedImages((current) => {
       const next = new Set(current);
@@ -132,6 +170,28 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
         <p className="eyebrow">Image Library</p>
         <h1>图片库</h1>
         <p>统一管理小红书提取图片、手动保存图片和所有生成结果。</p>
+      </section>
+
+      <section className="panel material-local-upload-panel" aria-labelledby="material-local-upload-title">
+        <div className="panel-heading">
+          <p className="eyebrow">Local Upload</p>
+          <h2 id="material-local-upload-title">从本地批量上传</h2>
+          <p>本地照片先统一保存到图片库，再到各个工具中选择使用。</p>
+        </div>
+        <label className={`material-local-upload${isUploading ? " is-uploading" : ""}`}>
+          {isUploading ? <LoaderCircle className="is-spinning" aria-hidden="true" /> : <ImagePlus aria-hidden="true" />}
+          <strong>{isUploading ? "正在上传图片" : "选择本地图片"}</strong>
+          <span>支持 JPG、PNG、WebP，可一次选择多张</span>
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            disabled={isUploading}
+            aria-label="从本地批量上传图片"
+            onChange={(event) => void handleLocalUpload(event)}
+          />
+        </label>
+        <p className="material-library-inline-status" role="status">{uploadStatus}</p>
       </section>
 
       <section className="panel material-extract-panel" aria-labelledby="material-extract-title">

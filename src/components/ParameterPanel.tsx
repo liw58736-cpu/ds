@@ -1,4 +1,4 @@
-import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   brandVersionExtraCredits,
@@ -7,6 +7,7 @@ import {
   getResolutionCreditCost,
 } from "../domain/creditCost";
 import { moduleLabels } from "../domain/defaults";
+import type { MaterialLibraryAsset } from "../api/materialLibraryApi";
 import type {
   AspectRatio,
   DetailPageModuleId,
@@ -22,6 +23,7 @@ import type {
   WhiteBackgroundMode,
 } from "../domain/types";
 import { NoticeDialog } from "./NoticeDialog";
+import { MaterialPickerDialog } from "./MaterialPickerDialog";
 
 type StudioModule = Extract<
   GenerationModule,
@@ -49,7 +51,7 @@ const pageMeta = {
   white_background: {
     eyebrow: "AI Tools",
     title: "AI工具",
-    description: "选择常用 AI 商品图工具，上传商品图后快速生成对应素材。",
+    description: "选择常用 AI 商品图工具，从图片库选取商品图后快速生成对应素材。",
   },
   detail_page: {
     eyebrow: "Detail Page Settings",
@@ -286,6 +288,9 @@ export function ParameterPanel({
     showModelChangeRequiredNotice,
     setShowModelChangeRequiredNotice,
   ] = useState(false);
+  const [libraryPickerTarget, setLibraryPickerTarget] = useState<
+    "outfit_change" | "model_change" | "module_reference" | null
+  >(null);
   const resolution = config.resolution ?? "1K";
   const generationVersion = config.generationVersion ?? "brand";
   const selectedMainModules = config.selectedMainModules ?? [];
@@ -458,125 +463,49 @@ export function ParameterPanel({
     setDraftReferenceNote([...new Set(notes)].join("\n"));
   };
 
-  const readReferenceFiles = async (
-    files: FileList | null,
-  ): Promise<ModuleReferenceAsset[]> => {
-    if (!files) {
-      return [];
-    }
-
-    const remainingSlots = Math.max(
-      0,
-      maxModuleReferenceAssets - draftImageReferenceAssets.length,
-    );
-    const selectedFiles = Array.from(files).slice(0, remainingSlots);
-
-    return Promise.all(
-      selectedFiles.map(
-        (file) =>
-          new Promise<ModuleReferenceAsset>((resolve, reject) => {
-            const reader = new FileReader();
-
-            reader.onload = () => {
-              resolve({
-                id: `module-ref-${Date.now().toString(36)}-${Math.random()
-                  .toString(36)
-                  .slice(2, 8)}`,
-                fileName: file.name,
-                imageUrl: String(reader.result ?? ""),
-                ...(draftReferenceNote.trim()
-                  ? { note: draftReferenceNote.trim() }
-                  : {}),
-              });
-            };
-            reader.onerror = () => reject(reader.error);
-            reader.readAsDataURL(file);
-          }),
-      ),
-    );
-  };
-
-  const handleReferenceFilesChange = async (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const assets = await readReferenceFiles(event.target.files);
-
-    setDraftReferenceAssets((currentAssets) =>
-      [...currentAssets, ...assets].slice(0, maxModuleReferenceAssets),
-    );
-    event.target.value = "";
-  };
-
-  const handleOutfitChangeTargetFileChange = async (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    const asset = await new Promise<ModuleReferenceAsset>((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        resolve({
-          id: `outfit-change-target-${Date.now().toString(36)}-${Math.random()
-            .toString(36)
-            .slice(2, 8)}`,
-          fileName: file.name,
-          imageUrl: String(reader.result ?? ""),
-          note: "Use this uploaded garment as the target clothing for outfit change.",
-        });
-      };
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
-
-    saveModuleReferenceAssets("outfit_change", [asset]);
-    setShowOutfitChangeRequiredNotice(false);
-    event.target.value = "";
-  };
-
   const removeOutfitChangeTargetAsset = () => {
     saveModuleReferenceAssets("outfit_change", []);
     setShowOutfitChangeRequiredNotice(true);
   };
 
-  const handleModelChangeTargetFileChange = async (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    const asset = await new Promise<ModuleReferenceAsset>((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        resolve({
-          id: `model-change-target-${Date.now().toString(36)}-${Math.random()
-            .toString(36)
-            .slice(2, 8)}`,
-          fileName: file.name,
-          imageUrl: String(reader.result ?? ""),
-          note: "Use this uploaded person as the target model reference. Preserve Image 1 clothing or product exactly.",
-        });
-      };
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
-
-    saveModuleReferenceAssets("model_change", [asset]);
-    setShowModelChangeRequiredNotice(false);
-    event.target.value = "";
-  };
-
   const removeModelChangeTargetAsset = () => {
     saveModuleReferenceAssets("model_change", []);
     setShowModelChangeRequiredNotice(true);
+  };
+
+  const handleLibraryAssetPick = (libraryAsset: MaterialLibraryAsset) => {
+    const baseAsset: ModuleReferenceAsset = {
+      id: `library-reference-${libraryAsset.id}-${Date.now().toString(36)}`,
+      fileName: libraryAsset.fileName,
+      imageUrl: libraryAsset.imageUrl,
+    };
+
+    if (libraryPickerTarget === "outfit_change") {
+      saveModuleReferenceAssets("outfit_change", [{
+        ...baseAsset,
+        note: "Use this selected garment as the target clothing for outfit change.",
+      }]);
+      setShowOutfitChangeRequiredNotice(false);
+      return;
+    }
+
+    if (libraryPickerTarget === "model_change") {
+      saveModuleReferenceAssets("model_change", [{
+        ...baseAsset,
+        note: "Use this selected person as the target model reference. Preserve Image 1 clothing or product exactly.",
+      }]);
+      setShowModelChangeRequiredNotice(false);
+      return;
+    }
+
+    if (libraryPickerTarget === "module_reference") {
+      setDraftReferenceAssets((currentAssets) => {
+        const withoutDuplicate = currentAssets.filter(
+          (asset) => asset.imageUrl !== baseAsset.imageUrl,
+        );
+        return [...withoutDuplicate, baseAsset].slice(-maxModuleReferenceAssets);
+      });
+    }
   };
 
   const saveReferenceAssets = () => {
@@ -874,16 +803,15 @@ export function ParameterPanel({
                 <span>换装服饰</span>
                 <small>多上传 1 张要换上的衣服，作为 Image 2 参考</small>
               </div>
-              <label className="outfit-change-upload">
-                <span>上传要换上的服饰图</span>
-                <small>建议使用清晰正面或半身服饰图</small>
-                <input
-                  aria-label="上传要换上的服饰图"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleOutfitChangeTargetFileChange}
-                />
-              </label>
+              <button
+                type="button"
+                className="outfit-change-upload"
+                aria-label="从图片库选择换装服饰图"
+                onClick={() => setLibraryPickerTarget("outfit_change")}
+              >
+                <span>从图片库选择服饰图</span>
+                <small>建议选择清晰正面或半身服饰图</small>
+              </button>
               {outfitChangeTargetAsset ? (
                 <div className="outfit-change-target-preview">
                   <img
@@ -913,16 +841,15 @@ export function ParameterPanel({
                 <span>目标模特</span>
                 <small>多上传 1 张模特照片，作为 Image 2 人物参考</small>
               </div>
-              <label className="outfit-change-upload">
-                <span>上传目标模特照片</span>
-                <small>建议使用清晰正面或半身照，避免遮挡面部</small>
-                <input
-                  aria-label="上传目标模特照片"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleModelChangeTargetFileChange}
-                />
-              </label>
+              <button
+                type="button"
+                className="outfit-change-upload"
+                aria-label="从图片库选择目标模特照片"
+                onClick={() => setLibraryPickerTarget("model_change")}
+              >
+                <span>从图片库选择目标模特</span>
+                <small>建议选择清晰正面或半身照，避免遮挡面部</small>
+              </button>
               {modelChangeTargetAsset ? (
                 <div className="outfit-change-target-preview">
                   <img
@@ -1208,17 +1135,15 @@ export function ParameterPanel({
                 ×
               </button>
             </div>
-            <label className="module-reference-upload">
-              <span>上传模块参考图</span>
+            <button
+              type="button"
+              className="module-reference-upload"
+              aria-label="从图片库添加模块参考图"
+              onClick={() => setLibraryPickerTarget("module_reference")}
+            >
+              <span>从图片库添加参考图</span>
               <small>最多 {maxModuleReferenceAssets} 张，作为 Image 2 参考素材</small>
-              <input
-                aria-label="上传模块参考图"
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleReferenceFilesChange}
-              />
-            </label>
+            </button>
             {draftImageReferenceAssets.length > 0 ? (
               <div className="module-reference-list">
                 {draftImageReferenceAssets.map((asset) => (
@@ -1267,8 +1192,8 @@ export function ParameterPanel({
       ) : null}
       <NoticeDialog
         open={showProductRequiredNotice}
-        title="请先上传商品图"
-        message="上传商品图后才能选择生成模块，避免生成与商品无关的无效图片。"
+        title="请先选择商品图"
+        message="请先从图片库选择商品图，再选择生成模块，避免生成与商品无关的无效图片。"
         onClose={() => setShowProductRequiredNotice(false)}
       />
       <NoticeDialog
@@ -1282,6 +1207,18 @@ export function ParameterPanel({
         title="请上传目标模特"
         message="换模特需要额外上传一张目标模特照片，系统会将它作为 Image 2 人物参考，只替换模特并保留原商品。"
         onClose={() => setShowModelChangeRequiredNotice(false)}
+      />
+      <MaterialPickerDialog
+        open={libraryPickerTarget !== null}
+        title={
+          libraryPickerTarget === "outfit_change"
+            ? "从图片库选择换装服饰"
+            : libraryPickerTarget === "model_change"
+              ? "从图片库选择目标模特"
+              : "从图片库添加模块参考图"
+        }
+        onPick={handleLibraryAssetPick}
+        onClose={() => setLibraryPickerTarget(null)}
       />
     </>
   );

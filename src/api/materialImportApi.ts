@@ -153,6 +153,53 @@ export async function saveImportedMaterial(
   throw new Error("登录状态已失效，请重新登录后保存素材。");
 }
 
+export async function uploadLocalMaterial(file: File): Promise<SavedMaterial> {
+  const baseUrl = getMaterialApiBaseUrl();
+  let token = getAccountAccessToken();
+
+  if (!baseUrl) throw new Error("本地图片上传需要连接网页账号后端。");
+  if (!token) throw new Error("请先登录后再上传图片。");
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+    throw new Error("只支持 PNG、JPG、JPEG 和 WebP 图片。");
+  }
+  if (file.size <= 0 || file.size > 20 * 1024 * 1024) {
+    throw new Error(file.size <= 0 ? "图片文件不能为空。" : "单张图片不能超过 20MB。");
+  }
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const form = new FormData();
+    form.append("image", file, file.name);
+    const response = await fetch(`${baseUrl}/materials/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+
+    if (response.status === 401 && attempt === 0) {
+      token = await refreshKromaSession();
+      if (token) continue;
+    }
+
+    if (!response.ok) {
+      const text = await response.text();
+      let message = text;
+      try {
+        const payload = JSON.parse(text) as { detail?: string };
+        message = payload.detail ?? text;
+      } catch {
+        // Keep response text when the backend did not return JSON.
+      }
+      throw new Error(message || `图片上传失败（HTTP ${response.status}）`);
+    }
+
+    const payload = (await response.json()) as StoredMaterialResponse;
+    if (!payload.stored_url) throw new Error("图片上传接口没有返回稳定地址。");
+    return normalizeSavedMaterial(payload);
+  }
+
+  throw new Error("登录状态已失效，请重新登录后上传图片。");
+}
+
 export async function listSavedMaterials(limit = 60): Promise<SavedMaterial[]> {
   const baseUrl = getMaterialApiBaseUrl();
   let token = getAccountAccessToken();

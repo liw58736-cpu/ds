@@ -67,6 +67,34 @@ async function seedAuthenticatedAccount(page: Page, balance = 100) {
   }, balance);
 }
 
+async function seedImageLibrary(page: Page) {
+  await page.addInitScript(() => {
+    const createTask = (id: string, fileName: string, url: string, createdAt: string) => ({
+      id,
+      productInput: { id: `${id}-source`, imageUrl: url, fileName, createdAt, source: "sample" },
+      config: { module: "main_image", platform: "amazon", aspectRatio: "1:1", style: "studio", outputFormat: "png", sellingPoints: "", specifications: "", selectedMainModules: ["hero_kv"] },
+      status: "completed",
+      resultUrls: [url],
+      resultAssets: [{ url, label: fileName }],
+      creditCost: 1,
+      createdAt,
+      completedAt: createdAt,
+      attempt: 1,
+    });
+    localStorage.setItem("commerce-studio-tasks-v1", JSON.stringify([
+      createTask("library-2", "library-detail.webp", "/src/assets/home/kroma-detail-before-v2.webp", "2026-09-03T00:01:00.000Z"),
+      createTask("library-1", "library-main.webp", "/src/assets/home/kroma-main-before-v2.webp", "2026-09-03T00:00:00.000Z"),
+    ]));
+  });
+}
+
+async function chooseImageLibraryAsset(page: Page, triggerName: string, fileName: string) {
+  await page.getByRole("button", { name: triggerName, exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: /从图片库/ });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: new RegExp(fileName) }).click();
+}
+
 async function openStudioPage(page: Page, navIndex: number) {
   await page.goto("/");
   await page.locator(".topnav-button").nth(navIndex).click();
@@ -128,17 +156,20 @@ test("main image multi-select creates one result per selected function and recor
 
 test("workspace uploads stay isolated by navigation and detail titles remain horizontal", async ({ page }) => {
   await seedAuthenticatedAccount(page);
+  await seedImageLibrary(page);
   await page.goto("/");
 
   await page.getByRole("button", { name: "商品主图", exact: true }).click();
-  await page.getByLabel("上传商品图").setInputFiles("src/assets/home/kroma-main-before-v2.webp");
-  await expect(page.getByText("kroma-main-before-v2.webp")).toBeVisible();
+  await chooseImageLibraryAsset(page, "从图片库选择商品图", "library-main.webp");
+  let productRegion = page.getByRole("region", { name: "产品素材" });
+  await expect(productRegion.getByText("library-main.webp")).toBeVisible();
 
   await page.getByRole("button", { name: "详情页", exact: true }).click();
-  await expect(page.getByText("kroma-main-before-v2.webp")).toHaveCount(0);
-  await expect(page.getByAltText("当前商品图")).toHaveCount(0);
-  await page.getByLabel("上传商品图").setInputFiles("src/assets/home/kroma-detail-before-v2.webp");
-  await expect(page.getByText("kroma-detail-before-v2.webp")).toBeVisible();
+  productRegion = page.getByRole("region", { name: "产品素材" });
+  await expect(productRegion.getByText("library-main.webp")).toHaveCount(0);
+  await expect(productRegion.getByAltText("当前商品图")).toHaveCount(0);
+  await chooseImageLibraryAsset(page, "从图片库选择商品图", "library-detail.webp");
+  await expect(productRegion.getByText("library-detail.webp")).toBeVisible();
 
   const firstModuleTitle = page.locator(".detail-module-button .module-card-topline strong").first();
   await expect(firstModuleTitle).toBeVisible();
@@ -148,8 +179,9 @@ test("workspace uploads stay isolated by navigation and detail titles remain hor
   }))).toEqual({ whiteSpace: "nowrap", writingMode: "horizontal-tb" });
 
   await page.getByRole("button", { name: "商品主图", exact: true }).click();
-  await expect(page.getByText("kroma-main-before-v2.webp")).toBeVisible();
-  await expect(page.getByText("kroma-detail-before-v2.webp")).toHaveCount(0);
+  productRegion = page.getByRole("region", { name: "产品素材" });
+  await expect(productRegion.getByText("library-main.webp")).toBeVisible();
+  await expect(productRegion.getByText("library-detail.webp")).toHaveCount(0);
 });
 
 test("detail page quantity controls create multiple results for the same module", async ({
@@ -173,6 +205,7 @@ test("AI tool modes all connect to generation and return a downloadable result",
   page,
 }) => {
   await seedAuthenticatedAccount(page, 100);
+  await seedImageLibrary(page);
   await openStudioPage(page, 3);
   await useSampleProductByCss(page);
   await chooseStandardOneK(page);
@@ -184,15 +217,11 @@ test("AI tool modes all connect to generation and return a downloadable result",
   for (let index = 0; index < toolCount; index += 1) {
     await toolButtons.nth(index).click();
     if ((await toolButtons.nth(index).textContent())?.trim() === "换装") {
-      await page
-        .getByLabel("上传要换上的服饰图")
-        .setInputFiles("src/assets/home/kroma-detail-before-v2.webp");
+      await chooseImageLibraryAsset(page, "从图片库选择换装服饰图", "library-detail.webp");
       await expect(page.getByAltText("要换上的服饰图")).toBeVisible();
     }
     if ((await toolButtons.nth(index).textContent())?.trim() === "换模特") {
-      await page
-        .getByLabel("上传目标模特照片")
-        .setInputFiles("src/assets/home/kroma-main-before-v2.webp");
+      await chooseImageLibraryAsset(page, "从图片库选择目标模特照片", "library-main.webp");
       await expect(page.getByAltText("目标模特照片")).toBeVisible();
     }
     await generateAndExpectResults(page, 1);
@@ -298,7 +327,7 @@ test("navigation surfaces render and preserve generated history", async ({
     page.getByRole("heading", { name: "最近任务", level: 2 }),
   ).toBeVisible();
   await expect(page.getByAltText("当前商品图")).toHaveCount(0);
-  await expect(page.getByAltText("生成结果")).toBeVisible();
+  await expect(page.locator(".history-result-grid").getByAltText("生成结果")).toBeVisible();
   await expect(
     page.locator(".history-result-grid").getByRole("button", { name: "下载" }),
   ).toBeVisible();
@@ -315,13 +344,14 @@ test("new content tools render and remain usable without horizontal overflow", a
 
   await page.getByRole("button", { name: "灵感创作", exact: true }).click();
   await expect(page.getByRole("heading", { name: "灵感创作" })).toBeVisible();
-  await expect(page.getByLabel("上传灵感原图")).toBeVisible();
-  await expect(page.getByLabel("上传产品服装图")).toBeVisible();
+  await expect(page.getByRole("button", { name: "从图片库选择灵感原图" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "从图片库选择产品服装图" })).toBeVisible();
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
   await expectNoHorizontalDocumentOverflow(page);
 
   await page.getByRole("button", { name: "Live图", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Live 图生成" })).toBeVisible();
-  await expect(page.getByLabel("上传动态源图")).toBeVisible();
+  await expect(page.getByRole("button", { name: "从图片库选择动态源图" })).toBeVisible();
   await expect(page.getByLabel("动态提示词")).toBeVisible();
   await expect(page.getByText("固定 3 秒", { exact: true })).toBeVisible();
   await expect(page.getByLabel("运镜方式")).toHaveCount(0);
@@ -329,6 +359,7 @@ test("new content tools render and remain usable without horizontal overflow", a
 
   await page.getByRole("button", { name: "图片库", exact: true }).click();
   await expect(page.getByRole("heading", { name: "图片库" })).toBeVisible();
+  await expect(page.getByLabel("从本地批量上传图片")).toHaveAttribute("multiple", "");
   await expect(page.getByRole("heading", { name: "链接提取" })).toBeVisible();
   await expectNoHorizontalDocumentOverflow(page);
 });
@@ -355,11 +386,10 @@ test("light motion generates a real downloadable WebM in the browser", async ({
 }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "One browser render is enough for the local encoder.");
   await seedAuthenticatedAccount(page);
+  await seedImageLibrary(page);
   await page.goto("/");
   await page.getByRole("button", { name: "Live图", exact: true }).click();
-  await page
-    .getByLabel("上传动态源图")
-    .setInputFiles("src/assets/home/kroma-main-before-v2.webp");
+  await chooseImageLibraryAsset(page, "从图片库选择动态源图", "library-main.webp");
   await page.getByLabel("动态提示词").fill("画面缓慢拉远，逐步展示完整商品。");
   await expect(page.locator(".motion-preview-frame")).toHaveClass(/is-zoom_out/);
   await page.getByLabel("清晰度").selectOption("1080p");
@@ -381,17 +411,18 @@ test("light motion generates a real downloadable WebM in the browser", async ({
 
 test("two-image inspiration results compare original and generated images and can open Live creation", async ({ page }) => {
   await seedAuthenticatedAccount(page);
+  await seedImageLibrary(page);
   await page.goto("/");
   await page.getByRole("button", { name: "灵感创作", exact: true }).click();
-  await page.getByLabel("上传灵感原图").setInputFiles("src/assets/home/kroma-detail-after-v2.webp");
-  await page.getByLabel("上传产品服装图").setInputFiles("src/assets/home/kroma-detail-before-v2.webp");
+  await chooseImageLibraryAsset(page, "从图片库选择灵感原图", "library-main.webp");
+  await chooseImageLibraryAsset(page, "从图片库选择产品服装图", "library-detail.webp");
   await expect(page.getByAltText("灵感原图")).toBeVisible();
   await expect(page.getByAltText("替换产品服装图")).toBeVisible();
   await page.locator(".version-grid button").first().click();
   await page.getByRole("button", { name: "生成灵感创作", exact: true }).click();
 
   await expect(page.getByAltText("创作原图")).toBeVisible();
-  await expect(page.getByAltText("生成结果")).toBeVisible();
+  await expect(page.getByRole("button", { name: "放大查看 灵感创作" })).toBeVisible();
   await page.getByRole("button", { name: "生成 Live 图", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Live 图生成" })).toBeVisible();
   await expect(page.getByText(/已载入生成结果/)).toBeVisible();

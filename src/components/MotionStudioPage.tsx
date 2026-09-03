@@ -3,6 +3,8 @@ import { Download, Film, ImagePlus, Play } from "lucide-react";
 import { NoticeDialog } from "./NoticeDialog";
 import { consumeCredits, getCurrentAccountSnapshot } from "../api/accountApi";
 import type { ProductInput } from "../domain/types";
+import type { MaterialLibraryAsset } from "../api/materialLibraryApi";
+import { MaterialPickerDialog } from "./MaterialPickerDialog";
 
 type MotionStyle = "zoom_in" | "zoom_out" | "pan_left" | "float";
 type MotionRatio = "9:16" | "4:5" | "1:1";
@@ -36,15 +38,6 @@ function motionSize(ratio: MotionRatio, clarity: MotionClarity) {
   if (ratio === "9:16") return { width, height: Math.round(width * 16 / 9) };
   if (ratio === "4:5") return { width, height: Math.round(width * 5 / 4) };
   return { width, height: width };
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("图片读取失败"));
-    reader.onerror = () => reject(reader.error ?? new Error("图片读取失败"));
-    reader.readAsDataURL(file);
-  });
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -108,6 +101,7 @@ export function MotionStudioPage({
   const [downloadUrl, setDownloadUrl] = useState("");
   const [isRendering, setIsRendering] = useState(false);
   const [errorNotice, setErrorNotice] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const style = useMemo(() => resolveMotionStyle(motionPrompt), [motionPrompt]);
   const creditCost = clarityCredits[clarity];
 
@@ -123,11 +117,10 @@ export function MotionStudioPage({
     if (downloadUrl) URL.revokeObjectURL(downloadUrl);
   }, [downloadUrl]);
 
-  const handleFile = async (file: File | undefined) => {
-    if (!file) return;
-    setImageUrl(await readFileAsDataUrl(file));
-    setFileName(file.name);
-    setStatus("已选择静图。填写动态提示词后即可生成 3 秒 Live 图。");
+  const handleLibraryPick = (asset: MaterialLibraryAsset) => {
+    setImageUrl(asset.imageUrl);
+    setFileName(asset.fileName);
+    setStatus("已从图片库选择静图。填写动态提示词后即可生成 3 秒 Live 图。");
     if (downloadUrl) {
       URL.revokeObjectURL(downloadUrl);
       setDownloadUrl("");
@@ -213,12 +206,11 @@ export function MotionStudioPage({
       </section>
       <div className="motion-workbench">
         <section className="panel motion-settings" aria-label="动态设置">
-          <label className="motion-upload">
+          <button type="button" className="motion-upload" aria-label="从图片库选择动态源图" onClick={() => setPickerOpen(true)}>
             <ImagePlus aria-hidden="true" />
-            <span>上传静态图片</span>
-            <small>支持 JPG、PNG、WebP</small>
-            <input type="file" accept="image/*" aria-label="上传动态源图" onChange={(event) => void handleFile(event.target.files?.[0])} />
-          </label>
+            <span>从图片库选择静态图片</span>
+            <small>本地图片请先到图片库批量上传</small>
+          </button>
           {fileName ? <p className="motion-file-name">当前图片：{fileName}</p> : null}
           <label className="field motion-prompt-field">
             <span>动态提示词</span>
@@ -243,7 +235,7 @@ export function MotionStudioPage({
         </section>
         <section className="panel motion-preview-panel" aria-label="动态预览">
           <div className={`motion-preview-frame is-${style}`} data-ratio={ratio}>
-            {imageUrl ? <img src={imageUrl} alt="动态源图预览" /> : <div><Play aria-hidden="true" /><strong>等待静图</strong><span>上传后这里会按提示词循环预览</span></div>}
+            {imageUrl ? <img src={imageUrl} alt="动态源图预览" /> : <div><Play aria-hidden="true" /><strong>等待静图</strong><span>从图片库选择后，这里会按提示词循环预览</span></div>}
           </div>
         </section>
       </div>
@@ -254,6 +246,12 @@ export function MotionStudioPage({
         primaryLabel={errorNotice.includes("登录") ? "去登录" : errorNotice.includes("积分") ? "查看价格" : undefined}
         onPrimary={errorNotice.includes("登录") ? onRequireLogin : errorNotice.includes("积分") ? onOpenPricing : undefined}
         onClose={() => setErrorNotice("")}
+      />
+      <MaterialPickerDialog
+        open={pickerOpen}
+        title="从图片库选择动态源图"
+        onPick={handleLibraryPick}
+        onClose={() => setPickerOpen(false)}
       />
     </main>
   );

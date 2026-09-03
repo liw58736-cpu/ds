@@ -12,37 +12,6 @@ interface InspirationUploadPanelProps {
   onReplacementChange: (asset: ModuleReferenceAsset) => void;
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () =>
-      typeof reader.result === "string"
-        ? resolve(reader.result)
-        : reject(new Error("图片读取失败"));
-    reader.onerror = () => reject(reader.error ?? new Error("图片读取失败"));
-    reader.readAsDataURL(file);
-  });
-}
-
-function productFromFile(file: File, imageUrl: string): ProductInput {
-  return {
-    id: `inspiration-${file.name}-${file.lastModified}`,
-    imageUrl,
-    fileName: file.name,
-    createdAt: new Date().toISOString(),
-    source: "upload",
-  };
-}
-
-function replacementFromFile(file: File, imageUrl: string): ModuleReferenceAsset {
-  return {
-    id: `replacement-${file.name}-${file.lastModified}`,
-    imageUrl,
-    fileName: file.name,
-    note: "Use Image 2 as the replacement product or clothing.",
-  };
-}
-
 export function InspirationUploadPanel({
   inspiration,
   replacement,
@@ -50,16 +19,6 @@ export function InspirationUploadPanel({
   onReplacementChange,
 }: InspirationUploadPanelProps) {
   const [pickerRole, setPickerRole] = useState<"inspiration" | "replacement" | null>(null);
-
-  const handleInspirationFile = async (file: File | undefined) => {
-    if (!file) return;
-    onInspirationChange(productFromFile(file, await readFileAsDataUrl(file)));
-  };
-
-  const handleReplacementFile = async (file: File | undefined) => {
-    if (!file) return;
-    onReplacementChange(replacementFromFile(file, await readFileAsDataUrl(file)));
-  };
 
   const handleLibraryPick = (asset: MaterialLibraryAsset) => {
     if (pickerRole === "inspiration") {
@@ -96,8 +55,7 @@ export function InspirationUploadPanel({
           imageUrl={inspiration?.imageUrl}
           fileName={inspiration?.fileName}
           imageAlt="灵感原图"
-          uploadLabel="上传灵感原图"
-          onFile={handleInspirationFile}
+          selectLabel="从图片库选择灵感原图"
           onOpenLibrary={() => setPickerRole("inspiration")}
         />
         <InspirationImageSlot
@@ -108,8 +66,7 @@ export function InspirationUploadPanel({
           imageUrl={replacement?.imageUrl}
           fileName={replacement?.fileName}
           imageAlt="替换产品服装图"
-          uploadLabel="上传产品服装图"
-          onFile={handleReplacementFile}
+          selectLabel="从图片库选择产品服装图"
           onOpenLibrary={() => setPickerRole("replacement")}
         />
       </div>
@@ -131,8 +88,7 @@ function InspirationImageSlot({
   imageUrl,
   fileName,
   imageAlt,
-  uploadLabel,
-  onFile,
+  selectLabel,
   onOpenLibrary,
 }: {
   number: string;
@@ -142,8 +98,7 @@ function InspirationImageSlot({
   imageUrl?: string;
   fileName?: string;
   imageAlt: string;
-  uploadLabel: string;
-  onFile: (file?: File) => void;
+  selectLabel: string;
   onOpenLibrary: () => void;
 }) {
   return (
@@ -159,11 +114,7 @@ function InspirationImageSlot({
       )}
       {fileName ? <p title={fileName}>{fileName}</p> : null}
       <div className="inspiration-slot-actions">
-        <label className="secondary-button">
-          <ImagePlus aria-hidden="true" />{uploadLabel}
-          <input type="file" accept="image/*" aria-label={uploadLabel} onChange={(event) => { void onFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
-        </label>
-        <button type="button" className="secondary-button" onClick={onOpenLibrary}><Library aria-hidden="true" />从图片库选择</button>
+        <button type="button" className="secondary-button" onClick={onOpenLibrary}><Library aria-hidden="true" />{selectLabel}</button>
       </div>
     </article>
   );

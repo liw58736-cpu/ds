@@ -56,7 +56,8 @@ describe("ImageCleanupPage", () => {
       "src",
       "https://web-project.supabase.co/storage/material.jpg",
     );
-    expect(screen.getByRole("checkbox")).toBeChecked();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "从图片库选择待清理图片" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("已载入提取图片");
     expect(onInitialProductConsumed).toHaveBeenCalledOnce();
   });

@@ -113,6 +113,10 @@ async function handleRequest(
       return await handleMaterialStore(request, env, fetchImpl, resolveHost);
     }
 
+    if (url.pathname === "/api/v1/materials/upload" && request.method === "POST") {
+      return await handleMaterialUpload(request, env, fetchImpl);
+    }
+
     if (url.pathname === "/api/v1/materials" && request.method === "GET") {
       return await handleListMaterials(request, url, env, fetchImpl);
     }
@@ -317,6 +321,72 @@ async function handleMaterialStore(request, env, fetchImpl, resolveHost) {
     id: objectPath,
     stored_url: `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath}`,
     file_name: materialTitle || "saved-material",
+    created_at: new Date().toISOString(),
+    content_type: contentType,
+    size: buffer.length,
+  });
+}
+
+async function handleMaterialUpload(request, env, fetchImpl) {
+  const authUser = await requireAuthUser(request, env, fetchImpl);
+  let formData;
+
+  try {
+    formData = await request.formData();
+  } catch {
+    throw new HttpError(400, { detail: "Invalid image upload form." });
+  }
+
+  const image = formData.get("image");
+  if (!image || typeof image === "string" || typeof image.arrayBuffer !== "function") {
+    throw new HttpError(422, { detail: "Choose an image to upload." });
+  }
+
+  const contentType = String(image.type ?? "").toLowerCase();
+  if (!["image/png", "image/jpeg", "image/webp"].includes(contentType)) {
+    throw new HttpError(415, { detail: "Only PNG, JPEG, and WebP images can be uploaded." });
+  }
+
+  const maxBytes = 20 * 1024 * 1024;
+  if (image.size <= 0 || image.size > maxBytes) {
+    throw new HttpError(image.size <= 0 ? 422 : 413, {
+      detail: image.size <= 0 ? "The uploaded image is empty." : "The uploaded image exceeds 20 MB.",
+    });
+  }
+
+  const buffer = Buffer.from(await image.arrayBuffer());
+  const originalName = String(image.name ?? formData.get("file_name") ?? "local-image");
+  const materialTitle = sanitizeMaterialTitle(
+    String(formData.get("title") ?? originalName).replace(/\.[a-z0-9]{2,5}$/i, ""),
+  ).slice(0, 48);
+  const extension = imageExtension(contentType, originalName);
+  const objectName = `${Date.now()}-${randomInt(100000, 999999)}-${materialTitle}.${extension}`;
+  const objectPath = [
+    sanitizeStoragePathSegment(authUser.id),
+    "materials",
+    objectName,
+  ].join("/");
+  const bucket = env.WEB_MATERIAL_STORAGE_BUCKET?.trim() || "web-imported-materials";
+  await ensureGenerationStorageBucket(fetchImpl, env, bucket);
+  const upload = await fetchImpl(
+    `${supabaseUrl(env)}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath}`,
+    {
+      method: "PUT",
+      headers: {
+        apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": contentType,
+        "x-upsert": "false",
+      },
+      body: new Blob([buffer], { type: contentType }),
+    },
+  );
+  await parseSupabaseResponse(upload);
+
+  return jsonResponse({
+    id: objectPath,
+    stored_url: `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath}`,
+    file_name: materialTitle || "local-image",
     created_at: new Date().toISOString(),
     content_type: contentType,
     size: buffer.length,

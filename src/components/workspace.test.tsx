@@ -2,12 +2,37 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GenerationTask } from "../domain/types";
+import { listMaterialLibraryAssets } from "../api/materialLibraryApi";
 import { getAccountSnapshot, replaceAccountSnapshot } from "../storage/accountStore";
 import { AppShell } from "./AppShell";
 import { Workspace } from "./Workspace";
 
+vi.mock("../api/materialLibraryApi", () => ({
+  listMaterialLibraryAssets: vi.fn(),
+}));
+
+const libraryAssets = [
+  {
+    id: "library-product-1",
+    imageUrl: "https://cdn.example.com/library-product-1.png",
+    fileName: "library-product-1.png",
+    createdAt: "2026-09-03T00:00:00.000Z",
+    source: "saved" as const,
+    sourceLabel: "保存图片",
+  },
+  {
+    id: "library-product-2",
+    imageUrl: "https://cdn.example.com/library-product-2.png",
+    fileName: "library-product-2.png",
+    createdAt: "2026-09-03T00:01:00.000Z",
+    source: "saved" as const,
+    sourceLabel: "保存图片",
+  },
+];
+
 beforeEach(() => {
   localStorage.clear();
+  vi.mocked(listMaterialLibraryAssets).mockResolvedValue(libraryAssets);
 });
 
 afterEach(() => {
@@ -46,6 +71,16 @@ function createStoredTask(overrides: Partial<GenerationTask> = {}): GenerationTa
   };
 }
 
+async function chooseLibraryAsset(
+  user: ReturnType<typeof userEvent.setup>,
+  triggerName: string,
+  assetName = "library-product-1.png",
+) {
+  await user.click(screen.getByRole("button", { name: triggerName }));
+  const dialog = await screen.findByRole("dialog", { name: /从图片库/ });
+  await user.click(within(dialog).getByRole("button", { name: new RegExp(assetName) }));
+}
+
 describe("Workspace", () => {
   it("displays the current product image after selecting the sample product", async () => {
     const user = userEvent.setup();
@@ -65,7 +100,7 @@ describe("Workspace", () => {
 
     await user.click(heroCard);
 
-    expect(screen.getByRole("alertdialog", { name: "请先上传商品图" })).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "请先选择商品图" })).toBeInTheDocument();
     expect(screen.getByText("已选 0")).toBeInTheDocument();
     expect(heroCard).toHaveAttribute("aria-pressed", "false");
     await user.click(screen.getByRole("button", { name: "我知道了" }));
@@ -73,7 +108,7 @@ describe("Workspace", () => {
     await user.click(within(heroCard).getByRole("button", { name: "添加素材" }));
 
     expect(screen.queryByRole("dialog", { name: "首屏 KV素材" })).not.toBeInTheDocument();
-    expect(screen.getByRole("alertdialog", { name: "请先上传商品图" })).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "请先选择商品图" })).toBeInTheDocument();
   });
 
   it("asks for a product image before selecting detail page modules", async () => {
@@ -88,7 +123,7 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "我知道了" }));
     await user.click(screen.getByRole("button", { name: "品牌介绍 增加 1 张" }));
 
-    expect(screen.getByRole("alertdialog", { name: "请先上传商品图" })).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "请先选择商品图" })).toBeInTheDocument();
     expect(screen.getByText("已选 0")).toBeInTheDocument();
     expect(brandCard).toHaveAttribute("aria-pressed", "false");
   });
@@ -99,7 +134,7 @@ describe("Workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "AI背景" }));
 
-    expect(screen.getByRole("alertdialog", { name: "请先上传商品图" })).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "请先选择商品图" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "白底图" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -222,10 +257,7 @@ describe("Workspace", () => {
     });
 
     await user.click(within(packagingCard).getByRole("button", { name: "添加素材" }));
-    await user.upload(
-      screen.getByLabelText("上传模块参考图"),
-      new File(["box"], "box.png", { type: "image/png" }),
-    );
+    await chooseLibraryAsset(user, "从图片库添加模块参考图");
     await user.type(
       screen.getByLabelText("素材备注"),
       "Use this exact package box.",
@@ -288,58 +320,44 @@ describe("Workspace", () => {
     expect(screen.getByRole("button", { name: "原图尺寸" })).toBeInTheDocument();
   });
 
-  it("shows a target garment uploader only for outfit change", async () => {
+  it("shows a target garment library picker only for outfit change", async () => {
     const user = userEvent.setup();
     render(<Workspace activeModule="white_background" />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
 
-    expect(screen.queryByLabelText("上传要换上的服饰图")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "从图片库选择换装服饰图" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "换装" }));
-    await user.upload(
-      screen.getByLabelText("上传要换上的服饰图"),
-      new File(["target-garment"], "target-garment.png", {
-        type: "image/png",
-      }),
-    );
+    await chooseLibraryAsset(user, "从图片库选择换装服饰图");
 
-    expect(screen.getByText("target-garment.png")).toBeInTheDocument();
+    expect(screen.getByText("library-product-1.png")).toBeInTheDocument();
   });
 
-  it("shows a required target model uploader for model change", async () => {
+  it("shows a required target model library picker for model change", async () => {
     const user = userEvent.setup();
     render(<Workspace activeModule="white_background" />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    expect(screen.queryByLabelText("上传目标模特照片")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "从图片库选择目标模特照片" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "换模特" }));
-    await user.upload(
-      screen.getByLabelText("上传目标模特照片"),
-      new File(["target-model"], "target-model.png", { type: "image/png" }),
-    );
+    await chooseLibraryAsset(user, "从图片库选择目标模特照片", "library-product-2.png");
 
     expect(screen.getByAltText("目标模特照片")).toBeInTheDocument();
-    expect(screen.getByText("target-model.png")).toBeInTheDocument();
+    expect(screen.getByText("library-product-2.png")).toBeInTheDocument();
   });
 
   it("supports the two-image replacement workflow and screenshot-matched controls", async () => {
     const user = userEvent.setup();
     render(<Workspace activeModule="lifestyle" />);
 
-    await user.upload(
-      screen.getByLabelText("上传灵感原图"),
-      new File(["inspiration"], "inspiration.png", { type: "image/png" }),
-    );
-    await user.upload(
-      screen.getByLabelText("上传产品服装图"),
-      new File(["replacement"], "replacement-shirt.png", { type: "image/png" }),
-    );
+    await chooseLibraryAsset(user, "从图片库选择灵感原图");
+    await chooseLibraryAsset(user, "从图片库选择产品服装图", "library-product-2.png");
     expect(screen.getByRole("heading", { name: "灵感创作" })).toBeInTheDocument();
     expect(screen.getByAltText("灵感原图")).toBeInTheDocument();
     expect(await screen.findByAltText("替换产品服装图")).toBeInTheDocument();
-    expect(screen.getByText("replacement-shirt.png")).toBeInTheDocument();
+    expect(screen.getByText("library-product-2.png")).toBeInTheDocument();
     expect(within(screen.getByLabelText("背景")).getByRole("button", { name: "保持" })).toHaveAttribute("aria-pressed", "true");
     expect(within(screen.getByLabelText("产品 / 服装")).getByRole("button", { name: "替换" })).toHaveAttribute("aria-pressed", "true");
     await user.click(within(screen.getByLabelText("姿势")).getByRole("button", { name: "调整" }));
@@ -391,77 +409,44 @@ describe("Workspace", () => {
     expect(screen.queryByText("本月消耗")).not.toBeInTheDocument();
   });
 
-  it("allows focus to reach the upload input inside the dropzone", () => {
+  it("opens the image library from the product dropzone", async () => {
+    const user = userEvent.setup();
     render(<Workspace />);
 
-    const uploadInput = screen.getByLabelText("上传商品图");
-    uploadInput.focus();
-    const dropzone = uploadInput.closest(".upload-dropzone") as HTMLElement | null;
-
-    expect(uploadInput).toHaveFocus();
-    expect(dropzone).toContainElement(
-      document.activeElement as HTMLElement | null,
-    );
+    expect(screen.queryByLabelText("上传商品图")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "从图片库选择商品图" }));
+    expect(await screen.findByRole("dialog", { name: "从图片库选择商品图" })).toBeInTheDocument();
   });
 
-  it("displays uploaded product image and filename from a persisted data URL", async () => {
+  it("displays the product selected from the image library", async () => {
     const user = userEvent.setup();
-    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     render(<Workspace />);
 
-    const file = new File(["product"], "product-photo.png", {
-      type: "image/png",
-    });
-    await user.upload(screen.getByLabelText("上传商品图"), file);
+    await chooseLibraryAsset(user, "从图片库选择商品图");
 
     expect(screen.getByAltText("当前商品图")).toHaveAttribute(
       "src",
-      "data:image/png;base64,cHJvZHVjdA==",
+      "https://cdn.example.com/library-product-1.png",
     );
     expect(screen.queryByAltText("原始商品图")).not.toBeInTheDocument();
-    expect(screen.getByText("product-photo.png")).toBeInTheDocument();
+    expect(screen.getByText("library-product-1.png")).toBeInTheDocument();
   });
 
-  it("does not revoke persisted data URLs when replaced or unmounted", async () => {
-    const user = userEvent.setup();
-    const revokeObjectURL = vi
-      .spyOn(URL, "revokeObjectURL")
-      .mockImplementation(() => undefined);
-    const { unmount } = render(<Workspace />);
-    const uploadInput = screen.getByLabelText("上传商品图");
-
-    await user.upload(
-      uploadInput,
-      new File(["first"], "first-product.png", { type: "image/png" }),
-    );
-    await user.upload(
-      uploadInput,
-      new File(["second"], "second-product.png", { type: "image/png" }),
-    );
-    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    unmount();
-
-    expect(revokeObjectURL).not.toHaveBeenCalled();
-  });
-
-  it("allows uploading the same file again after using the sample product", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+  it("does not expose local file inputs outside the image library", () => {
     render(<Workspace />);
-    const uploadInput = screen.getByLabelText("上传商品图");
-    const file = new File(["same"], "same-product.png", {
-      type: "image/png",
-    });
 
-    await user.upload(uploadInput, file);
-    expect(uploadInput).toHaveValue("");
-    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    await user.upload(uploadInput, file);
+    expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
+  });
 
-    expect(await screen.findByText("same-product.png")).toBeInTheDocument();
+  it("allows replacing a product with another image-library selection", async () => {
+    const user = userEvent.setup();
+    render(<Workspace />);
+
+    await chooseLibraryAsset(user, "从图片库选择商品图");
+    await chooseLibraryAsset(user, "从图片库选择商品图", "library-product-2.png");
     expect(screen.getByAltText("当前商品图")).toHaveAttribute(
       "src",
-      "data:image/png;base64,c2FtZQ==",
+      "https://cdn.example.com/library-product-2.png",
     );
   });
 
@@ -469,25 +454,19 @@ describe("Workspace", () => {
     const user = userEvent.setup();
     const { rerender } = render(<Workspace activeModule="main_image" />);
 
-    await user.upload(
-      screen.getByLabelText("上传商品图"),
-      new File(["main"], "main-only.png", { type: "image/png" }),
-    );
-    expect(await screen.findByText("main-only.png")).toBeInTheDocument();
+    await chooseLibraryAsset(user, "从图片库选择商品图");
+    expect(await screen.findByText("library-product-1.png")).toBeInTheDocument();
 
     rerender(<Workspace activeModule="detail_page" />);
-    expect(screen.queryByText("main-only.png")).not.toBeInTheDocument();
+    expect(screen.queryByText("library-product-1.png")).not.toBeInTheDocument();
     expect(screen.queryByAltText("当前商品图")).not.toBeInTheDocument();
 
-    await user.upload(
-      screen.getByLabelText("上传商品图"),
-      new File(["detail"], "detail-only.png", { type: "image/png" }),
-    );
-    expect(await screen.findByText("detail-only.png")).toBeInTheDocument();
+    await chooseLibraryAsset(user, "从图片库选择商品图", "library-product-2.png");
+    expect(await screen.findByText("library-product-2.png")).toBeInTheDocument();
 
     rerender(<Workspace activeModule="main_image" />);
-    expect(screen.getByText("main-only.png")).toBeInTheDocument();
-    expect(screen.queryByText("detail-only.png")).not.toBeInTheDocument();
+    expect(screen.getByText("library-product-1.png")).toBeInTheDocument();
+    expect(screen.queryByText("library-product-2.png")).not.toBeInTheDocument();
   });
 
   it("generates material from the sample product and stores the completed task", async () => {

@@ -293,6 +293,51 @@ test("material store copies an authorized public image into isolated web storage
   assert.equal(calls.some((call) => call.url === "https://cdn.example.com/material.webp"), true);
 });
 
+test("material upload stores a local image in the authenticated user's library", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_MATERIAL_STORAGE_BUCKET: "web-materials",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://web-project.supabase.co/storage/v1/bucket") {
+        return jsonResponse({ id: "web-materials" }, 200);
+      }
+      if (url.startsWith("https://web-project.supabase.co/storage/v1/object/web-materials/")) {
+        assert.equal(init.method, "PUT");
+        assert.equal(init.headers["Content-Type"], "image/png");
+        assert.equal(await init.body.text(), "local-image");
+        return jsonResponse({ Key: "stored" }, 200);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const form = new FormData();
+  form.append("image", new Blob(["local-image"], { type: "image/png" }), "summer-look.png");
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/materials/upload", {
+      method: "POST",
+      headers: { Authorization: "Bearer access-token" },
+      body: form,
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  assert.match(body.id, /^web-user-1\/materials\/\d+-\d+-summer-look\.png$/);
+  assert.equal(body.file_name, "summer-look");
+  assert.equal(body.content_type, "image/png");
+  assert.equal(body.size, Buffer.byteLength("local-image"));
+});
+
 test("material library lists only the authenticated user's saved images", async () => {
   const calls = [];
   const app = createWebBackend({

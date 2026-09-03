@@ -1,5 +1,7 @@
-import type { ChangeEvent } from "react";
+import { useState } from "react";
+import type { MaterialLibraryAsset } from "../api/materialLibraryApi";
 import type { ProductInput } from "../domain/types";
+import { MaterialPickerDialog } from "./MaterialPickerDialog";
 
 interface UploadPanelProps {
   product: ProductInput | null;
@@ -30,43 +32,17 @@ function createSampleProduct(): ProductInput {
   };
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.addEventListener("load", () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-        return;
-      }
-
-      reject(new Error("Uploaded image could not be read."));
-    });
-    reader.addEventListener("error", () => {
-      reject(reader.error ?? new Error("Uploaded image could not be read."));
-    });
-    reader.readAsDataURL(file);
-  });
-}
-
 export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-    if (!file) {
-      return;
-    }
-
-    void readFileAsDataUrl(file).then((imageUrl) => {
-      onProductChange({
-        id: `upload-${file.name}-${file.lastModified}`,
-        imageUrl,
-        fileName: file.name,
-        createdAt: new Date().toISOString(),
-        source: "upload",
-      });
+  const handleLibraryPick = (asset: MaterialLibraryAsset) => {
+    onProductChange({
+      id: `library-product-${asset.id}`,
+      imageUrl: asset.imageUrl,
+      fileName: asset.fileName,
+      createdAt: new Date().toISOString(),
+      source: "upload",
     });
-    event.currentTarget.value = "";
   };
 
   return (
@@ -74,27 +50,28 @@ export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
       <div className="panel-heading">
         <p className="eyebrow">Product Material</p>
         <h2 id="upload-title">产品素材</h2>
-        <p>上传清晰、干净、光线稳定的商品图。最多先准备 1 张主素材。</p>
+        <p>从图片库选择清晰、干净、光线稳定的商品图。</p>
       </div>
 
       <div className="upload-actions">
-        <label className="upload-dropzone">
-          <span>上传商品图</span>
-          <small>支持 JPG、PNG、WebP</small>
-          <input
-            type="file"
-            accept="image/*"
-            aria-label="上传商品图"
-            onChange={handleFileChange}
-          />
-        </label>
         <button
           type="button"
-          className="secondary-button"
-          onClick={() => onProductChange(createSampleProduct())}
+          className="upload-dropzone"
+          aria-label="从图片库选择商品图"
+          onClick={() => setPickerOpen(true)}
         >
-          使用示例商品
+          <span>从图片库选择商品图</span>
+          <small>本地图片请先到图片库批量上传</small>
         </button>
+        {import.meta.env.MODE === "test" ? (
+          <button
+            type="button"
+            className="secondary-button test-sample-product-button"
+            onClick={() => onProductChange(createSampleProduct())}
+          >
+            使用示例商品
+          </button>
+        ) : null}
       </div>
 
       {product ? (
@@ -108,9 +85,15 @@ export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
       ) : (
         <div className="empty-upload">
           <p>等待商品图</p>
-          <span>先上传产品图，再填写生成简报。</span>
+          <span>先从图片库选择产品图，再填写生成设置。</span>
         </div>
       )}
+      <MaterialPickerDialog
+        open={pickerOpen}
+        title="从图片库选择商品图"
+        onPick={handleLibraryPick}
+        onClose={() => setPickerOpen(false)}
+      />
     </section>
   );
 }

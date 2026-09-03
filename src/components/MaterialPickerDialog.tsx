@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ImagePlus, RefreshCw, X } from "lucide-react";
 import { listMaterialLibraryAssets, type MaterialLibraryAsset } from "../api/materialLibraryApi";
 
@@ -31,7 +32,7 @@ export function MaterialPickerDialog({ open, title, onPick, onClose }: MaterialP
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="module-reference-modal-backdrop material-picker-backdrop" role="presentation" onClick={onClose}>
       <section className="module-reference-modal material-picker-dialog" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
         <div className="module-reference-modal-heading">
@@ -54,6 +55,7 @@ export function MaterialPickerDialog({ open, title, onPick, onClose }: MaterialP
         {status && assets.length > 0 ? <p className="material-library-inline-status">{status}</p> : null}
         <button type="button" className="secondary-button material-picker-retry" onClick={() => void load()}><RefreshCw aria-hidden="true" />重新读取</button>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

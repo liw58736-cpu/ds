@@ -10237,3 +10237,74 @@ body {
   grid-row: auto;
   justify-self: start;
 }
+
+/* Local files enter through the image library; all editors use library pickers. */
+.upload-dropzone,
+.motion-upload,
+.cleanup-upload,
+.outfit-change-upload,
+.module-reference-upload {
+  width: 100%;
+  font: inherit;
+  text-align: center;
+}
+
+.material-local-upload-panel {
+  display: grid;
+  gap: 14px;
+  overflow: hidden;
+  padding-bottom: 18px;
+  background: #ffffff;
+}
+
+.material-local-upload {
+  position: relative;
+  display: grid;
+  min-height: 132px;
+  margin: 0 20px;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  border: 1px dashed var(--button-border);
+  border-radius: 16px;
+  color: var(--button-text);
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+
+.material-local-upload:hover,
+.material-local-upload:focus-within {
+  border-color: var(--accent-blue);
+  background: #f7fbff;
+}
+
+.material-local-upload.is-uploading {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.material-local-upload svg {
+  width: 30px;
+  height: 30px;
+}
+
+.material-local-upload strong {
+  font-size: 0.94rem;
+}
+
+.material-local-upload span,
+.material-local-upload-panel > .material-library-inline-status {
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+}
+
+.material-local-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.material-local-upload-panel > .material-library-inline-status {
+  margin: 0 20px;
+}

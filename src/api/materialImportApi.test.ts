@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initializeSession } from "../storage/accountStore";
-import { importPublicMaterial, listSavedMaterials, storeImportedMaterial } from "./materialImportApi";
+import { importPublicMaterial, listSavedMaterials, storeImportedMaterial, uploadLocalMaterial } from "./materialImportApi";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -141,5 +141,39 @@ describe("materialImportApi", () => {
       "https://web-api.example.com/api/v1/materials?limit=60",
       expect.objectContaining({ headers: { Authorization: "Bearer access-token" } }),
     );
+  });
+
+  it("uploads a local image through the material library backend", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1/");
+    initializeSession({
+      identifier: "seller@example.com",
+      authView: "login",
+      mode: "password",
+      storeName: "",
+      inviteCode: "",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      provider: "kroma",
+      userId: "user-1",
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: "user-1/materials/local-photo.png",
+      stored_url: "https://web-project.supabase.co/storage/local-photo.png",
+      file_name: "local-photo",
+      created_at: "2026-09-03T00:00:00.000Z",
+      content_type: "image/png",
+      size: 5,
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(uploadLocalMaterial(new File(["image"], "local-photo.png", { type: "image/png" }))).resolves.toMatchObject({
+      imageUrl: "https://web-project.supabase.co/storage/local-photo.png",
+      fileName: "local-photo",
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://web-api.example.com/api/v1/materials/upload");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get("image")).toBeInstanceOf(File);
   });
 });

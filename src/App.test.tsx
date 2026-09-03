@@ -153,8 +153,8 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "灵感创作" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("上传灵感原图")).toBeInTheDocument();
-    expect(screen.getByLabelText("上传产品服装图")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "从图片库选择灵感原图" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "从图片库选择产品服装图" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "小红书图片提取" })).not.toBeInTheDocument();
   });
 
@@ -165,7 +165,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Live图" }));
 
     expect(screen.getByRole("heading", { name: "Live 图生成" })).toBeInTheDocument();
-    expect(screen.getByLabelText("上传动态源图")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "从图片库选择动态源图" })).toBeInTheDocument();
     expect(screen.getByLabelText("动态提示词")).toHaveValue("画面缓慢自然推进，主体保持居中，整体稳定流畅。");
     expect(screen.getByText("固定 3 秒")).toBeInTheDocument();
     expect(screen.queryByLabelText("运镜方式")).not.toBeInTheDocument();
