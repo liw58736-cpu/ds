@@ -38,7 +38,7 @@ describe("MaterialLibraryPage", () => {
     vi.mocked(listMaterialLibraryAssets).mockRejectedValue(new Error("Failed to fetch"));
     render(<MaterialLibraryPage isAuthenticated onRequireLogin={vi.fn()} />);
 
-    expect(await screen.findByText("素材库暂时无法同步。点击“重新读取”重试。")).toBeVisible();
+    expect(await screen.findByText("图片库暂时无法同步。点击“重新读取”重试。")).toBeVisible();
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 });

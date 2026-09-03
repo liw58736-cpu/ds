@@ -9,7 +9,6 @@ export type AppPage =
   | "inspiration"
   | "motion"
   | "materials"
-  | "cleanup"
   | "history"
   | "pricing"
   | "account"
@@ -35,7 +34,7 @@ const topNavItems = [
   { page: "white_background", label: "AI工具" },
   { page: "inspiration", label: "灵感创作" },
   { page: "motion", label: "Live图" },
-  { page: "materials", label: "素材库" },
+  { page: "materials", label: "图片库" },
   { page: "history", label: "历史任务" },
   { page: "pricing", label: "价格" },
   { page: "account", label: "账户" },

@@ -34,17 +34,17 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
   const loadLibrary = async () => {
     if (!isAuthenticated) {
       setAssets([]);
-      setLibraryStatus("登录后查看并复用保存素材与生成结果。");
+      setLibraryStatus("登录后查看并复用保存图片与生成结果。");
       return;
     }
-    setLibraryStatus("正在同步素材库…");
+    setLibraryStatus("正在同步图片库…");
     try {
       const nextAssets = await listMaterialLibraryAssets();
       setAssets(nextAssets);
-      setLibraryStatus(nextAssets.length > 0 ? "" : "素材库还是空的，先提取、上传或生成图片。");
+      setLibraryStatus(nextAssets.length > 0 ? "" : "图片库还是空的，先提取、上传或生成图片。");
     } catch {
       setAssets([]);
-      setLibraryStatus("素材库暂时无法同步。点击“重新读取”重试。");
+      setLibraryStatus("图片库暂时无法同步。点击“重新读取”重试。");
     }
   };
 
@@ -56,7 +56,7 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
     if (isAuthenticated) return false;
     setNotice({
       title: "请先登录",
-      message: "登录后才能提取并保存图片，素材也会保留在个人素材库中。",
+      message: "登录后才能提取并保存图片，照片也会保留在个人图片库中。",
       primaryLabel: "去登录",
       onPrimary: onRequireLogin,
     });
@@ -98,7 +98,7 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
 
   const handleSave = async () => {
     if (selectedImages.size === 0) {
-      setNotice({ title: "还没有选择照片", message: "请勾选需要保存到素材库的照片。" });
+      setNotice({ title: "还没有选择照片", message: "请勾选需要保存到图片库的照片。" });
       return;
     }
     if (requireLogin()) return;
@@ -129,16 +129,16 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
   return (
     <main className="page-surface material-library-page">
       <section className="page-heading">
-        <p className="eyebrow">Material Library</p>
-        <h1>素材库</h1>
-        <p>统一管理小红书提取图片、手动保存素材和所有生成结果。</p>
+        <p className="eyebrow">Image Library</p>
+        <h1>图片库</h1>
+        <p>统一管理小红书提取图片、手动保存图片和所有生成结果。</p>
       </section>
 
       <section className="panel material-extract-panel" aria-labelledby="material-extract-title">
         <div className="panel-heading">
           <p className="eyebrow">Xiaohongshu Extractor</p>
           <h2 id="material-extract-title">链接提取</h2>
-          <p>提取后先多选照片，再保存到个人素材库。</p>
+          <p>提取后先多选照片，再保存到个人图片库。</p>
         </div>
         <div className="material-import-form">
           <label className="field">
@@ -180,7 +180,7 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
 
       <section className="panel material-assets-panel" aria-labelledby="material-assets-title">
         <div className="material-section-heading">
-          <div><p className="eyebrow">All Assets</p><h2 id="material-assets-title">全部素材</h2><span>保存素材与生成结果都会显示在这里</span></div>
+          <div><p className="eyebrow">All Images</p><h2 id="material-assets-title">全部图片</h2><span>保存图片与生成结果都会显示在这里</span></div>
           <button type="button" className="secondary-button" onClick={() => void loadLibrary()}><RefreshCw aria-hidden="true" />重新读取</button>
         </div>
         {assets.length > 0 ? (

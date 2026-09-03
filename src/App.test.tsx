@@ -173,9 +173,9 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "素材库" }));
+    await user.click(screen.getByRole("button", { name: "图片库" }));
 
-    expect(screen.getByRole("heading", { name: "素材库" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "图片库" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "链接提取" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "图片清理" })).not.toBeInTheDocument();
   });
@@ -194,7 +194,7 @@ describe("App", () => {
       "AI工具",
       "灵感创作",
       "Live图",
-      "素材库",
+      "图片库",
       "价格",
       "登录",
     ]);

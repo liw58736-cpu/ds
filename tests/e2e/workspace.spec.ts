@@ -292,15 +292,15 @@ test("new content tools render and remain usable without horizontal overflow", a
   await expect(page.getByLabel("上传动态源图")).toBeVisible();
   await expectNoHorizontalDocumentOverflow(page);
 
-  await page.getByRole("button", { name: "素材库", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "素材库" })).toBeVisible();
+  await page.getByRole("button", { name: "图片库", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "图片库" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "链接提取" })).toBeVisible();
   await expectNoHorizontalDocumentOverflow(page);
 });
 
 test("guest Xiaohongshu extraction uses a visible login dialog", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "素材库", exact: true }).click();
+  await page.getByRole("button", { name: "图片库", exact: true }).click();
   await page
     .getByLabel("小红书素材链接")
     .fill("https://www.xiaohongshu.com/explore/example");

@@ -115,7 +115,7 @@ export function InspirationUploadPanel({
       </div>
       <MaterialPickerDialog
         open={pickerRole !== null}
-        title={pickerRole === "inspiration" ? "从素材库选择灵感原图" : "从素材库选择产品 / 服装图"}
+        title={pickerRole === "inspiration" ? "从图片库选择灵感原图" : "从图片库选择产品 / 服装图"}
         onPick={handleLibraryPick}
         onClose={() => setPickerRole(null)}
       />
@@ -163,7 +163,7 @@ function InspirationImageSlot({
           <ImagePlus aria-hidden="true" />{uploadLabel}
           <input type="file" accept="image/*" aria-label={uploadLabel} onChange={(event) => { void onFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
         </label>
-        <button type="button" className="secondary-button" onClick={onOpenLibrary}><Library aria-hidden="true" />从素材库选择</button>
+        <button type="button" className="secondary-button" onClick={onOpenLibrary}><Library aria-hidden="true" />从图片库选择</button>
       </div>
     </article>
   );

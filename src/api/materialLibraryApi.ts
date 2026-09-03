@@ -25,7 +25,7 @@ export async function listMaterialLibraryAssets(): Promise<MaterialLibraryAsset[
       fileName: material.fileName,
       createdAt: material.createdAt,
       source: "saved" as const,
-      sourceLabel: "保存素材",
+      sourceLabel: "保存图片",
     })));
   }
 
@@ -46,7 +46,7 @@ export async function listMaterialLibraryAssets(): Promise<MaterialLibraryAsset[
   }
 
   if (savedResult.status === "rejected" && generatedResult.status === "rejected") {
-    throw new Error("素材库暂时无法同步，请稍后重试。");
+    throw new Error("图片库暂时无法同步，请稍后重试。");
   }
 
   const uniqueByUrl = new Map<string, MaterialLibraryAsset>();

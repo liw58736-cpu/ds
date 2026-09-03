@@ -166,7 +166,7 @@ export async function listSavedMaterials(limit = 60): Promise<SavedMaterial[]> {
       token = await refreshKromaSession();
       if (token) continue;
     }
-    if (!response.ok) throw new Error(`素材库读取失败（HTTP ${response.status}）`);
+    if (!response.ok) throw new Error(`图片库读取失败（HTTP ${response.status}）`);
     const payload = (await response.json()) as SavedMaterialListResponse;
     return (payload.materials ?? []).filter((item) => item.stored_url).map(normalizeSavedMaterial);
   }

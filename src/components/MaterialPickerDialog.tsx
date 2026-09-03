@@ -11,17 +11,17 @@ interface MaterialPickerDialogProps {
 
 export function MaterialPickerDialog({ open, title, onPick, onClose }: MaterialPickerDialogProps) {
   const [assets, setAssets] = useState<MaterialLibraryAsset[]>([]);
-  const [status, setStatus] = useState("正在读取素材库…");
+  const [status, setStatus] = useState("正在读取图片库…");
 
   const load = async () => {
-    setStatus("正在读取素材库…");
+    setStatus("正在读取图片库…");
     try {
       const nextAssets = await listMaterialLibraryAssets();
       setAssets(nextAssets);
-      setStatus(nextAssets.length > 0 ? "" : "素材库还没有图片，请先保存或生成图片。");
+      setStatus(nextAssets.length > 0 ? "" : "图片库还没有图片，请先保存或生成图片。");
     } catch {
       setAssets([]);
-      setStatus("素材库暂时无法同步，请稍后重试。");
+      setStatus("图片库暂时无法同步，请稍后重试。");
     }
   };
 
@@ -35,8 +35,8 @@ export function MaterialPickerDialog({ open, title, onPick, onClose }: MaterialP
     <div className="module-reference-modal-backdrop material-picker-backdrop" role="presentation" onClick={onClose}>
       <section className="module-reference-modal material-picker-dialog" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
         <div className="module-reference-modal-heading">
-          <div><p className="eyebrow">Material Library</p><h3>{title}</h3></div>
-          <button type="button" aria-label="关闭素材选择器" onClick={onClose}><X aria-hidden="true" /></button>
+          <div><p className="eyebrow">Image Library</p><h3>{title}</h3></div>
+          <button type="button" aria-label="关闭图片选择器" onClick={onClose}><X aria-hidden="true" /></button>
         </div>
         {assets.length > 0 ? (
           <div className="material-library-grid material-picker-grid">
