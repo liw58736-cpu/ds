@@ -126,6 +126,32 @@ test("main image multi-select creates one result per selected function and recor
   await expect(page.locator(".history-task-row strong")).toContainText("KV");
 });
 
+test("workspace uploads stay isolated by navigation and detail titles remain horizontal", async ({ page }) => {
+  await seedAuthenticatedAccount(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "商品主图", exact: true }).click();
+  await page.getByLabel("上传商品图").setInputFiles("src/assets/home/kroma-main-before-v2.webp");
+  await expect(page.getByText("kroma-main-before-v2.webp")).toBeVisible();
+
+  await page.getByRole("button", { name: "详情页", exact: true }).click();
+  await expect(page.getByText("kroma-main-before-v2.webp")).toHaveCount(0);
+  await expect(page.getByAltText("当前商品图")).toHaveCount(0);
+  await page.getByLabel("上传商品图").setInputFiles("src/assets/home/kroma-detail-before-v2.webp");
+  await expect(page.getByText("kroma-detail-before-v2.webp")).toBeVisible();
+
+  const firstModuleTitle = page.locator(".detail-module-button .module-card-topline strong").first();
+  await expect(firstModuleTitle).toBeVisible();
+  await expect.poll(() => firstModuleTitle.evaluate((element) => ({
+    whiteSpace: getComputedStyle(element).whiteSpace,
+    writingMode: getComputedStyle(element).writingMode,
+  }))).toEqual({ whiteSpace: "nowrap", writingMode: "horizontal-tb" });
+
+  await page.getByRole("button", { name: "商品主图", exact: true }).click();
+  await expect(page.getByText("kroma-main-before-v2.webp")).toBeVisible();
+  await expect(page.getByText("kroma-detail-before-v2.webp")).toHaveCount(0);
+});
+
 test("detail page quantity controls create multiple results for the same module", async ({
   page,
 }) => {

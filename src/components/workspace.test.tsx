@@ -465,6 +465,31 @@ describe("Workspace", () => {
     );
   });
 
+  it("keeps uploaded product images isolated by navigation workspace", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<Workspace activeModule="main_image" />);
+
+    await user.upload(
+      screen.getByLabelText("上传商品图"),
+      new File(["main"], "main-only.png", { type: "image/png" }),
+    );
+    expect(await screen.findByText("main-only.png")).toBeInTheDocument();
+
+    rerender(<Workspace activeModule="detail_page" />);
+    expect(screen.queryByText("main-only.png")).not.toBeInTheDocument();
+    expect(screen.queryByAltText("当前商品图")).not.toBeInTheDocument();
+
+    await user.upload(
+      screen.getByLabelText("上传商品图"),
+      new File(["detail"], "detail-only.png", { type: "image/png" }),
+    );
+    expect(await screen.findByText("detail-only.png")).toBeInTheDocument();
+
+    rerender(<Workspace activeModule="main_image" />);
+    expect(screen.getByText("main-only.png")).toBeInTheDocument();
+    expect(screen.queryByText("detail-only.png")).not.toBeInTheDocument();
+  });
+
   it("generates material from the sample product and stores the completed task", async () => {
     const user = userEvent.setup();
     render(<Workspace />);
@@ -714,6 +739,7 @@ describe("Workspace", () => {
     });
 
     rerender(<Workspace activeModule="white_background" />);
+    fireEvent.click(screen.getByRole("button", { name: "使用示例商品" }));
     fireEvent.click(container.querySelector(".generate-button") as HTMLButtonElement);
 
     let secondTaskId = "";

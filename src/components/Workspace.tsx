@@ -98,6 +98,9 @@ interface WorkspaceProps {
   onOpenMotion?: (imageUrl: string, title: string) => void;
 }
 
+type WorkspaceModule = NonNullable<WorkspaceProps["activeModule"]>;
+type ProductByModule = Partial<Record<WorkspaceModule, ProductInput | null>>;
+
 function getModuleDefaults(module: GenerationModule): Partial<GenerationConfig> {
   if (module === "detail_page") {
     return { module, aspectRatio: "long_page", outputFormat: "jpg" };
@@ -133,7 +136,7 @@ export function Workspace({
   onOpenMotion,
 }: WorkspaceProps) {
   const [config, setConfig] = useState<GenerationConfig>(defaultConfig);
-  const [product, setProduct] = useState<ProductInput | null>(null);
+  const [productsByModule, setProductsByModule] = useState<ProductByModule>({});
   const [tasks, setTasks] = useState<GenerationTask[]>(
     () => getGenerationTaskSnapshot(),
   );
@@ -145,8 +148,7 @@ export function Workspace({
   >(undefined);
   const [showLoginRequiredNotice, setShowLoginRequiredNotice] = useState(false);
   const [showReplacementRequiredNotice, setShowReplacementRequiredNotice] = useState(false);
-  const productRef = useRef<ProductInput | null>(null);
-  const activeModuleRef = useRef(activeModule);
+  const productsByModuleRef = useRef<ProductByModule>({});
   const hasLoadedTasksRef = useRef(true);
   const taskRunTokensRef = useRef<Record<string, number>>({});
   const latestTask = tasks[0];
@@ -154,6 +156,7 @@ export function Workspace({
     (task) => task.status === "queued" || task.status === "processing",
   ).length;
   const previewTasks = tasks.slice(0, 8);
+  const product = productsByModule[activeModule] ?? null;
   const estimatedCreditCost = estimateGenerationCredits(config);
   const isOutOfCredits = accountBalance < estimatedCreditCost;
 
@@ -176,14 +179,21 @@ export function Workspace({
     taskRunTokensRef.current[taskId] === token;
 
   const handleProductChange = (nextProduct: ProductInput) => {
-    const previousProduct = productRef.current;
+    const module = activeModule;
+    const previousProduct = productsByModuleRef.current[module] ?? null;
 
     if (previousProduct?.imageUrl !== nextProduct.imageUrl) {
       revokeUploadedProduct(previousProduct);
     }
 
-    productRef.current = nextProduct;
-    setProduct(nextProduct);
+    productsByModuleRef.current = {
+      ...productsByModuleRef.current,
+      [module]: nextProduct,
+    };
+    setProductsByModule((currentProducts) => ({
+      ...currentProducts,
+      [module]: nextProduct,
+    }));
   };
 
   const replacementAsset =
@@ -445,12 +455,13 @@ export function Workspace({
       ...getModuleDefaults(activeModule),
     }));
 
-    activeModuleRef.current = activeModule;
   }, [activeModule]);
 
   useEffect(() => {
     return () => {
-      revokeUploadedProduct(productRef.current);
+      Object.values(productsByModuleRef.current).forEach((savedProduct) => {
+        revokeUploadedProduct(savedProduct ?? null);
+      });
     };
   }, []);
 

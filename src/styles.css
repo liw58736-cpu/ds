@@ -10208,3 +10208,32 @@ body {
     padding: 34px 18px;
   }
 }
+
+/* Keep compact detail-module cards readable in the narrow settings column. */
+.detail-module-button {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.detail-module-button .module-card-topline {
+  grid-column: 1 / -1;
+  align-items: center;
+}
+
+.detail-module-button .module-card-topline strong {
+  min-width: 0;
+  white-space: nowrap;
+  word-break: keep-all;
+  writing-mode: horizontal-tb;
+}
+
+.detail-module-button > span,
+.detail-module-button > em,
+.detail-module-button .detail-module-stepper {
+  grid-column: 1 / -1;
+  writing-mode: horizontal-tb;
+}
+
+.detail-module-button .detail-module-stepper {
+  grid-row: auto;
+  justify-self: start;
+}
