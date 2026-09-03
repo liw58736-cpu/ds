@@ -163,6 +163,12 @@ test("AI tool modes all connect to generation and return a downloadable result",
         .setInputFiles("src/assets/home/kroma-detail-before-v2.webp");
       await expect(page.getByAltText("要换上的服饰图")).toBeVisible();
     }
+    if ((await toolButtons.nth(index).textContent())?.trim() === "换模特") {
+      await page
+        .getByLabel("上传目标模特照片")
+        .setInputFiles("src/assets/home/kroma-main-before-v2.webp");
+      await expect(page.getByAltText("目标模特照片")).toBeVisible();
+    }
     await generateAndExpectResults(page, 1);
   }
 });

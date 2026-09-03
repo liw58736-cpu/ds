@@ -1646,6 +1646,70 @@ test("AI outfit change uses edit routing with the uploaded target garment image"
   assert.equal(calls.some((call) => call.url.includes("/images/edits")), true);
 });
 
+test("AI model change uses edit routing with the uploaded target model image", async () => {
+  const calls = [];
+  const productImage = `data:image/png;base64,${Buffer.from("product-on-model").toString("base64")}`;
+  const targetModelImage = `data:image/png;base64,${Buffer.from("target-model").toString("base64")}`;
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      PACKYAPI_BASE_URL: "https://packyapi.example.com/v1",
+      PACKYAPI_KEY_1: "packy-key",
+      PACKYAPI_IMAGE_MODEL: "gpt-image-2",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://packyapi.example.com/v1/images/edits") {
+        assert.equal(init.method, "POST");
+        assert.equal(init.body instanceof FormData, true);
+        assert.match(String(init.body.get("prompt")), /target model reference/i);
+        assert.equal(init.body.getAll("image").length, 2);
+        return jsonResponse({
+          data: [{ url: "https://cdn.example.com/model-change.png" }],
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/image/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "Image 2 is the target model reference. Preserve the exact Image 1 product.",
+        image_base64: productImage,
+        template_image_base64: targetModelImage,
+        template_image_base64s: [targetModelImage],
+        quality: "standard",
+        size: "1024x1024",
+        task_type: "image_edit",
+        style: "white_background:model_change:standard",
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const task = await app.handle(
+    new Request(`http://local.test/api/v1/image/task/${body.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+  const taskBody = await readJson(task);
+
+  assert.equal(taskBody.status, "done");
+  assert.equal(taskBody.image_url, "https://cdn.example.com/model-change.png");
+  assert.equal(calls.some((call) => call.url.includes("/images/generations")), false);
+  assert.equal(calls.some((call) => call.url.includes("/images/edits")), true);
+});
+
 test("AI edit tools fall back to standard providers when PackyAPI edit fails", async () => {
   const calls = [];
   const app = createWebBackend({

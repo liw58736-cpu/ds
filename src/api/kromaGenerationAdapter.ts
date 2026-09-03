@@ -80,7 +80,9 @@ export function buildKromaGenerateRequest(
     size: getKromaSize(config.aspectRatio, config.resolution),
     quality: route.quality,
     use_template_mode: hasModuleReferenceImages,
-    keep_user_outfit_pose: false,
+    keep_user_outfit_pose:
+      config.module === "white_background" &&
+      config.whiteBackgroundMode === "model_change",
   };
 }
 
@@ -101,7 +103,8 @@ function getKromaTaskType(
 
   if (
     config.whiteBackgroundMode === "ghost_model" ||
-    config.whiteBackgroundMode === "outfit_change"
+    config.whiteBackgroundMode === "outfit_change" ||
+    config.whiteBackgroundMode === "model_change"
   ) {
     return "image_edit";
   }

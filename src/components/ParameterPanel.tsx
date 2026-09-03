@@ -216,7 +216,7 @@ const whiteBackgroundModes: Array<{
   { value: "ai_background", label: "AI背景" },
   { value: "retouch", label: "精修" },
   { value: "outfit_change", label: "换装" },
-  { value: "product_showcase", label: "产品展示" },
+  { value: "model_change", label: "换模特" },
 ];
 
 const defaultInspirationSettings: InspirationSettings = {
@@ -282,6 +282,10 @@ export function ParameterPanel({
     showOutfitChangeRequiredNotice,
     setShowOutfitChangeRequiredNotice,
   ] = useState(false);
+  const [
+    showModelChangeRequiredNotice,
+    setShowModelChangeRequiredNotice,
+  ] = useState(false);
   const resolution = config.resolution ?? "1K";
   const generationVersion = config.generationVersion ?? "brand";
   const selectedMainModules = config.selectedMainModules ?? [];
@@ -294,6 +298,9 @@ export function ParameterPanel({
   const outfitChangeReferenceAssets = moduleReferenceAssets.outfit_change ?? [];
   const outfitChangeTargetAsset =
     outfitChangeReferenceAssets.find(hasModuleReferenceImage) ?? null;
+  const modelChangeReferenceAssets = moduleReferenceAssets.model_change ?? [];
+  const modelChangeTargetAsset =
+    modelChangeReferenceAssets.find(hasModuleReferenceImage) ?? null;
   const draftImageReferenceAssets = draftReferenceAssets.filter(
     hasModuleReferenceImage,
   );
@@ -333,6 +340,12 @@ export function ParameterPanel({
       setShowOutfitChangeRequiredNotice(false);
     }
   }, [whiteBackgroundMode, outfitChangeTargetAsset]);
+
+  useEffect(() => {
+    if (whiteBackgroundMode !== "model_change" || modelChangeTargetAsset) {
+      setShowModelChangeRequiredNotice(false);
+    }
+  }, [whiteBackgroundMode, modelChangeTargetAsset]);
 
   const requireProductBeforeModuleSelection = () => {
     if (hasProduct) {
@@ -530,6 +543,42 @@ export function ParameterPanel({
     setShowOutfitChangeRequiredNotice(true);
   };
 
+  const handleModelChangeTargetFileChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const asset = await new Promise<ModuleReferenceAsset>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        resolve({
+          id: `model-change-target-${Date.now().toString(36)}-${Math.random()
+            .toString(36)
+            .slice(2, 8)}`,
+          fileName: file.name,
+          imageUrl: String(reader.result ?? ""),
+          note: "Use this uploaded person as the target model reference. Preserve Image 1 clothing or product exactly.",
+        });
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+    saveModuleReferenceAssets("model_change", [asset]);
+    setShowModelChangeRequiredNotice(false);
+    event.target.value = "";
+  };
+
+  const removeModelChangeTargetAsset = () => {
+    saveModuleReferenceAssets("model_change", []);
+    setShowModelChangeRequiredNotice(true);
+  };
+
   const saveReferenceAssets = () => {
     if (!editingReferenceModule) {
       return;
@@ -605,6 +654,15 @@ export function ParameterPanel({
       !outfitChangeTargetAsset
     ) {
       setShowOutfitChangeRequiredNotice(true);
+      return;
+    }
+
+    if (
+      activeModule === "white_background" &&
+      whiteBackgroundMode === "model_change" &&
+      !modelChangeTargetAsset
+    ) {
+      setShowModelChangeRequiredNotice(true);
       return;
     }
 
@@ -842,6 +900,45 @@ export function ParameterPanel({
                     type="button"
                     className="secondary-button"
                     onClick={removeOutfitChangeTargetAsset}
+                  >
+                    删除
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {whiteBackgroundMode === "model_change" ? (
+            <div className="outfit-change-target-card model-change-target-card">
+              <div className="setting-group-heading">
+                <span>目标模特</span>
+                <small>多上传 1 张模特照片，作为 Image 2 人物参考</small>
+              </div>
+              <label className="outfit-change-upload">
+                <span>上传目标模特照片</span>
+                <small>建议使用清晰正面或半身照，避免遮挡面部</small>
+                <input
+                  aria-label="上传目标模特照片"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleModelChangeTargetFileChange}
+                />
+              </label>
+              {modelChangeTargetAsset ? (
+                <div className="outfit-change-target-preview">
+                  <img
+                    src={modelChangeTargetAsset.imageUrl}
+                    alt="目标模特照片"
+                  />
+                  <div>
+                    <p className="file-label">已选择模特</p>
+                    <p className="file-name">
+                      {modelChangeTargetAsset.fileName}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={removeModelChangeTargetAsset}
                   >
                     删除
                   </button>
@@ -1179,6 +1276,12 @@ export function ParameterPanel({
         title="请上传换装服饰"
         message="换装需要额外上传一张目标服饰图，系统会将它作为 Image 2 参考。"
         onClose={() => setShowOutfitChangeRequiredNotice(false)}
+      />
+      <NoticeDialog
+        open={showModelChangeRequiredNotice}
+        title="请上传目标模特"
+        message="换模特需要额外上传一张目标模特照片，系统会将它作为 Image 2 人物参考，只替换模特并保留原商品。"
+        onClose={() => setShowModelChangeRequiredNotice(false)}
       />
     </>
   );

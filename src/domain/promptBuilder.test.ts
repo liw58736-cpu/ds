@@ -100,25 +100,37 @@ describe("buildGenerationPrompt", () => {
     );
   });
 
-  it("creates distinct AI tool prompts for scene and showcase modes", () => {
+  it("creates distinct AI tool prompts for scene and model-change modes", () => {
     const backgroundPrompt = buildGenerationPrompt({
       ...baseConfig,
       module: "white_background",
       whiteBackgroundMode: "ai_background",
     });
-    const showcasePrompt = buildGenerationPrompt({
+    const modelChangePrompt = buildGenerationPrompt({
       ...baseConfig,
       module: "white_background",
-      whiteBackgroundMode: "product_showcase",
+      whiteBackgroundMode: "model_change",
+      moduleReferenceAssets: {
+        model_change: [{
+          id: "target-model",
+          fileName: "target-model.png",
+          imageUrl: "data:image/png;base64,target-model",
+        }],
+      },
     });
 
     expect(backgroundPrompt.modules[0].prompt).toContain(
       "visibly different from a plain white cutout",
     );
-    expect(showcasePrompt.modules[0].prompt).toContain(
-      "pedestal, hanger, folded detail",
+    expect(modelChangePrompt.modules[0].prompt).toContain(
+      "Image 2 is the target model reference",
     );
-    expect(showcasePrompt.modules[0].prompt).not.toContain("no extra props");
+    expect(modelChangePrompt.modules[0].prompt).toContain(
+      "Keep the exact Image 1 sold product or garment",
+    );
+    expect(modelChangePrompt.modules[0].prompt).toContain(
+      "never copy Image 2 clothing",
+    );
   });
 
   it("adds Image 1 SKU preservation guard to every main-image module", () => {

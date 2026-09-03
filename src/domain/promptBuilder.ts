@@ -188,6 +188,8 @@ const aiToolPromptCopy: Record<WhiteBackgroundMode, string> = {
     "Retouch the uploaded product image while keeping the same product, pose, framing, and identity. Improve fabric cleanliness, wrinkles, lighting balance, edge clarity, color consistency, and commercial polish. Do not redesign the product, do not change the model pose, and do not add a new scene.",
   outfit_change:
     "Create an outfit-change edit. Use Image 1 as the base person or model photo, and use Image 2 as the target clothing to put onto the person in Image 1. Preserve the Image 1 person's identity, pose, body proportions, camera angle, and scene where appropriate. Replace only the visible outfit with the Image 2 garment while preserving the Image 2 garment category, color, collar, sleeves, silhouette, fabric texture, pattern, seams, buttons, logos, and recognisable design.",
+  model_change:
+    "Create a model-replacement edit. Image 1 is the base product photo and its visible product or garment is the sold SKU. Image 2 is the target model reference. Replace the visible person in Image 1 with the Image 2 model, using the model's recognisable face, hair, skin tone, age presentation, and visible body characteristics. Preserve the exact Image 1 product or garment category, color, silhouette, fabric, seams, buttons, logos, pattern, fit, placement, camera angle, composition, lighting, and scene. Do not copy clothing or products from Image 2.",
   product_showcase:
     "Create a premium product showcase composition for ecommerce. Preserve the product identity, then stage it with refined studio lighting, a pedestal, hanger, folded detail, tasteful props, depth, and a polished retail display setup. The result must look like a designed product showcase, not a plain white-background cutout.",
   watermark_remove:
@@ -258,6 +260,7 @@ function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
       ai_background: "AI背景",
       retouch: "精修",
       outfit_change: "换装",
+      model_change: "换模特",
       product_showcase: "产品展示",
       watermark_remove: "去除水印或文字",
       remove_object: "移除物体",
@@ -352,6 +355,8 @@ function withModuleReferencePrompt(
 ): string {
   const guardedPrompt = moduleId === "outfit_change"
     ? withOutfitChangeIdentityGuard(prompt)
+    : moduleId === "model_change"
+      ? withModelChangeIdentityGuard(prompt)
     : moduleId === "inspiration"
       ? withInspirationReplacementGuard(prompt)
       : withProductIdentityGuard(prompt);
@@ -414,6 +419,8 @@ function withModuleReferencePrompt(
     promptParts.push(
       moduleId === "outfit_change"
         ? "Image 2 reference assets are the target clothing for outfit change. Use the uploaded Image 2 garment as the clothing to wear on Image 1. Do not render the upload note as visible text. Do not invent extra garments or extra colorways."
+        : moduleId === "model_change"
+          ? "Image 2 is the target model reference. Use the uploaded person's recognisable identity and appearance to replace only the model in Image 1. Keep the exact Image 1 sold product or garment; never copy Image 2 clothing, accessories, background, or products."
         : moduleId === "inspiration"
           ? "Image 2 is the replacement product or garment. Use its exact visible design on the Image 1 person or in the Image 1 scene. Keep Image 1 as the base photo and do not introduce a third reference role."
         : "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
@@ -497,6 +504,11 @@ function withOutfitChangeIdentityGuard(prompt: string): string {
   return `${prompt} Image 1 is the base photo. Image 2 is the target clothing. Keep the person, pose, hands, face, body proportions, camera angle, and scene from Image 1 stable, but replace the outfit with Image 2 clothing. Preserve Image 2 garment details exactly; do not keep the old Image 1 outfit unless it is not part of the clothing being replaced.`;
 }
 
+function withModelChangeIdentityGuard(prompt: string): string {
+  if (prompt.includes("Image 2 is the target model reference")) return prompt;
+  return `${prompt} Image 1 is the base product photo and Image 2 is the target model reference. Replace only the visible person with the Image 2 model. Preserve the exact Image 1 product or garment and its color, construction, fabric, logos, fit, placement, pose, camera angle, composition, lighting, and scene. Do not import Image 2 clothing, products, accessories, or background.`;
+}
+
 function withInspirationReplacementGuard(prompt: string): string {
   if (prompt.includes("Image 1 remains the base inspiration photo")) return prompt;
   return `${prompt} Image 1 remains the base inspiration photo. Preserve the Image 1 person identity, face, hands, pose, body proportions, camera angle, composition, and scene for every element configured as keep. Image 2 is the only replacement product or clothing source. Preserve Image 2 item details exactly and replace only the requested product or garment area.`;
@@ -511,6 +523,12 @@ function getSharedImageIdentityInstruction(config: GenerationConfig): string {
     config.whiteBackgroundMode === "outfit_change"
   ) {
     return "For outfit change, Image 1 is the base person or model photo and Image 2 is the target clothing. Preserve Image 1 person, pose, body shape, camera angle, and scene; replace the visible outfit with Image 2 clothing while preserving Image 2 garment details. Do not render upload notes as visible text.";
+  }
+  if (
+    config.module === "white_background" &&
+    config.whiteBackgroundMode === "model_change"
+  ) {
+    return "For model change, Image 1 is the sold product or garment and scene, while Image 2 is the target model reference. Replace only the person with the Image 2 model identity and appearance. Preserve the exact Image 1 product, pose, framing, lighting, and scene; do not use Image 2 clothing or background.";
   }
 
   return "Preserve Image 1 product identity: same product category, garment shape, material, color, seams, lace, buttons, logos, packaging, camera-facing details, and recognisable design. A blouse or shirt must remain a blouse or shirt; never turn a top into a dress, lingerie, lace costume, packaging-only mockup, or unrelated SKU. Do not replace it with a different product.";

@@ -107,6 +107,7 @@ const whiteBackgroundModes = new Set<WhiteBackgroundMode>([
   "ai_background",
   "retouch",
   "outfit_change",
+  "model_change",
   "product_showcase",
   "watermark_remove",
   "remove_object",

@@ -213,7 +213,7 @@ describe("taskStore", () => {
         ...task.config,
         module: "white_background",
         aspectRatio: "original",
-        whiteBackgroundMode: "product_showcase",
+        whiteBackgroundMode: "model_change",
       },
     };
 
@@ -221,7 +221,7 @@ describe("taskStore", () => {
 
     expect(loadTasks()[0]?.config).toMatchObject({
       module: "white_background",
-      whiteBackgroundMode: "product_showcase",
+      whiteBackgroundMode: "model_change",
     });
   });
 

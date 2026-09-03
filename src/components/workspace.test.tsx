@@ -281,9 +281,10 @@ describe("Workspace", () => {
     expect(screen.queryByLabelText("输出语言")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("设计简报")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("促销信息")).not.toBeInTheDocument();
-    for (const label of ["白底图", "幽灵模特", "AI背景", "精修", "换装", "产品展示"]) {
+    for (const label of ["白底图", "幽灵模特", "AI背景", "精修", "换装", "换模特"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
+    expect(screen.queryByRole("button", { name: "产品展示" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "原图尺寸" })).toBeInTheDocument();
   });
 
@@ -306,6 +307,23 @@ describe("Workspace", () => {
     expect(screen.getByText("target-garment.png")).toBeInTheDocument();
   });
 
+  it("shows a required target model uploader for model change", async () => {
+    const user = userEvent.setup();
+    render(<Workspace activeModule="white_background" />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    expect(screen.queryByLabelText("上传目标模特照片")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "换模特" }));
+    await user.upload(
+      screen.getByLabelText("上传目标模特照片"),
+      new File(["target-model"], "target-model.png", { type: "image/png" }),
+    );
+
+    expect(screen.getByAltText("目标模特照片")).toBeInTheDocument();
+    expect(screen.getByText("target-model.png")).toBeInTheDocument();
+  });
+
   it("supports the two-image replacement workflow and screenshot-matched controls", async () => {
     const user = userEvent.setup();
     render(<Workspace activeModule="lifestyle" />);
@@ -320,7 +338,7 @@ describe("Workspace", () => {
     );
     expect(screen.getByRole("heading", { name: "灵感创作" })).toBeInTheDocument();
     expect(screen.getByAltText("灵感原图")).toBeInTheDocument();
-    expect(screen.getByAltText("替换产品服装图")).toBeInTheDocument();
+    expect(await screen.findByAltText("替换产品服装图")).toBeInTheDocument();
     expect(screen.getByText("replacement-shirt.png")).toBeInTheDocument();
     expect(within(screen.getByLabelText("背景")).getByRole("button", { name: "保持" })).toHaveAttribute("aria-pressed", "true");
     expect(within(screen.getByLabelText("产品 / 服装")).getByRole("button", { name: "替换" })).toHaveAttribute("aria-pressed", "true");
@@ -342,6 +360,18 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "生成换装" }));
 
     expect(screen.getByRole("alertdialog", { name: "请上传换装服饰" })).toBeInTheDocument();
+    expect(screen.queryByText("正在生成")).not.toBeInTheDocument();
+  });
+
+  it("asks for the target model image before generating model change", async () => {
+    const user = userEvent.setup();
+    render(<Workspace activeModule="white_background" />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: "换模特" }));
+    await user.click(screen.getByRole("button", { name: "生成换模特" }));
+
+    expect(screen.getByRole("alertdialog", { name: "请上传目标模特" })).toBeInTheDocument();
     expect(screen.queryByText("正在生成")).not.toBeInTheDocument();
   });
 
@@ -428,7 +458,7 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
     await user.upload(uploadInput, file);
 
-    expect(screen.getByText("same-product.png")).toBeInTheDocument();
+    expect(await screen.findByText("same-product.png")).toBeInTheDocument();
     expect(screen.getByAltText("当前商品图")).toHaveAttribute(
       "src",
       "data:image/png;base64,c2FtZQ==",

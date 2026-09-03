@@ -359,6 +359,39 @@ describe("kromaGenerationAdapter", () => {
     expect(kromaRequest.prompt).toContain("Image 2 is the target clothing");
   });
 
+  it("maps AI model change work to an image edit task with the target model image", () => {
+    const request = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        module: "white_background",
+        whiteBackgroundMode: "model_change",
+        moduleReferenceAssets: {
+          model_change: [
+            {
+              id: "target-model",
+              fileName: "target-model.png",
+              imageUrl: "data:image/png;base64,target-model",
+            },
+          ],
+        },
+      },
+    });
+    const kromaRequest = buildKromaGenerateRequest(request);
+
+    expect(kromaRequest).toMatchObject({
+      task_type: "image_edit",
+      style: "white_background:model_change:standard",
+      image_url: "https://cdn.example.com/product.png",
+      template_image_base64: "data:image/png;base64,target-model",
+      template_image_base64s: ["data:image/png;base64,target-model"],
+      use_template_mode: true,
+      keep_user_outfit_pose: true,
+    });
+    expect(kromaRequest.prompt).toContain("Image 2 is the target model reference");
+    expect(kromaRequest.prompt).toContain("Preserve the exact Image 1 product");
+  });
+
   it("maps HD requests to the 2K/4K quality values used by the reference router", () => {
     const request = buildGenerationTaskRequest({
       ...baseInput,
