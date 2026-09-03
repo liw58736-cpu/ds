@@ -168,7 +168,7 @@ const detailPrompts: Record<
 const inspirationPrompt = {
   title: "灵感创作",
   prompt:
-    "Create a fresh ecommerce visual by combining the exact Image 1 product with the selected creative direction. Image 2 is an inspiration reference for background, pose, model, composition, or mood only. Preserve Image 1 product identity, category, shape, material, color, logos, and recognisable details. Do not replace Image 1 with the product or garment shown in Image 2, and do not render upload instructions as visible text.",
+    "Create an identity-preserving product replacement edit. Image 1 is the inspiration base photo: it controls the person, pose, hands, body proportions, camera angle, composition, lighting, and scene. Image 2 is the replacement product or garment: place that exact item naturally into Image 1, preserving its category, silhouette, fabric, color, seams, buttons, logos, pattern, and recognisable design. Do not copy the person or scene from Image 2. Do not render upload instructions as visible text.",
 };
 
 const shadowCopy: Record<ShadowMode, string> = {
@@ -327,19 +327,22 @@ function getInspirationSettingsPrompt(config: GenerationConfig): string {
   const settings = config.inspirationSettings;
 
   if (!settings) {
-    return "Use a natural lifestyle background, natural pose, no specified model, clear hero composition, preserve the product unchanged, and use a product-listing purpose.";
+    return "Creative controls: background=keep; pose=keep; model=keep; product=replace. Keep the Image 1 scene and person unchanged, and replace only the product or clothing with Image 2.";
   }
 
+  const backgroundAction = settings.backgroundAction ?? "keep";
+  const poseAction = settings.poseAction ?? "keep";
+  const modelAction = settings.modelAction ?? "keep";
+  const productAction = settings.productAction ?? "replace";
   const backgroundChange = settings.backgroundChange ?? "medium";
-  const poseChange = settings.poseChange ?? "low";
-  const garmentProportion = settings.garmentProportion ?? "preserve";
-  const backgroundRule = backgroundChange === "keep"
-    ? "keep the original background unchanged"
-    : `adjust the background with ${backgroundChange} change intensity toward ${settings.background}`;
-  const poseRule = poseChange === "keep"
-    ? "keep the original pose unchanged"
-    : `adjust the pose with ${poseChange} change intensity toward ${settings.pose}`;
-  return `Creative controls: background=${settings.background}; background_change=${backgroundChange} (${backgroundRule}); pose=${settings.pose}; pose_change=${poseChange} (${poseRule}); model=${settings.model}; garment_proportion=${garmentProportion}; composition=${settings.composition}; product_handling=${settings.productHandling}; purpose=${settings.purpose}. Low means subtle change, medium means clear but identity-safe change, and high means a larger composition change without changing the sold SKU. Image 2 is the model or pose reference and Image 3 is the garment reference when provided. Follow these controls while keeping Image 1 as the sold product.`;
+  const poseChange = settings.poseChange ?? "medium";
+  const backgroundControl = backgroundAction === "adjust"
+    ? `adjust (${backgroundChange} change intensity)`
+    : backgroundAction;
+  const poseControl = poseAction === "adjust"
+    ? `adjust (${poseChange} change intensity)`
+    : poseAction;
+  return `Creative controls: background=${backgroundControl}; pose=${poseControl}; model=${modelAction}; product=${productAction}. Keep means preserve that Image 1 element exactly. Low change is subtle, medium change is clearly visible but identity-safe, and high change allows a larger visual difference. Pose or model replacement is generated without treating Image 2 as a person reference. Product replacement must use Image 2 as the sole product or garment source. Output ratio=${config.aspectRatio}.`;
 }
 
 function withModuleReferencePrompt(
@@ -347,9 +350,10 @@ function withModuleReferencePrompt(
   moduleId: string,
   config: GenerationConfig,
 ): string {
-  const guardedPrompt =
-    moduleId === "outfit_change"
-      ? withOutfitChangeIdentityGuard(prompt)
+  const guardedPrompt = moduleId === "outfit_change"
+    ? withOutfitChangeIdentityGuard(prompt)
+    : moduleId === "inspiration"
+      ? withInspirationReplacementGuard(prompt)
       : withProductIdentityGuard(prompt);
   const assets = getModuleReferenceAssets(config, moduleId);
 
@@ -410,6 +414,8 @@ function withModuleReferencePrompt(
     promptParts.push(
       moduleId === "outfit_change"
         ? "Image 2 reference assets are the target clothing for outfit change. Use the uploaded Image 2 garment as the clothing to wear on Image 1. Do not render the upload note as visible text. Do not invent extra garments or extra colorways."
+        : moduleId === "inspiration"
+          ? "Image 2 is the replacement product or garment. Use its exact visible design on the Image 1 person or in the Image 1 scene. Keep Image 1 as the base photo and do not introduce a third reference role."
         : "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
     );
   }
@@ -491,7 +497,15 @@ function withOutfitChangeIdentityGuard(prompt: string): string {
   return `${prompt} Image 1 is the base photo. Image 2 is the target clothing. Keep the person, pose, hands, face, body proportions, camera angle, and scene from Image 1 stable, but replace the outfit with Image 2 clothing. Preserve Image 2 garment details exactly; do not keep the old Image 1 outfit unless it is not part of the clothing being replaced.`;
 }
 
+function withInspirationReplacementGuard(prompt: string): string {
+  if (prompt.includes("Image 1 remains the base inspiration photo")) return prompt;
+  return `${prompt} Image 1 remains the base inspiration photo. Preserve the Image 1 person identity, face, hands, pose, body proportions, camera angle, composition, and scene for every element configured as keep. Image 2 is the only replacement product or clothing source. Preserve Image 2 item details exactly and replace only the requested product or garment area.`;
+}
+
 function getSharedImageIdentityInstruction(config: GenerationConfig): string {
+  if (config.module === "lifestyle") {
+    return "For inspiration replacement, Image 1 is the base person and scene, while Image 2 is the replacement product or garment. Preserve the Image 1 identity and all configured keep elements; preserve the exact Image 2 product design. Never swap these roles.";
+  }
   if (
     config.module === "white_background" &&
     config.whiteBackgroundMode === "outfit_change"
@@ -728,11 +742,10 @@ function getModuleReferenceAssets(
   moduleId: string,
 ): ModuleReferenceAsset[] {
   const assets = moduleId === "inspiration"
-    ? [
-        ...(config.moduleReferenceAssets?.inspiration ?? []),
-        ...(config.moduleReferenceAssets?.inspiration_model ?? []),
-        ...(config.moduleReferenceAssets?.inspiration_garment ?? []),
-      ]
+    ? config.moduleReferenceAssets?.inspiration_product ??
+      config.moduleReferenceAssets?.inspiration_garment ??
+      config.moduleReferenceAssets?.inspiration ??
+      []
     : config.moduleReferenceAssets?.[moduleId] ?? [];
   return assets.filter(
     (asset) => hasModuleReferenceImage(asset) || hasModuleReferenceNote(asset),

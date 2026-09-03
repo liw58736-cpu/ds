@@ -12,7 +12,7 @@ interface HomePageProps {
   onOpenStudio: (
     page: Extract<
       AppPage,
-      "main_image" | "white_background" | "detail_page" | "inspiration" | "motion" | "cleanup"
+      "main_image" | "white_background" | "detail_page" | "inspiration" | "motion" | "materials"
     >,
   ) => void;
 }
@@ -178,12 +178,12 @@ export function HomePage({ onOpenStudio }: HomePageProps) {
             <p className="kroma-home-eyebrow">CONTENT WORKFLOW</p>
             <h2 id="content-tools-title">从参考素材到动态内容</h2>
           </div>
-          <p>提取授权素材、生成新视觉、转成 Live 图，再清理交付前的文字或瑕疵。</p>
+          <p>提取爆款笔记素材、完成换品创作，再生成适合发布的 Live 图。</p>
         </header>
         <div className="kroma-home-content-grid">
-          <article><Link2 aria-hidden="true" /><span>01</span><h3>小红书提图与灵感创作</h3><p>粘贴小红书分享文案，批量提取图片并下载、去水印或作为 Image 2 参考。</p><button type="button" onClick={() => onOpenStudio("inspiration")}>打开灵感创作<ArrowRight aria-hidden="true" /></button></article>
+          <article><Link2 aria-hidden="true" /><span>01</span><h3>链接提取与素材库</h3><p>粘贴小红书分享文案，多选需要的照片并保存到个人素材库。</p><button type="button" onClick={() => onOpenStudio("materials")}>打开素材库<ArrowRight aria-hidden="true" /></button></article>
           <article><Film aria-hidden="true" /><span>02</span><h3>生成 Live 图</h3><p>选择 720P、1080P 或 2K，添加推进、拉远、横移或漂移动效并下载 WebM。</p><button type="button" onClick={() => onOpenStudio("motion")}>打开 Live 图<ArrowRight aria-hidden="true" /></button></article>
-          <article><Brush aria-hidden="true" /><span>03</span><h3>图片清理</h3><p>用画笔标出水印、文字或物体区域，只重绘被标记的部分。</p><button type="button" onClick={() => onOpenStudio("cleanup")}>打开图片清理<ArrowRight aria-hidden="true" /></button></article>
+          <article><Brush aria-hidden="true" /><span>03</span><h3>换品灵感创作</h3><p>保持灵感原图的人物和场景，将第二张产品或服装自然替换进去。</p><button type="button" onClick={() => onOpenStudio("inspiration")}>新建创作任务<ArrowRight aria-hidden="true" /></button></article>
         </div>
       </section>
 

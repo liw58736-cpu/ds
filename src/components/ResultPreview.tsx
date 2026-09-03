@@ -9,6 +9,7 @@ import type { GenerationResultAsset, GenerationTask, ProductInput } from "../dom
 
 interface ResultPreviewProps {
   product: ProductInput | null;
+  inputLabel?: string;
   latestTask?: GenerationTask;
   tasks?: GenerationTask[];
   onCancelTask?: (task: GenerationTask) => void;
@@ -62,6 +63,7 @@ function getRunningProgress(task: GenerationTask): string {
 
 export function ResultPreview({
   product,
+  inputLabel = "商品图",
   latestTask,
   tasks,
   onCancelTask,
@@ -96,7 +98,7 @@ export function ResultPreview({
     <section className="panel result-panel" aria-labelledby="result-title">
       {!product && !hasTasks ? (
         <div className="preview-empty-state">
-          <h3>先上传商品图并填写生成设置</h3>
+          <h3>先上传{inputLabel}并填写生成设置</h3>
           <p>左侧完成设置后，这里会显示生成预览和最终结果。</p>
         </div>
       ) : null}
@@ -124,7 +126,7 @@ export function ResultPreview({
         <div className="preview-grid preview-grid-single">
           <div className="preview-slot">
             <div className="preview-placeholder">
-              {product ? "等待生成结果" : "未选择商品图"}
+              {product ? "等待生成结果" : `未选择${inputLabel}`}
             </div>
           </div>
         </div>

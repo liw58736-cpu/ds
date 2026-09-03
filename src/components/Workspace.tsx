@@ -13,6 +13,7 @@ import type {
   GenerationConfig,
   GenerationModule,
   GenerationTask,
+  ModuleReferenceAsset,
   ProductInput,
 } from "../domain/types";
 import {
@@ -33,7 +34,7 @@ import { GenerationProviderError } from "../providers/generationProvider";
 import { ParameterPanel } from "./ParameterPanel";
 import { ResultPreview } from "./ResultPreview";
 import { UploadPanel } from "./UploadPanel";
-import { MaterialImportPanel } from "./MaterialImportPanel";
+import { InspirationUploadPanel } from "./InspirationUploadPanel";
 import { NoticeDialog } from "./NoticeDialog";
 
 function moveTaskToTop(
@@ -94,7 +95,6 @@ interface WorkspaceProps {
   isAuthenticated?: boolean;
   onOpenPricing?: () => void;
   onRequireLogin?: () => void;
-  onOpenCleanup?: (imageUrl: string, title: string) => void;
   onOpenMotion?: (imageUrl: string, title: string) => void;
 }
 
@@ -130,7 +130,6 @@ export function Workspace({
   isAuthenticated = true,
   onOpenPricing,
   onRequireLogin,
-  onOpenCleanup,
   onOpenMotion,
 }: WorkspaceProps) {
   const [config, setConfig] = useState<GenerationConfig>(defaultConfig);
@@ -145,6 +144,7 @@ export function Workspace({
     string | null | undefined
   >(undefined);
   const [showLoginRequiredNotice, setShowLoginRequiredNotice] = useState(false);
+  const [showReplacementRequiredNotice, setShowReplacementRequiredNotice] = useState(false);
   const productRef = useRef<ProductInput | null>(null);
   const activeModuleRef = useRef(activeModule);
   const hasLoadedTasksRef = useRef(true);
@@ -186,35 +186,17 @@ export function Workspace({
     setProduct(nextProduct);
   };
 
-  const handleImportedProduct = (imageUrl: string, title: string) => {
-    handleProductChange({
-      id: `imported-product-${Date.now().toString(36)}`,
-      imageUrl,
-      fileName: title || "imported-product",
-      createdAt: new Date().toISOString(),
-      source: "upload",
-    });
-  };
+  const replacementAsset =
+    config.moduleReferenceAssets?.inspiration_product?.find(
+      (asset) => asset.imageUrl.trim().length > 0,
+    );
 
-  const handleImportedReference = (
-    imageUrl: string,
-    title: string,
-    role: "model" | "garment" = "model",
-  ) => {
+  const handleReplacementChange = (asset: ModuleReferenceAsset) => {
     setConfig((currentConfig) => ({
       ...currentConfig,
       moduleReferenceAssets: {
         ...(currentConfig.moduleReferenceAssets ?? {}),
-        [role === "model" ? "inspiration_model" : "inspiration_garment"]: [
-          {
-            id: `imported-inspiration-${role}-${Date.now().toString(36)}`,
-            imageUrl,
-            fileName: title || `imported-${role}-reference`,
-            note: role === "model"
-              ? "Use this saved material as Image 2 for model, pose, background, and composition reference only."
-              : "Use this saved material as Image 3 for garment structure, styling, and clothing proportion reference only.",
-          },
-        ],
+        inspiration_product: [asset],
       },
     }));
   };
@@ -355,6 +337,11 @@ export function Workspace({
       return;
     }
 
+    if (config.module === "lifestyle" && !replacementAsset) {
+      setShowReplacementRequiredNotice(true);
+      return;
+    }
+
     const queuedTask = createTask({
       product,
       config,
@@ -472,17 +459,15 @@ export function Workspace({
       <div className="studio-split">
         <section className="studio-settings" aria-label="生成设置">
           {activeModule === "lifestyle" ? (
-            <MaterialImportPanel
-              onUseAsProduct={handleImportedProduct}
-              onUseAsReference={handleImportedReference}
-              onUseAsModelReference={(imageUrl, title) => handleImportedReference(imageUrl, title, "model")}
-              onUseAsGarmentReference={(imageUrl, title) => handleImportedReference(imageUrl, title, "garment")}
-              onUseForCleanup={onOpenCleanup}
-              isAuthenticated={isAuthenticated}
-              onRequireLogin={onRequireLogin}
+            <InspirationUploadPanel
+              inspiration={product}
+              replacement={replacementAsset}
+              onInspirationChange={handleProductChange}
+              onReplacementChange={handleReplacementChange}
             />
-          ) : null}
-          <UploadPanel product={product} onProductChange={handleProductChange} />
+          ) : (
+            <UploadPanel product={product} onProductChange={handleProductChange} />
+          )}
           <ParameterPanel
             activeModule={activeModule}
             config={config}
@@ -498,6 +483,7 @@ export function Workspace({
         <section className="studio-preview" aria-label="生成预览">
           <ResultPreview
             product={product}
+            inputLabel={activeModule === "lifestyle" ? "灵感原图" : "商品图"}
             latestTask={activePreviewTaskId ? tasks.find((task) => task.id === activePreviewTaskId) : latestTask}
             tasks={previewTasks}
             onCancelTask={handleCancelTask}
@@ -513,6 +499,12 @@ export function Workspace({
         primaryLabel="去登录"
         onPrimary={onRequireLogin}
         onClose={() => setShowLoginRequiredNotice(false)}
+      />
+      <NoticeDialog
+        open={showReplacementRequiredNotice}
+        title="请上传产品 / 服装图"
+        message="灵感创作需要两张图片：第一张保留人物与画面，第二张作为要替换进去的产品或服装。"
+        onClose={() => setShowReplacementRequiredNotice(false)}
       />
     </main>
   );

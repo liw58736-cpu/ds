@@ -9,7 +9,7 @@ import { LoginPage } from "./components/LoginPage";
 import { PricingPage } from "./components/PricingPage";
 import { Workspace } from "./components/Workspace";
 import { MotionStudioPage } from "./components/MotionStudioPage";
-import { ImageCleanupPage } from "./components/ImageCleanupPage";
+import { MaterialLibraryPage } from "./components/MaterialLibraryPage";
 import { getCurrentAccountSnapshot } from "./api/accountApi";
 import { ACCOUNT_CHANGED_EVENT, clearAccountSession } from "./storage/accountStore";
 import type { GenerationModule, ProductInput } from "./domain/types";
@@ -54,7 +54,6 @@ export default function App() {
   );
   const [activeStudioModule, setActiveStudioModule] =
     useState<StudioPage>("main_image");
-  const [cleanupSeed, setCleanupSeed] = useState<ProductInput | null>(null);
   const [motionSeed, setMotionSeed] = useState<ProductInput | null>(null);
   const isWorkspaceVisible = isStudioPage(page);
   const shouldMountWorkspace = page !== "home" && page !== "history";
@@ -107,13 +106,10 @@ export default function App() {
         onRequireLogin={() => handlePageChange("login")}
         onOpenPricing={() => handlePageChange("pricing")}
       />
-    ) : page === "cleanup" ? (
-      <ImageCleanupPage
+    ) : page === "materials" ? (
+      <MaterialLibraryPage
         isAuthenticated={isAuthenticated}
         onRequireLogin={() => handlePageChange("login")}
-        onOpenPricing={() => handlePageChange("pricing")}
-        initialProduct={cleanupSeed}
-        onInitialProductConsumed={() => setCleanupSeed(null)}
       />
     ) : page === "account" ? (
       <AccountPage paymentStatus={initialPaymentStatus} onLogout={handleLogout} />
@@ -204,16 +200,6 @@ export default function App() {
             isAuthenticated={isAuthenticated}
             onOpenPricing={() => handlePageChange("pricing")}
             onRequireLogin={() => handlePageChange("login")}
-            onOpenCleanup={(imageUrl, title) => {
-              setCleanupSeed({
-                id: `cleanup-import-${Date.now().toString(36)}`,
-                imageUrl,
-                fileName: title || "xiaohongshu-image",
-                createdAt: new Date().toISOString(),
-                source: "upload",
-              });
-              setPage("cleanup");
-            }}
             onOpenMotion={(imageUrl, title) => {
               setMotionSeed({
                 id: `motion-result-${Date.now().toString(36)}`,

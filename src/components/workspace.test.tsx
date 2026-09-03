@@ -306,36 +306,31 @@ describe("Workspace", () => {
     expect(screen.getByText("target-garment.png")).toBeInTheDocument();
   });
 
-  it("supports inspiration controls and an Image 2 reference", async () => {
+  it("supports the two-image replacement workflow and screenshot-matched controls", async () => {
     const user = userEvent.setup();
     render(<Workspace activeModule="lifestyle" />);
 
-    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    expect(screen.getByRole("heading", { name: "灵感创作" })).toBeInTheDocument();
-    expect(screen.getByLabelText("背景")).toHaveValue("lifestyle");
-    expect(screen.getByLabelText("姿态")).toHaveValue("natural");
-
-    await user.selectOptions(screen.getByLabelText("背景"), "studio");
-    await user.selectOptions(screen.getByLabelText("构图"), "ugc");
     await user.upload(
-      screen.getByLabelText("上传模特姿势参考图"),
-      new File(["reference"], "inspiration.png", { type: "image/png" }),
+      screen.getByLabelText("上传灵感原图"),
+      new File(["inspiration"], "inspiration.png", { type: "image/png" }),
     );
-    await user.type(
-      screen.getByLabelText("参考说明"),
-      "参考模特姿态和背景，保留我的商品。",
+    await user.upload(
+      screen.getByLabelText("上传产品服装图"),
+      new File(["replacement"], "replacement-shirt.png", { type: "image/png" }),
     );
-
-    expect(screen.getByText("inspiration.png")).toBeInTheDocument();
-    expect(screen.getByLabelText("上传服装参考图")).toBeInTheDocument();
-    expect(screen.getByLabelText("背景")).toHaveValue("studio");
-    expect(screen.getByLabelText("构图")).toHaveValue("ugc");
-    expect(screen.getByLabelText("背景调整幅度")).toHaveValue("medium");
-    expect(screen.getByLabelText("姿势调整幅度")).toHaveValue("low");
-    expect(screen.getByLabelText("服装比例")).toHaveValue("preserve");
-    expect(screen.getByLabelText("参考说明")).toHaveValue(
-      "参考模特姿态和背景，保留我的商品。",
-    );
+    expect(screen.getByRole("heading", { name: "灵感创作" })).toBeInTheDocument();
+    expect(screen.getByAltText("灵感原图")).toBeInTheDocument();
+    expect(screen.getByAltText("替换产品服装图")).toBeInTheDocument();
+    expect(screen.getByText("replacement-shirt.png")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("背景")).getByRole("button", { name: "保持" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByLabelText("产品 / 服装")).getByRole("button", { name: "替换" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(screen.getByLabelText("姿势")).getByRole("button", { name: "调整" }));
+    expect(within(screen.getByLabelText("姿势")).getByRole("button", { name: "调整" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("姿势变化幅度")).toBeInTheDocument();
+    await user.click(within(screen.getByLabelText("姿势变化幅度")).getByRole("button", { name: "高" }));
+    expect(within(screen.getByLabelText("姿势变化幅度")).getByRole("button", { name: "高" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(screen.getByLabelText("背景")).getByRole("button", { name: "调整" }));
+    expect(screen.getByLabelText("背景变化幅度")).toBeInTheDocument();
   });
 
   it("asks for the target garment image before generating outfit change", async () => {

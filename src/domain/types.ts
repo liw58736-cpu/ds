@@ -54,6 +54,7 @@ export type InspirationGarmentProportion =
   | "fitted"
   | "balanced"
   | "oversized";
+export type InspirationEditAction = "keep" | "adjust" | "replace";
 
 export interface InspirationSettings {
   background: InspirationBackground;
@@ -65,6 +66,10 @@ export interface InspirationSettings {
   backgroundChange?: InspirationChangeIntensity;
   poseChange?: InspirationChangeIntensity;
   garmentProportion?: InspirationGarmentProportion;
+  backgroundAction?: Exclude<InspirationEditAction, "replace">;
+  poseAction?: InspirationEditAction;
+  modelAction?: InspirationEditAction;
+  productAction?: Extract<InspirationEditAction, "keep" | "replace">;
 }
 
 export type MainImageModuleId =

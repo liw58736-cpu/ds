@@ -87,6 +87,10 @@ export function buildKromaGenerateRequest(
 function getKromaTaskType(
   config: GenerationTaskCreateRequest["body"]["config"],
 ): KromaGenerateRequest["task_type"] {
+  if (config.module === "lifestyle") {
+    return "image_edit";
+  }
+
   if (config.module !== "white_background") {
     return "ecommerce";
   }
@@ -111,15 +115,19 @@ function getModuleReferenceImageInput(
   const moduleIds = request.body.prompt.modules.map((module) => module.id);
   const expandedModuleIds = moduleIds.flatMap((moduleId) =>
     moduleId === "inspiration"
-      ? ["inspiration", "inspiration_model", "inspiration_garment"]
+      ? ["inspiration_product", "inspiration_garment", "inspiration"]
       : [moduleId],
   );
-  const imageUrls = expandedModuleIds
+  const allImageUrls = expandedModuleIds
     .flatMap((moduleId) =>
       (request.body.config.moduleReferenceAssets?.[moduleId] ?? [])
         .map((asset) => asset.imageUrl.trim())
         .filter(Boolean),
-    );
+    )
+    .filter((imageUrl, index, allUrls) => allUrls.indexOf(imageUrl) === index);
+  const imageUrls = request.body.config.module === "lifestyle"
+    ? allImageUrls.slice(0, 1)
+    : allImageUrls;
 
   if (imageUrls.length === 0) {
     return {};

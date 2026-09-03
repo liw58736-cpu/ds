@@ -14,14 +14,8 @@ import type {
   GenerationModule,
   GenerationResolution,
   GenerationVersion,
-  InspirationBackground,
   InspirationChangeIntensity,
-  InspirationComposition,
-  InspirationModel,
-  InspirationGarmentProportion,
-  InspirationPose,
-  InspirationPurpose,
-  InspirationProductHandling,
+  InspirationEditAction,
   InspirationSettings,
   MainImageModuleId,
   ModuleReferenceAsset,
@@ -65,7 +59,7 @@ const pageMeta = {
   lifestyle: {
     eyebrow: "INSPIRATION CREATOR",
     title: "灵感创作",
-    description: "用商品图搭配灵感参考，调整背景、姿态、模特和构图，生成新的电商视觉。",
+    description: "保留灵感原图的人物与画面，将第二张产品或服装自然替换进去。",
   },
 } as const satisfies Record<
   StudioModule,
@@ -233,157 +227,32 @@ const defaultInspirationSettings: InspirationSettings = {
   purpose: "product_listing",
   productHandling: "preserve",
   backgroundChange: "medium",
-  poseChange: "low",
-  garmentProportion: "preserve",
+  poseChange: "medium",
+  backgroundAction: "keep",
+  poseAction: "keep",
+  modelAction: "keep",
+  productAction: "replace",
 };
 
-const inspirationControls: Array<{
-  key: keyof InspirationSettings;
+const inspirationActionControls: Array<{
+  key: "backgroundAction" | "poseAction" | "modelAction" | "productAction";
   label: string;
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ value: InspirationEditAction; label: string }>;
 }> = [
-  {
-    key: "background",
-    label: "背景",
-    options: [
-      { value: "original", label: "保留原场景" },
-      { value: "studio", label: "高级棚拍" },
-      { value: "lifestyle", label: "生活方式" },
-      { value: "minimal", label: "极简留白" },
-      { value: "seasonal", label: "节日氛围" },
-    ],
-  },
-  {
-    key: "backgroundChange",
-    label: "背景调整幅度",
-    options: [
-      { value: "keep", label: "保持不变" },
-      { value: "low", label: "低 · 轻微调整" },
-      { value: "medium", label: "中 · 明显变化" },
-      { value: "high", label: "高 · 大幅重构" },
-    ],
-  },
-  {
-    key: "pose",
-    label: "姿态",
-    options: [
-      { value: "natural", label: "自然状态" },
-      { value: "static", label: "稳定展示" },
-      { value: "dynamic", label: "动态动作" },
-      { value: "closeup", label: "局部近景" },
-    ],
-  },
-  {
-    key: "poseChange",
-    label: "姿势调整幅度",
-    options: [
-      { value: "keep", label: "保持不变" },
-      { value: "low", label: "低 · 轻微调整" },
-      { value: "medium", label: "中 · 明显变化" },
-      { value: "high", label: "高 · 大幅重构" },
-    ],
-  },
-  {
-    key: "model",
-    label: "模特",
-    options: [
-      { value: "none", label: "不添加模特" },
-      { value: "female", label: "女性模特" },
-      { value: "male", label: "男性模特" },
-      { value: "diverse", label: "多元模特" },
-    ],
-  },
-  {
-    key: "composition",
-    label: "构图",
-    options: [
-      { value: "hero", label: "主视觉" },
-      { value: "editorial", label: "杂志感" },
-      { value: "split", label: "多画面" },
-      { value: "ugc", label: "真实分享" },
-    ],
-  },
-  {
-    key: "productHandling",
-    label: "商品处理",
-    options: [
-      { value: "preserve", label: "原样保留" },
-      { value: "feature", label: "突出商品" },
-      { value: "wear", label: "模特穿戴" },
-      { value: "in_use", label: "场景使用" },
-    ],
-  },
-  {
-    key: "garmentProportion",
-    label: "服装比例",
-    options: [
-      { value: "preserve", label: "保持参考比例" },
-      { value: "fitted", label: "修身比例" },
-      { value: "balanced", label: "标准比例" },
-      { value: "oversized", label: "宽松比例" },
-    ],
-  },
-  {
-    key: "purpose",
-    label: "用途",
-    options: [
-      { value: "product_listing", label: "商品上架" },
-      { value: "social_post", label: "社媒笔记" },
-      { value: "ad_creative", label: "广告素材" },
-      { value: "brand_story", label: "品牌内容" },
-    ],
-  },
+  { key: "backgroundAction", label: "背景", options: [{ value: "keep", label: "保持" }, { value: "adjust", label: "调整" }] },
+  { key: "poseAction", label: "姿势", options: [{ value: "keep", label: "保持" }, { value: "adjust", label: "调整" }, { value: "replace", label: "替换" }] },
+  { key: "modelAction", label: "模特", options: [{ value: "keep", label: "保持" }, { value: "adjust", label: "调整" }, { value: "replace", label: "替换" }] },
+  { key: "productAction", label: "产品 / 服装", options: [{ value: "keep", label: "保持" }, { value: "replace", label: "替换" }] },
 ];
 
-function readImageFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("Reference image could not be read."));
-      }
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("Reference image could not be read."));
-    reader.readAsDataURL(file);
-  });
-}
-
-function InspirationReferenceSlot({
-  label,
-  description,
-  inputLabel,
-  image,
-  imageAlt,
-  onChange,
-  onRemove,
-}: {
+const inspirationChangeOptions: Array<{
+  value: Exclude<InspirationChangeIntensity, "keep">;
   label: string;
-  description: string;
-  inputLabel: string;
-  image?: ModuleReferenceAsset;
-  imageAlt: string;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="inspiration-reference-slot">
-      <label className="inspiration-reference-upload">
-        <span>{label}</span>
-        <small>{description}</small>
-        <input type="file" accept="image/*" aria-label={inputLabel} onChange={onChange} />
-      </label>
-      {image ? (
-        <div className="inspiration-reference-preview">
-          <img src={image.imageUrl} alt={imageAlt} />
-          <div><strong>{image.fileName}</strong><span>{description}</span></div>
-          <button type="button" className="secondary-button" onClick={onRemove}>删除</button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
+}> = [
+  { value: "low", label: "低" },
+  { value: "medium", label: "中" },
+  { value: "high", label: "高" },
+];
 
 export function ParameterPanel({
   activeModule,
@@ -418,19 +287,6 @@ export function ParameterPanel({
   const selectedMainModules = config.selectedMainModules ?? [];
   const detailCounts = config.detailModuleCounts ?? {};
   const moduleReferenceAssets = config.moduleReferenceAssets ?? {};
-  const inspirationModelAssets =
-    moduleReferenceAssets.inspiration_model ?? moduleReferenceAssets.inspiration ?? [];
-  const inspirationModelImage = inspirationModelAssets.find(
-    hasModuleReferenceImage,
-  );
-  const inspirationGarmentAssets = moduleReferenceAssets.inspiration_garment ?? [];
-  const inspirationGarmentImage = inspirationGarmentAssets.find(
-    hasModuleReferenceImage,
-  );
-  const inspirationNote = inspirationModelAssets
-    .map((asset) => asset.note?.trim() ?? "")
-    .filter(Boolean)
-    .join("\n");
   const inspirationSettings = {
     ...defaultInspirationSettings,
     ...(config.inspirationSettings ?? {}),
@@ -572,60 +428,6 @@ export function ParameterPanel({
       ...inspirationSettings,
       [key]: value,
     });
-  };
-
-  const updateInspirationNote = (note: string) => {
-    const trimmedNote = note.trim();
-    const imageAssets = inspirationModelAssets.filter(hasModuleReferenceImage);
-    const nextAssets = imageAssets.length > 0
-      ? imageAssets.map((asset) => ({
-          ...asset,
-          ...(trimmedNote ? { note: trimmedNote } : { note: undefined }),
-        }))
-      : trimmedNote
-        ? [createNoteOnlyReferenceAsset(trimmedNote)]
-        : [];
-    saveModuleReferenceAssets("inspiration_model", nextAssets);
-  };
-
-  const handleInspirationReferenceFileChange = async (
-    event: ChangeEvent<HTMLInputElement>,
-    role: "model" | "garment",
-  ) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-
-    if (!file || !hasProduct) {
-      if (!hasProduct) {
-        requireProductBeforeModuleSelection();
-      }
-      return;
-    }
-
-    const imageUrl = await readImageFile(file);
-    const asset: ModuleReferenceAsset = {
-      id: `inspiration-${role}-${Date.now().toString(36)}-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`,
-      fileName: file.name,
-      imageUrl,
-      ...(role === "model" && inspirationNote ? { note: inspirationNote } : {}),
-    };
-    saveModuleReferenceAssets(
-      role === "model" ? "inspiration_model" : "inspiration_garment",
-      [asset],
-    );
-  };
-
-  const removeInspirationReference = (role: "model" | "garment") => {
-    if (role === "garment") {
-      saveModuleReferenceAssets("inspiration_garment", []);
-      return;
-    }
-    saveModuleReferenceAssets(
-      "inspiration_model",
-      inspirationNote ? [createNoteOnlyReferenceAsset(inspirationNote)] : [],
-    );
   };
 
   const openReferenceEditor = (moduleId: string, title: string) => {
@@ -1054,65 +856,67 @@ export function ParameterPanel({
         <section className="setting-group inspiration-creator-group" aria-labelledby="inspiration-controls">
           <div className="setting-group-heading">
             <span id="inspiration-controls">创作控制</span>
-            <small>Image 1 商品 · Image 2 模特/姿势 · Image 3 服装参考</small>
+            <small>按灵感原图决定哪些内容保持、调整或替换</small>
           </div>
-          <div className="inspiration-control-grid">
-            {inspirationControls.map((control) => (
-              <div className="field" key={control.key}>
-                <label htmlFor={`inspiration-${control.key}`}>{control.label}</label>
-                <select
-                  id={`inspiration-${control.key}`}
-                  value={inspirationSettings[control.key]}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    if (control.key === "background") updateInspirationSetting("background", value as InspirationBackground);
-                    if (control.key === "pose") updateInspirationSetting("pose", value as InspirationPose);
-                    if (control.key === "model") updateInspirationSetting("model", value as InspirationModel);
-                    if (control.key === "composition") updateInspirationSetting("composition", value as InspirationComposition);
-                    if (control.key === "purpose") updateInspirationSetting("purpose", value as InspirationPurpose);
-                    if (control.key === "productHandling") updateInspirationSetting("productHandling", value as InspirationProductHandling);
-                    if (control.key === "backgroundChange") updateInspirationSetting("backgroundChange", value as InspirationChangeIntensity);
-                    if (control.key === "poseChange") updateInspirationSetting("poseChange", value as InspirationChangeIntensity);
-                    if (control.key === "garmentProportion") updateInspirationSetting("garmentProportion", value as InspirationGarmentProportion);
-                  }}
-                >
-                  {control.options.map((option) => (
-                    <option value={option.value} key={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
+          <div className="inspiration-action-list">
+            {inspirationActionControls.map((control) => {
+              const fallback = control.key === "productAction" ? "replace" : "keep";
+              const selectedAction = inspirationSettings[control.key] ?? fallback;
+              const changeKey = control.key === "backgroundAction"
+                ? "backgroundChange"
+                : control.key === "poseAction"
+                  ? "poseChange"
+                  : null;
+
+              return (
+                <div className="inspiration-action-control" key={control.key}>
+                  <div className="inspiration-action-row">
+                    <strong>{control.label}</strong>
+                    <div className="segmented-control" aria-label={control.label}>
+                      {control.options.map((option) => {
+                        const active = selectedAction === option.value;
+                        return (
+                          <button
+                            type="button"
+                            key={option.value}
+                            className={active ? "is-active" : undefined}
+                            aria-pressed={active}
+                            onClick={() => updateInspirationSetting(control.key, option.value)}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {changeKey && selectedAction === "adjust" ? (
+                    <div className="inspiration-change-row">
+                      <span>{control.label}变化幅度</span>
+                      <div className="segmented-control" aria-label={`${control.label}变化幅度`}>
+                        {inspirationChangeOptions.map((option) => {
+                          const active = (inspirationSettings[changeKey] ?? "medium") === option.value;
+                          return (
+                            <button
+                              type="button"
+                              key={option.value}
+                              className={active ? "is-active" : undefined}
+                              aria-pressed={active}
+                              onClick={() => updateInspirationSetting(changeKey, option.value)}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
-          <div className="inspiration-reference-slots">
-            <InspirationReferenceSlot
-              label="模特 / 姿势参考图"
-              description="Image 2：参考模特、姿势、构图或背景"
-              inputLabel="上传模特姿势参考图"
-              image={inspirationModelImage}
-              imageAlt="已上传的模特姿势参考图"
-              onChange={(event) => void handleInspirationReferenceFileChange(event, "model")}
-              onRemove={() => removeInspirationReference("model")}
-            />
-            <InspirationReferenceSlot
-              label="服装参考图"
-              description="Image 3：参考服装款式、结构和穿着比例"
-              inputLabel="上传服装参考图"
-              image={inspirationGarmentImage}
-              imageAlt="已上传的服装参考图"
-              onChange={(event) => void handleInspirationReferenceFileChange(event, "garment")}
-              onRemove={() => removeInspirationReference("garment")}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="inspiration-reference-note">参考说明</label>
-            <textarea
-              id="inspiration-reference-note"
-              rows={3}
-              value={inspirationNote}
-              onChange={(event) => updateInspirationNote(event.target.value)}
-              placeholder="例如：参考这张图的模特姿态和室内背景，但保留我的商品款式、颜色和细节。"
-            />
-          </div>
+          <p className="inspiration-action-summary">
+            默认保持背景、姿势和模特，只替换产品 / 服装；如需更大变化再调整对应选项。
+          </p>
         </section>
       ) : null}
 

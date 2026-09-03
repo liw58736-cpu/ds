@@ -153,9 +153,9 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "灵感创作" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("上传模特姿势参考图")).toBeInTheDocument();
-    expect(screen.getByLabelText("上传服装参考图")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "小红书图片提取" })).toBeInTheDocument();
+    expect(screen.getByLabelText("上传灵感原图")).toBeInTheDocument();
+    expect(screen.getByLabelText("上传产品服装图")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "小红书图片提取" })).not.toBeInTheDocument();
   });
 
   it("opens the local still-to-motion workspace", async () => {
@@ -169,15 +169,15 @@ describe("App", () => {
     expect(screen.getByLabelText("清晰度")).toHaveValue("720p");
   });
 
-  it("opens the masked image cleanup workspace", async () => {
+  it("opens the material library instead of a separate cleanup navigation page", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "图片清理" }));
+    await user.click(screen.getByRole("button", { name: "素材库" }));
 
-    expect(screen.getByRole("heading", { name: "图片清理" })).toBeInTheDocument();
-    expect(screen.getByLabelText("上传待清理图片")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "去除水印或文字" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "素材库" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "链接提取" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "图片清理" })).not.toBeInTheDocument();
   });
 
   it("places AI tools after the detail page in the top navigation", () => {
@@ -194,7 +194,7 @@ describe("App", () => {
       "AI工具",
       "灵感创作",
       "Live图",
-      "图片清理",
+      "素材库",
       "价格",
       "登录",
     ]);

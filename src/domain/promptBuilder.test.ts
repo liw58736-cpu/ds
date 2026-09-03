@@ -71,14 +71,19 @@ describe("buildGenerationPrompt", () => {
         composition: "ugc",
         purpose: "social_post",
         productHandling: "preserve",
+        backgroundAction: "keep",
+        poseAction: "adjust",
+        poseChange: "high",
+        modelAction: "keep",
+        productAction: "replace",
       },
       moduleReferenceAssets: {
-        inspiration: [
+        inspiration_product: [
           {
             id: "inspiration-ref-1",
             fileName: "reference.png",
             imageUrl: "data:image/png;base64,reference",
-            note: "参考模特姿态和背景，保留我的商品。",
+            note: "将这件产品替换到灵感原图中。",
           },
         ],
       },
@@ -86,11 +91,12 @@ describe("buildGenerationPrompt", () => {
 
     expect(prompt.modules).toHaveLength(1);
     expect(prompt.modules[0]?.id).toBe("inspiration");
-    expect(prompt.modules[0]?.prompt).toContain("Image 2 reference assets");
-    expect(prompt.modules[0]?.prompt).toContain("background=studio");
-    expect(prompt.modules[0]?.prompt).toContain("purpose=social_post");
+    expect(prompt.modules[0]?.prompt).toContain("Image 1 is the inspiration base photo");
+    expect(prompt.modules[0]?.prompt).toContain("background=keep");
+    expect(prompt.modules[0]?.prompt).toContain("pose=adjust (high change intensity)");
+    expect(prompt.modules[0]?.prompt).toContain("product=replace");
     expect(prompt.modules[0]?.prompt).toContain(
-      "Do not replace Image 1 with the product or garment shown in Image 2",
+      "Image 2 is the only replacement product or clothing source",
     );
   });
 

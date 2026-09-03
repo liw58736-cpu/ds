@@ -7,6 +7,7 @@ import type {
   InspirationBackground,
   InspirationChangeIntensity,
   InspirationComposition,
+  InspirationEditAction,
   InspirationModel,
   InspirationGarmentProportion,
   InspirationPose,
@@ -163,6 +164,11 @@ const inspirationGarmentProportions = new Set<InspirationGarmentProportion>([
   "balanced",
   "oversized",
 ]);
+const inspirationEditActions = new Set<InspirationEditAction>([
+  "keep",
+  "adjust",
+  "replace",
+]);
 const statuses = new Set<TaskStatus>([
   "queued",
   "processing",
@@ -283,6 +289,10 @@ function parseInspirationSettings(value: unknown): InspirationSettings | undefin
     backgroundChange,
     poseChange,
     garmentProportion,
+    backgroundAction,
+    poseAction,
+    modelAction,
+    productAction,
   } = value;
 
   if (
@@ -321,6 +331,22 @@ function parseInspirationSettings(value: unknown): InspirationSettings | undefin
       isString(garmentProportion) && inspirationGarmentProportions.has(garmentProportion as InspirationGarmentProportion)
         ? (garmentProportion as InspirationGarmentProportion)
         : "preserve",
+    backgroundAction:
+      isString(backgroundAction) && backgroundAction !== "replace" && inspirationEditActions.has(backgroundAction as InspirationEditAction)
+        ? (backgroundAction as "keep" | "adjust")
+        : "keep",
+    poseAction:
+      isString(poseAction) && inspirationEditActions.has(poseAction as InspirationEditAction)
+        ? (poseAction as InspirationEditAction)
+        : "keep",
+    modelAction:
+      isString(modelAction) && inspirationEditActions.has(modelAction as InspirationEditAction)
+        ? (modelAction as InspirationEditAction)
+        : "keep",
+    productAction:
+      isString(productAction) && (productAction === "keep" || productAction === "replace")
+        ? (productAction as "keep" | "replace")
+        : "replace",
   };
 }
 

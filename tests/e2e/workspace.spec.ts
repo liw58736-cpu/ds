@@ -282,9 +282,9 @@ test("new content tools render and remain usable without horizontal overflow", a
   await page.goto("/");
 
   await page.getByRole("button", { name: "灵感创作", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "小红书图片提取" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "灵感创作" })).toBeVisible();
-  await expect(page.getByLabel("商品处理")).toHaveValue("preserve");
+  await expect(page.getByLabel("上传灵感原图")).toBeVisible();
+  await expect(page.getByLabel("上传产品服装图")).toBeVisible();
   await expectNoHorizontalDocumentOverflow(page);
 
   await page.getByRole("button", { name: "Live图", exact: true }).click();
@@ -292,25 +292,24 @@ test("new content tools render and remain usable without horizontal overflow", a
   await expect(page.getByLabel("上传动态源图")).toBeVisible();
   await expectNoHorizontalDocumentOverflow(page);
 
-  await page.getByRole("button", { name: "图片清理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "图片清理" })).toBeVisible();
-  await expect(page.getByLabel("上传待清理图片")).toBeVisible();
-  await expect(page.getByRole("button", { name: "去除水印或文字" })).toBeVisible();
+  await page.getByRole("button", { name: "素材库", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "素材库" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "链接提取" })).toBeVisible();
   await expectNoHorizontalDocumentOverflow(page);
 });
 
 test("guest Xiaohongshu extraction uses a visible login dialog", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "灵感创作", exact: true }).click();
+  await page.getByRole("button", { name: "素材库", exact: true }).click();
   await page
-    .getByLabel("公开素材链接")
+    .getByLabel("小红书素材链接")
     .fill("https://www.xiaohongshu.com/explore/example");
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "提取笔记图片" }).click();
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await page.getByRole("button", { name: "提取图片" }).click();
 
   const dialog = page.getByRole("alertdialog", { name: "请先登录" });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("登录后才能提取并保存小红书图片");
+  await expect(dialog).toContainText("登录后才能提取并保存图片");
   await expectNoHorizontalDocumentOverflow(page);
   await dialog.getByRole("button", { name: "去登录" }).click();
   await expect(page.getByRole("heading", { name: "登录" })).toBeVisible();
@@ -344,11 +343,14 @@ test("light motion generates a real downloadable WebM in the browser", async ({
   })).toBe(99);
 });
 
-test("inspiration results compare original and generated images and can open Live creation", async ({ page }) => {
+test("two-image inspiration results compare original and generated images and can open Live creation", async ({ page }) => {
   await seedAuthenticatedAccount(page);
   await page.goto("/");
   await page.getByRole("button", { name: "灵感创作", exact: true }).click();
-  await page.getByRole("button", { name: "使用示例商品", exact: true }).click();
+  await page.getByLabel("上传灵感原图").setInputFiles("src/assets/home/kroma-detail-after-v2.webp");
+  await page.getByLabel("上传产品服装图").setInputFiles("src/assets/home/kroma-detail-before-v2.webp");
+  await expect(page.getByAltText("灵感原图")).toBeVisible();
+  await expect(page.getByAltText("替换产品服装图")).toBeVisible();
   await page.locator(".version-grid button").first().click();
   await page.getByRole("button", { name: "生成灵感创作", exact: true }).click();
 
