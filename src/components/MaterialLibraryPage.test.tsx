@@ -44,7 +44,12 @@ describe("MaterialLibraryPage", () => {
     });
     render(<MaterialLibraryPage isAuthenticated onRequireLogin={vi.fn()} />);
 
-    await user.click(screen.getByRole("button", { name: "链接提取" }));
+    const openImport = screen.getByRole("button", { name: "链接提取" });
+    expect(openImport).toHaveAttribute("aria-expanded", "false");
+    await user.click(openImport);
+    expect(
+      screen.getByRole("button", { name: "收起链接提取" }),
+    ).toHaveAttribute("aria-expanded", "true");
     expect(
       screen.queryByRole("checkbox", { name: /授权/ }),
     ).not.toBeInTheDocument();
@@ -63,7 +68,46 @@ describe("MaterialLibraryPage", () => {
       "https://cdn.example.com/2.jpg",
       true,
       "穿搭参考-1",
+      "https://www.xiaohongshu.com/explore/note",
     );
+  });
+
+  it("keeps only failed extracted photos selected when a batch save is partial", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listMaterialLibraryAssets).mockResolvedValue([]);
+    vi.mocked(importPublicMaterial).mockResolvedValue({
+      sourceUrl: "https://www.xiaohongshu.com/explore/note",
+      title: "穿搭参考 - 小红书",
+      images: ["https://cdn.example.com/1.jpg", "https://cdn.example.com/2.jpg"],
+      limited: false,
+      sourcePlatform: "xiaohongshu",
+    });
+    vi.mocked(saveImportedMaterial)
+      .mockResolvedValueOnce({
+        id: "saved-1",
+        imageUrl: "stored-1",
+        fileName: "穿搭参考 1",
+        createdAt: "2026-09-03T00:00:00.000Z",
+        contentType: "image/jpeg",
+        size: 100,
+      })
+      .mockRejectedValueOnce(new Error("图片来源暂时无法读取，请稍后重试。"));
+    render(<MaterialLibraryPage isAuthenticated onRequireLogin={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "链接提取" }));
+    await user.type(
+      screen.getByLabelText("小红书素材链接"),
+      "https://www.xiaohongshu.com/explore/note",
+    );
+    await user.click(screen.getByRole("button", { name: "提取图片" }));
+    await user.click(await screen.findByRole("checkbox", { name: "选择照片 1" }));
+    await user.click(screen.getByRole("checkbox", { name: "选择照片 2" }));
+    await user.click(screen.getByRole("button", { name: "保存选中照片（2）" }));
+
+    expect(await screen.findByText("已保存 1 张，1 张未保存，可直接重试。")).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "选择照片 1" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "选择照片 2" })).toBeChecked();
+    expect(screen.getByRole("alertdialog", { name: "部分照片保存失败" })).toBeVisible();
   });
 
   it("shows background sync failure inline without an unsolicited popup", async () => {

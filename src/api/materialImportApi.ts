@@ -60,14 +60,18 @@ export async function importPublicMaterial(
   }
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await fetchWithTimeout(`${baseUrl}/materials/import`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      `${baseUrl}/materials/import`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url, authorized }),
       },
-      body: JSON.stringify({ url, authorized }),
-    });
+      90000,
+    );
 
     if (response.status === 401 && attempt === 0) {
       token = await refreshKromaSession();
@@ -83,7 +87,13 @@ export async function importPublicMaterial(
       } catch {
         // Keep the response text as the user-facing error.
       }
-      throw new Error(message || `素材导入失败（HTTP ${response.status}）`);
+      throw new Error(
+        normalizeMaterialError(
+          message,
+          response.status,
+          "图片提取失败，请稍后重试。",
+        ),
+      );
     }
 
     const payload = (await response.json()) as ImportedMaterialResponse;
@@ -112,6 +122,7 @@ export async function saveImportedMaterial(
   url: string,
   authorized: boolean,
   title?: string,
+  sourceUrl?: string,
 ): Promise<SavedMaterial> {
   const baseUrl = getMaterialApiBaseUrl();
   let token = getAccountAccessToken();
@@ -120,14 +131,23 @@ export async function saveImportedMaterial(
   if (!token) throw new Error("请先登录后再保存公开素材。");
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await fetchWithTimeout(`${baseUrl}/materials/store`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      `${baseUrl}/materials/store`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          url,
+          authorized,
+          ...(title ? { title } : {}),
+          ...(sourceUrl ? { source_url: sourceUrl } : {}),
+        }),
       },
-      body: JSON.stringify({ url, authorized, ...(title ? { title } : {}) }),
-    });
+      90000,
+    );
 
     if (response.status === 401 && attempt === 0) {
       token = await refreshKromaSession();
@@ -143,7 +163,13 @@ export async function saveImportedMaterial(
       } catch {
         // Keep response text when the backend did not return JSON.
       }
-      throw new Error(message || `素材保存失败（HTTP ${response.status}）`);
+      throw new Error(
+        normalizeMaterialError(
+          message,
+          response.status,
+          "图片保存失败，请稍后重试。",
+        ),
+      );
     }
 
     const payload = (await response.json()) as StoredMaterialResponse;
@@ -249,4 +275,25 @@ function normalizeSavedMaterial(
     contentType: payload.content_type ?? "image/jpeg",
     size: Number(payload.size ?? 0),
   };
+}
+
+function normalizeMaterialError(
+  message: string,
+  status: number,
+  fallback: string,
+): string {
+  const value = String(message || "").trim();
+  const lower = value.toLowerCase();
+  if (lower.includes("could not be read") || lower.includes("failed to fetch"))
+    return "图片来源暂时无法读取，请稍后重试。";
+  if (lower.includes("no public images were found"))
+    return "没有读取到公开图片，请确认链接可以直接访问。";
+  if (lower.includes("only png") || lower.includes("not an image"))
+    return "该图片格式暂不支持保存，请选择 JPG、PNG 或 WebP 图片。";
+  if (lower.includes("exceeds 20 mb") || status === 413)
+    return "图片超过 20MB，暂时无法保存。";
+  if (lower.includes("empty")) return "图片内容为空，请重新提取。";
+  if (lower.includes("timed out") || status === 504)
+    return "图片来源响应较慢，本次请求已超时，请稍后重试。";
+  return value || fallback;
 }

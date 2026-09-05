@@ -46,6 +46,7 @@ export function MaterialLibraryPage({
   const [pageLimit, setPageLimit] = useState(40);
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
+  const [sourcePageUrl, setSourcePageUrl] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
   const [assets, setAssets] = useState<MaterialLibraryAsset[]>([]);
@@ -110,6 +111,7 @@ export function MaterialLibraryPage({
     try {
       const result = await importPublicMaterial(url.trim(), true);
       setTitle(result.title);
+      setSourcePageUrl(result.sourceUrl);
       setImages(result.images);
       setSelectedImages(new Set());
       setMessage(
@@ -189,19 +191,39 @@ export function MaterialLibraryPage({
 
     setIsSaving(true);
     const selected = images.filter((imageUrl) => selectedImages.has(imageUrl));
-    try {
-      await Promise.all(
-        selected.map((imageUrl, index) =>
+    const results = await Promise.allSettled(
+      selected.map((imageUrl, index) =>
           saveImportedMaterial(
             imageUrl,
             true,
             `${title.replace(/\s+-\s+小红书$/u, "") || "小红书素材"}-${index + 1}`,
+            sourcePageUrl,
           ),
-        ),
+      ),
+    );
+    const failedUrls = selected.filter(
+      (_, index) => results[index].status === "rejected",
+    );
+    const succeeded = selected.length - failedUrls.length;
+    try {
+      setSelectedImages(new Set(failedUrls));
+      setMessage(
+        failedUrls.length
+          ? `已保存 ${succeeded} 张，${failedUrls.length} 张未保存，可直接重试。`
+          : `已保存 ${succeeded} 张照片。`,
       );
-      setSelectedImages(new Set());
-      setMessage(`已保存 ${selected.length} 张照片。`);
       await loadLibrary();
+      if (failedUrls.length) {
+        const reasons = results.flatMap((result) =>
+          result.status === "rejected"
+            ? [result.reason instanceof Error ? result.reason.message : "保存失败"]
+            : [],
+        );
+        setNotice({
+          title: succeeded ? "部分照片保存失败" : "保存失败",
+          message: `${reasons.slice(0, 3).join("；")} 失败照片仍保持选中，可再次点击保存。`,
+        });
+      }
     } catch (error) {
       setNotice({
         title: "保存失败",
@@ -226,19 +248,25 @@ export function MaterialLibraryPage({
         <div className="library-toolbar">
           <button
             type="button"
-            className="primary-button"
+            className={`primary-button${importMode === "upload" ? " is-active" : ""}`}
+            aria-expanded={importMode === "upload"}
+            aria-controls="material-local-upload"
+            disabled={isUploading}
             onClick={() =>
               setImportMode(importMode === "upload" ? null : "upload")
             }
           >
-            批量上传
+            {importMode === "upload" ? "收起批量上传" : "批量上传"}
           </button>
           <button
             type="button"
-            className="secondary-button"
+            className={`secondary-button${importMode === "link" ? " is-active" : ""}`}
+            aria-expanded={importMode === "link"}
+            aria-controls="material-link-import"
+            disabled={isExtracting || isSaving}
             onClick={() => setImportMode(importMode === "link" ? null : "link")}
           >
-            链接提取
+            {importMode === "link" ? "收起链接提取" : "链接提取"}
           </button>
           {onReturn ? (
             <button
@@ -254,6 +282,7 @@ export function MaterialLibraryPage({
       </section>
 
       <section
+        id="material-local-upload"
         hidden={importMode !== "upload"}
         className="panel material-local-upload-panel"
         aria-labelledby="material-local-upload-title"
@@ -298,6 +327,7 @@ export function MaterialLibraryPage({
       </section>
 
       <section
+        id="material-link-import"
         hidden={importMode !== "link"}
         className="panel material-extract-panel"
         aria-labelledby="material-extract-title"

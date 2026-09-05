@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initializeSession } from "../storage/accountStore";
-import { importPublicMaterial, listSavedMaterials, storeImportedMaterial, uploadLocalMaterial } from "./materialImportApi";
+import {
+  importPublicMaterial,
+  listSavedMaterials,
+  saveImportedMaterial,
+  storeImportedMaterial,
+  uploadLocalMaterial,
+} from "./materialImportApi";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -8,21 +14,25 @@ afterEach(() => {
   localStorage.clear();
 });
 
+function signIn() {
+  initializeSession({
+    identifier: "seller@example.com",
+    authView: "login",
+    mode: "password",
+    storeName: "",
+    inviteCode: "",
+    createdAt: "2026-08-31T00:00:00.000Z",
+    provider: "kroma",
+    userId: "user-1",
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+  });
+}
+
 describe("materialImportApi", () => {
   it("imports authorized public material through the separate web backend", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1/");
-    initializeSession({
-      identifier: "seller@example.com",
-      authView: "login",
-      mode: "password",
-      storeName: "",
-      inviteCode: "",
-      createdAt: "2026-08-31T00:00:00.000Z",
-      provider: "kroma",
-      userId: "user-1",
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
-    });
+    signIn();
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -60,22 +70,12 @@ describe("materialImportApi", () => {
 
   it("stores a selected imported image before it is used by generation", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1/");
-    initializeSession({
-      identifier: "seller@example.com",
-      authView: "login",
-      mode: "password",
-      storeName: "",
-      inviteCode: "",
-      createdAt: "2026-08-31T00:00:00.000Z",
-      provider: "kroma",
-      userId: "user-1",
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
-    });
+    signIn();
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          stored_url: "https://web-project.supabase.co/storage/v1/object/public/web-materials/user-1/material.webp",
+          stored_url:
+            "https://web-project.supabase.co/storage/v1/object/public/web-materials/user-1/material.webp",
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
@@ -96,31 +96,73 @@ describe("materialImportApi", () => {
     );
   });
 
-  it("lists previously saved account materials", async () => {
+  it("passes the source page when saving an extracted image", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1/");
-    initializeSession({
-      identifier: "seller@example.com",
-      authView: "login",
-      mode: "password",
-      storeName: "",
-      inviteCode: "",
-      createdAt: "2026-08-31T00:00:00.000Z",
-      provider: "kroma",
-      userId: "user-1",
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
-    });
+    signIn();
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          materials: [{
-            id: "user-1/materials/photo.webp",
-            stored_url: "https://web-project.supabase.co/storage/photo.webp",
-            file_name: "以前保存的照片",
-            created_at: "2026-09-01T00:00:00.000Z",
-            content_type: "image/webp",
-            size: 128,
-          }],
+          id: "saved",
+          stored_url: "https://storage.example.com/saved.jpg",
+          file_name: "saved",
+          content_type: "image/jpeg",
+          size: 10,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await saveImportedMaterial(
+      "https://sns-webpic-qc.xhscdn.com/image",
+      true,
+      "商品图",
+      "https://www.xiaohongshu.com/explore/note",
+    );
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      url: "https://sns-webpic-qc.xhscdn.com/image",
+      authorized: true,
+      title: "商品图",
+      source_url: "https://www.xiaohongshu.com/explore/note",
+    });
+  });
+
+  it("translates an unreadable source into a useful save error", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1/");
+    signIn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            detail: "The public material page could not be read (HTTP 403).",
+          }),
+          { status: 422 },
+        ),
+      ),
+    );
+
+    await expect(
+      saveImportedMaterial("https://cdn.example.com/image", true),
+    ).rejects.toThrow("图片来源暂时无法读取，请稍后重试。");
+  });
+
+  it("lists previously saved account materials", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1/");
+    signIn();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          materials: [
+            {
+              id: "user-1/materials/photo.webp",
+              stored_url: "https://web-project.supabase.co/storage/photo.webp",
+              file_name: "以前保存的照片",
+              created_at: "2026-09-01T00:00:00.000Z",
+              content_type: "image/webp",
+              size: 128,
+            },
+          ],
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
@@ -139,40 +181,43 @@ describe("materialImportApi", () => {
     ]);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://web-api.example.com/api/v1/materials?limit=60",
-      expect.objectContaining({ headers: { Authorization: "Bearer access-token" } }),
+      expect.objectContaining({
+        headers: { Authorization: "Bearer access-token" },
+      }),
     );
   });
 
   it("uploads a local image through the material library backend", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1/");
-    initializeSession({
-      identifier: "seller@example.com",
-      authView: "login",
-      mode: "password",
-      storeName: "",
-      inviteCode: "",
-      createdAt: "2026-08-31T00:00:00.000Z",
-      provider: "kroma",
-      userId: "user-1",
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
-    });
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      id: "user-1/materials/local-photo.png",
-      stored_url: "https://web-project.supabase.co/storage/local-photo.png",
-      file_name: "local-photo",
-      created_at: "2026-09-03T00:00:00.000Z",
-      content_type: "image/png",
-      size: 5,
-    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    signIn();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "user-1/materials/local-photo.png",
+          stored_url:
+            "https://web-project.supabase.co/storage/local-photo.png",
+          file_name: "local-photo",
+          created_at: "2026-09-03T00:00:00.000Z",
+          content_type: "image/png",
+          size: 5,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(uploadLocalMaterial(new File(["image"], "local-photo.png", { type: "image/png" }))).resolves.toMatchObject({
+    await expect(
+      uploadLocalMaterial(
+        new File(["image"], "local-photo.png", { type: "image/png" }),
+      ),
+    ).resolves.toMatchObject({
       imageUrl: "https://web-project.supabase.co/storage/local-photo.png",
       fileName: "local-photo",
     });
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://web-api.example.com/api/v1/materials/upload");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://web-api.example.com/api/v1/materials/upload",
+    );
     expect(init.body).toBeInstanceOf(FormData);
     expect((init.body as FormData).get("image")).toBeInstanceOf(File);
   });

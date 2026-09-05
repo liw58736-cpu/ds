@@ -172,6 +172,7 @@ test("material import extracts every Xiaohongshu note image from pasted share te
     "https:\\u002F\\u002Fsns-webpic-qc.xhscdn.com\\u002F20260902\\u002Ffirst!nd_dft_wlteh_jpg_3";
   const secondImage =
     "http:\\u002F\\u002Fsns-webpic-bd.xhscdn.com\\u002F20260902\\u002Fsecond!nd_dft_wlteh_jpg_3";
+  let sharePageFetches = 0;
   const app = createWebBackend({
     env: {
       WEB_SUPABASE_URL: "https://web-project.supabase.co",
@@ -184,6 +185,7 @@ test("material import extracts every Xiaohongshu note image from pasted share te
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
       }
       if (url === shareUrl) {
+        sharePageFetches++;
         return new Response(
           `<html><head><title>商品搭配 - 小红书</title><meta property="og:image" content="https://picasso-static.xiaohongshu.com/logo.png"></head><body><img src="https://fe-static.xhscdn.com/icon.png"><script>window.__INITIAL_STATE__={"note":{"imageList":[{"urlDefault":"${firstImage}"},{"urlDefault":"${secondImage}"}]}}</script></body></html>`,
           {
@@ -221,6 +223,18 @@ test("material import extracts every Xiaohongshu note image from pasted share te
     limited: false,
     source_platform: "xiaohongshu",
   });
+  const cachedResponse = await app.handle(
+    new Request("http://local.test/api/v1/materials/import", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer access-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url: shareUrl, authorized: true }),
+    }),
+  );
+  assert.equal(cachedResponse.status, 200);
+  assert.equal(sharePageFetches, 1);
 });
 
 test("material import rejects private network URLs and missing authorization confirmation", async () => {
@@ -269,7 +283,7 @@ test("material import rejects private network URLs and missing authorization con
   assert.equal(permissionResponse.status, 422);
 });
 
-test("material store copies an authorized public image into isolated web storage", async () => {
+test("material store copies an octet-stream Xiaohongshu JPEG with source referer into isolated web storage", async () => {
   const calls = [];
   const app = createWebBackend({
     env: {
@@ -284,10 +298,16 @@ test("material store copies an authorized public image into isolated web storage
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
       }
-      if (url === "https://cdn.example.com/material.webp") {
-        return new Response(Buffer.from("stable-material"), {
+      if (url === "https://sns-webpic-qc.xhscdn.com/material") {
+        assert.equal(
+          init.headers.Referer,
+          "https://www.xiaohongshu.com/explore/note",
+        );
+        assert.match(init.headers["User-Agent"], /Chrome\//);
+        return new Response(
+          Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.from("stable-material")]), {
           status: 200,
-          headers: { "Content-Type": "image/webp" },
+          headers: { "Content-Type": "application/octet-stream" },
         });
       }
       if (url === "https://web-project.supabase.co/storage/v1/bucket") {
@@ -299,8 +319,11 @@ test("material store copies an authorized public image into isolated web storage
         )
       ) {
         assert.equal(init.method, "PUT");
-        assert.equal(init.headers["Content-Type"], "image/webp");
-        assert.equal(await init.body.text(), "stable-material");
+        assert.equal(init.headers["Content-Type"], "image/jpeg");
+        assert.deepEqual(
+          Buffer.from(await init.body.arrayBuffer()).subarray(0, 3),
+          Buffer.from([0xff, 0xd8, 0xff]),
+        );
         return jsonResponse({ Key: "stored" }, 200);
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -315,9 +338,10 @@ test("material store copies an authorized public image into isolated web storage
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        url: "https://cdn.example.com/material.webp",
+        url: "https://sns-webpic-qc.xhscdn.com/material",
         authorized: true,
         title: "Summer Look",
+        source_url: "https://www.xiaohongshu.com/explore/note",
       }),
     }),
   );
@@ -328,14 +352,67 @@ test("material store copies an authorized public image into isolated web storage
     body.stored_url,
     /^https:\/\/web-project\.supabase\.co\/storage\/v1\/object\/public\/web-materials\/web-user-1\/materials\//,
   );
-  assert.equal(body.content_type, "image/webp");
-  assert.equal(body.size, Buffer.byteLength("stable-material"));
+  assert.equal(body.content_type, "image/jpeg");
+  assert.equal(body.size, Buffer.byteLength("stable-material") + 3);
   assert.equal(body.file_name, "Summer-Look");
-  assert.match(body.id, /Summer-Look\.webp$/);
+  assert.match(body.id, /Summer-Look\.jpg$/);
   assert.equal(
-    calls.some((call) => call.url === "https://cdn.example.com/material.webp"),
+    calls.some(
+      (call) => call.url === "https://sns-webpic-qc.xhscdn.com/material",
+    ),
     true,
   );
+});
+
+test("material store stops reading an oversized stream before storage upload", async () => {
+  let pulls = 0;
+  let canceled = false;
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_MATERIAL_STORAGE_BUCKET: "web-materials",
+    },
+    resolveHost: async () => [{ address: "93.184.216.34", family: 4 }],
+    fetch: async (url) => {
+      if (url.endsWith("/auth/v1/user"))
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      if (url === "https://cdn.example.com/unbounded-image") {
+        return new Response(
+          new ReadableStream({
+            pull(controller) {
+              pulls++;
+              controller.enqueue(new Uint8Array(1024 * 1024));
+            },
+            cancel() {
+              canceled = true;
+            },
+          }),
+          { headers: { "Content-Type": "application/octet-stream" } },
+        );
+      }
+      throw new Error(`Storage should not be reached: ${url}`);
+    },
+  });
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/materials/store", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer access-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: "https://cdn.example.com/unbounded-image",
+        authorized: true,
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 413);
+  assert.equal(canceled, true);
+  assert.ok(pulls <= 22);
 });
 
 test("material upload stores a local image in the authenticated user's library", async () => {

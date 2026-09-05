@@ -19,6 +19,7 @@ export function createWebBackend({
   const state = {
     databaseHealthCache: { value: null, expiresAt: 0 },
     recoveryAttempts: new Map(),
+    materialImportCache: new Map(),
     jobs: createDurableJobs({ env, fetch: fetchImpl, router: imageRouter }),
   };
   return {
@@ -179,7 +180,13 @@ async function handleRequest(
       url.pathname === "/api/v1/materials/import" &&
       request.method === "POST"
     ) {
-      return await handleMaterialImport(request, env, fetchImpl, resolveHost);
+      return await handleMaterialImport(
+        request,
+        env,
+        fetchImpl,
+        resolveHost,
+        state,
+      );
     }
 
     if (
@@ -332,7 +339,13 @@ async function handleRequest(
   }
 }
 
-async function handleMaterialImport(request, env, fetchImpl, resolveHost) {
+async function handleMaterialImport(
+  request,
+  env,
+  fetchImpl,
+  resolveHost,
+  state,
+) {
   await requireAuthUser(request, env, fetchImpl);
   const body = await readJsonBody(request);
 
@@ -343,6 +356,9 @@ async function handleMaterialImport(request, env, fetchImpl, resolveHost) {
   }
 
   const requestedUrl = parsePublicHttpUrl(body.url);
+  const cached = state.materialImportCache.get(requestedUrl.href);
+  if (cached?.expiresAt > Date.now()) return jsonResponse(cached.value);
+  if (cached) state.materialImportCache.delete(requestedUrl.href);
   const response = await fetchPublicMaterialPage(
     requestedUrl,
     fetchImpl,
@@ -355,13 +371,15 @@ async function handleMaterialImport(request, env, fetchImpl, resolveHost) {
   const finalUrl = parsePublicHttpUrl(response.url || requestedUrl.href);
 
   if (contentType.startsWith("image/")) {
-    return jsonResponse({
+    const result = {
       source_url: finalUrl.href,
       title: fileNameFromUrl(finalUrl),
       images: [finalUrl.href],
       limited: false,
       source_platform: detectMaterialPlatform(finalUrl),
-    });
+    };
+    cacheMaterialImport(state, requestedUrl.href, result);
+    return jsonResponse(result);
   }
 
   if (
@@ -384,7 +402,12 @@ async function handleMaterialImport(request, env, fetchImpl, resolveHost) {
     });
   }
 
-  const html = (await response.text()).slice(0, 2 * 1024 * 1024);
+  const html = (
+    await readResponseBufferLimited(response, 2 * 1024 * 1024, {
+      empty: "The public page is empty.",
+      tooLarge: "The public page is too large to import.",
+    })
+  ).toString("utf8");
   const title = extractHtmlTitle(html) || finalUrl.hostname;
   const sourcePlatform = detectMaterialPlatform(finalUrl);
   const extractedImages =
@@ -401,12 +424,24 @@ async function handleMaterialImport(request, env, fetchImpl, resolveHost) {
     });
   }
 
-  return jsonResponse({
+  const result = {
     source_url: finalUrl.href,
     title,
     images,
     limited: extractedImages.length > images.length,
     source_platform: sourcePlatform,
+  };
+  cacheMaterialImport(state, requestedUrl.href, result);
+  return jsonResponse(result);
+}
+
+function cacheMaterialImport(state, key, value) {
+  if (state.materialImportCache.size >= 200) {
+    state.materialImportCache.delete(state.materialImportCache.keys().next().value);
+  }
+  state.materialImportCache.set(key, {
+    value,
+    expiresAt: Date.now() + 10 * 60 * 1000,
   });
 }
 
@@ -421,21 +456,18 @@ async function handleMaterialStore(request, env, fetchImpl, resolveHost) {
   }
 
   const requestedUrl = parsePublicHttpUrl(body.url);
+  let sourceUrl;
+  if (body.source_url) sourceUrl = parsePublicHttpUrl(body.source_url);
   const response = await fetchPublicMaterialPage(
     requestedUrl,
     fetchImpl,
     resolveHost,
+    { referer: sourceUrl },
   );
-  const contentType = String(response.headers.get("content-type") ?? "")
+  const declaredContentType = String(response.headers.get("content-type") ?? "")
     .split(";")[0]
     .trim()
     .toLowerCase();
-
-  if (!["image/png", "image/jpeg", "image/webp"].includes(contentType)) {
-    throw new HttpError(415, {
-      detail: "Only PNG, JPEG, and WebP material images can be stored.",
-    });
-  }
 
   const maxBytes = 20 * 1024 * 1024;
   const declaredBytes = Number.parseInt(
@@ -446,13 +478,14 @@ async function handleMaterialStore(request, env, fetchImpl, resolveHost) {
     throw new HttpError(413, { detail: "The material image exceeds 20 MB." });
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.length === 0 || buffer.length > maxBytes) {
-    throw new HttpError(buffer.length === 0 ? 422 : 413, {
-      detail:
-        buffer.length === 0
-          ? "The material image is empty."
-          : "The material image exceeds 20 MB.",
+  const buffer = await readResponseBufferLimited(response, maxBytes, {
+    empty: "The material image is empty.",
+    tooLarge: "The material image exceeds 20 MB.",
+  });
+  const contentType = detectSupportedImageType(buffer, declaredContentType);
+  if (!contentType) {
+    throw new HttpError(415, {
+      detail: "Only PNG, JPEG, and WebP material images can be stored.",
     });
   }
 
@@ -665,19 +698,37 @@ function imageMimeTypeFromName(name) {
   return "image/jpeg";
 }
 
-async function fetchPublicMaterialPage(initialUrl, fetchImpl, resolveHost) {
+async function fetchPublicMaterialPage(
+  initialUrl,
+  fetchImpl,
+  resolveHost,
+  options = {},
+) {
   let currentUrl = initialUrl;
+  const deadline = Date.now() + 75000;
 
   for (let redirect = 0; redirect <= 5; redirect += 1) {
     await assertPublicHostname(currentUrl.hostname, resolveHost);
-    const response = await fetchImpl(currentUrl.href, {
-      method: "GET",
-      redirect: "manual",
-      headers: {
-        Accept: "text/html,application/xhtml+xml,image/*;q=0.9,*/*;q=0.5",
-        "User-Agent": "KromaPublicMaterialImporter/1.0",
-      },
-    });
+    let response;
+    try {
+      response = await fetchImpl(currentUrl.href, {
+        method: "GET",
+        redirect: "manual",
+        signal: AbortSignal.timeout(Math.max(1000, deadline - Date.now())),
+        headers: buildPublicMaterialHeaders(currentUrl, options.referer),
+      });
+    } catch (error) {
+      if (
+        error?.name === "AbortError" ||
+        error?.name === "TimeoutError" ||
+        Date.now() >= deadline
+      ) {
+        throw new HttpError(504, {
+          detail: "The public material source timed out.",
+        });
+      }
+      throw error;
+    }
 
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get("location");
@@ -702,6 +753,87 @@ async function fetchPublicMaterialPage(initialUrl, fetchImpl, resolveHost) {
   throw new HttpError(422, {
     detail: "The public material link could not be resolved.",
   });
+}
+
+function buildPublicMaterialHeaders(currentUrl, referer) {
+  const headers = {
+    Accept: "text/html,application/xhtml+xml,image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.6",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  };
+  if (
+    referer &&
+    isXiaohongshuHostname(referer.hostname) &&
+    (isXiaohongshuHostname(currentUrl.hostname) ||
+      currentUrl.hostname === "xhscdn.com" ||
+      currentUrl.hostname.endsWith(".xhscdn.com"))
+  ) {
+    headers.Referer = referer.href;
+  }
+  return headers;
+}
+
+function isXiaohongshuHostname(hostname) {
+  const value = String(hostname || "").toLowerCase();
+  return value === "xiaohongshu.com" || value.endsWith(".xiaohongshu.com");
+}
+
+function detectSupportedImageType(buffer, declaredType) {
+  if (declaredType === "image/jpg") return "image/jpeg";
+  if (["image/png", "image/jpeg", "image/webp"].includes(declaredType))
+    return declaredType;
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff)
+    return "image/jpeg";
+  if (
+    buffer.length >= 8 &&
+    buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) return "image/png";
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP"
+  ) return "image/webp";
+  return null;
+}
+
+async function readResponseBufferLimited(response, maxBytes, messages) {
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0)
+      throw new HttpError(422, { detail: messages.empty });
+    if (buffer.length > maxBytes)
+      throw new HttpError(413, { detail: messages.tooLarge });
+    return buffer;
+  }
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      size += chunk.length;
+      if (size > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new HttpError(413, { detail: messages.tooLarge });
+      }
+      chunks.push(chunk);
+    }
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    if (error?.name === "AbortError" || error?.name === "TimeoutError") {
+      throw new HttpError(504, {
+        detail: messages.timeout || "The public material source timed out.",
+      });
+    }
+    throw error;
+  } finally {
+    reader.releaseLock?.();
+  }
+  if (size === 0) throw new HttpError(422, { detail: messages.empty });
+  return Buffer.concat(chunks, size);
 }
 
 function parsePublicHttpUrl(value) {
@@ -1833,7 +1965,10 @@ async function readImageForStorage(fetchImpl, url) {
   const contentType = normalizeImageContentType(
     response.headers.get("Content-Type"),
   );
-  const buffer = Buffer.from(await response.arrayBuffer());
+  const buffer = await readResponseBufferLimited(response, 20 * 1024 * 1024, {
+    empty: "Image result is empty",
+    tooLarge: "Image result exceeds 20 MB",
+  });
 
   return {
     buffer,
