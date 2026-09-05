@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getWebBackendHealth } from "../api/accountApi";
 import {
   getMissingPaddleCheckoutConfig,
+  getVerifiedPriceCatalog,
+  type VerifiedPricePlan,
   isPaddleCheckoutConfigured,
   purchasePlan,
 } from "../api/billingApi";
@@ -42,8 +44,8 @@ function formatCredits(value: number): string {
 function isPaymentFulfillmentReady(health: WebBackendHealth | null): boolean {
   return Boolean(
     health?.config.paddleWebhookSecret &&
-      health.config.paddlePriceCredits &&
-      health.database?.webBillingEvents !== false,
+    health.config.paddlePriceCredits &&
+    health.database?.webBillingEvents !== false,
   );
 }
 
@@ -56,14 +58,14 @@ const topUpPlans: CreditPlan[] = [
     originalPrice: "¥72",
     currentPrice: "¥36",
     baseCredits: "1,500 积分",
-    firstPurchaseBonus: "付款成功后自动入账",
+    firstPurchaseBonus: "按支付订单入账",
     description: "灵活充值，积分永不过期，适合少量主图和详情图试用。",
     features: [
       "单次充值权益",
       "按积分用量计费",
-      "万能画板：上传 / 历史图编辑",
-      "AI 编辑、裁剪、下载",
-      "GPT Image 2 标准模型",
+      "图片库统一管理与选图",
+      "AI 换装、换模特与图片下载",
+      "主图、详情页及 AI 工具",
       "单次购买积分不过期",
     ],
   },
@@ -75,13 +77,13 @@ const topUpPlans: CreditPlan[] = [
     originalPrice: "¥216",
     currentPrice: "¥108",
     baseCredits: "5,250 积分",
-    firstPurchaseBonus: "付款成功后自动入账",
-    description: "主图、详情页和画板编辑都能稳定覆盖，适合固定上新。",
+    firstPurchaseBonus: "按支付订单入账",
+    description: "主图、详情页和图片编辑都能稳定覆盖，适合固定上新。",
     features: [
       "单次充值权益",
-      "万能画板：AI 编辑 + 文字替换",
-      "智能图层分离、合成与下载",
-      "主图 2.0 + 详情页生成",
+      "图片库、主图与详情页创作",
+      "多模块组图与批量下载",
+      "商品主图 + 详情页组图",
       "支持 1K / 2K / 4K",
       "单次购买积分不过期",
     ],
@@ -95,11 +97,11 @@ const topUpPlans: CreditPlan[] = [
     originalPrice: "¥436",
     currentPrice: "¥218",
     baseCredits: "10,500 积分",
-    firstPurchaseBonus: "付款成功后自动入账",
+    firstPurchaseBonus: "按支付订单入账",
     description: "适合稳定店铺素材周转，覆盖主图、详情页和风格复刻。",
     features: [
-      "万能画板完整基础能力",
-      "详情页 16 模块、主图 2.0",
+      "图片库与各项创作工具",
+      "详情页 19 模块、商品主图",
       "风格复刻、服装试穿 / 搭配",
       "GPT Image 2，支持 4K",
       "适合稳定店铺素材周转",
@@ -118,13 +120,13 @@ const subscriptionPlans: CreditPlan[] = [
     currentPrice: "¥72",
     period: "/ 月",
     baseCredits: "3,550 积分",
-    firstPurchaseBonus: "每期付款成功后自动入账",
+    firstPurchaseBonus: "每期按支付订单入账",
     description: "每月固定积分，适合轻量持续创作。",
     features: [
       "持续创作权益",
       "按积分用量计费",
-      "万能画板、主图、详情页、修图全可用",
-      "GPT Image 2 标准模型",
+      "主图、详情页、换装、换模特可用",
+      "主图、详情页及 AI 工具",
       "到期后可手动续购",
     ],
     paymentNote: "Paddle Checkout",
@@ -138,10 +140,10 @@ const subscriptionPlans: CreditPlan[] = [
     currentPrice: "¥202",
     period: "/ 季",
     baseCredits: "10,050 积分",
-    firstPurchaseBonus: "每期付款成功后自动入账",
+    firstPurchaseBonus: "每期按支付订单入账",
     description: "季度额度，适合固定上新节奏。",
     features: [
-      "画板编辑、详情页、风格复刻持续可用",
+      "图片编辑、详情页、风格复刻持续可用",
       "支持 1K / 2K / 4K 生成配置",
       "比月付更适合连续产出",
       "到期后可手动续购",
@@ -158,10 +160,10 @@ const subscriptionPlans: CreditPlan[] = [
     currentPrice: "¥718",
     period: "/ 年",
     baseCredits: "36,000 积分",
-    firstPurchaseBonus: "每期付款成功后自动入账",
+    firstPurchaseBonus: "每期按支付订单入账",
     description: "全年素材预算，适合长期运营。",
     features: [
-      "主图 2.0、详情页 16 模块、画板编辑",
+      "商品主图、详情页 19 模块、图片编辑",
       "风格复刻、服装试穿",
       "最高性价比普通订阅",
       "到期后可手动续购",
@@ -173,9 +175,11 @@ const subscriptionPlans: CreditPlan[] = [
 function PricingCard({
   plan,
   onSelect,
+  available = true,
 }: {
   plan: CreditPlan;
   onSelect: (plan: CreditPlan) => void;
+  available?: boolean;
 }) {
   return (
     <article
@@ -189,16 +193,28 @@ function PricingCard({
       </div>
       <h2>{plan.name}</h2>
       <p className="plan-description">{plan.description}</p>
-      <div className="plan-price-row">
-        <span className="original-price">{plan.originalPrice}</span>
-        <span className="discount-badge">5 折</span>
-      </div>
+      <div className="plan-price-row"></div>
       <p className="price-value">
-        {plan.currentPrice}
+        {available ? plan.currentPrice : "待核对"}
         {plan.period ? <span>{plan.period}</span> : null}
       </p>
       <div className="credit-stack">
-        <strong>{plan.baseCredits}</strong>
+        <strong>{available ? plan.baseCredits : "套餐积分核对中"}</strong>
+        {available ? (
+          <p>
+            标准版 1K 约 {parseCreditAmount(plan.baseCredits).toLocaleString()}{" "}
+            张 · 2K 约{" "}
+            {Math.floor(
+              parseCreditAmount(plan.baseCredits) / 2,
+            ).toLocaleString()}{" "}
+            张 · 4K 约{" "}
+            {Math.floor(
+              parseCreditAmount(plan.baseCredits) / 4,
+            ).toLocaleString()}{" "}
+            张
+          </p>
+        ) : null}
+
         {plan.campaignCredits ? (
           <p>
             <span>首购合计</span>
@@ -218,9 +234,10 @@ function PricingCard({
       <button
         type="button"
         className="primary-button plan-pay-button"
+        disabled={!available}
         onClick={() => onSelect(plan)}
       >
-        支付
+        购买积分
       </button>
       <p className="plan-payment-note">
         {plan.paymentNote ?? "单次购买，积分永不过期"}
@@ -234,6 +251,17 @@ interface PricingPageProps {
 }
 
 export function PricingPage({ onRequireLogin }: PricingPageProps = {}) {
+  const [verifiedPlans, setVerifiedPlans] = useState<VerifiedPricePlan[]>([]);
+  const [catalogApproved, setCatalogApproved] = useState(!import.meta.env.PROD);
+  useEffect(() => {
+    if (import.meta.env.PROD)
+      void getVerifiedPriceCatalog()
+        .then((catalog) => {
+          setCatalogApproved(catalog.approved);
+          setVerifiedPlans(catalog.plans);
+        })
+        .catch(() => setCatalogApproved(false));
+  }, []);
   const [activeBilling, setActiveBilling] = useState<BillingType>("top-up");
   const [selectedPlan, setSelectedPlan] = useState<CreditPlan | null>(null);
   const [paymentStatus, setPaymentStatus] = useState("");
@@ -244,19 +272,44 @@ export function PricingPage({ onRequireLogin }: PricingPageProps = {}) {
     setPaymentNotice(message);
   };
 
-  const activePlans =
-    activeBilling === "top-up" ? topUpPlans : subscriptionPlans;
+  const activePlans = (
+    activeBilling === "top-up" ? topUpPlans : subscriptionPlans
+  ).map((plan) => {
+    const verified = verifiedPlans.find((item) => item.id === plan.id);
+    return verified
+      ? {
+          ...plan,
+          baseCredits: `${verified.credits.toLocaleString()} 积分`,
+          currentPrice: `¥${(verified.amount_minor / 100).toFixed(2)}`,
+          paymentNote: verified.recurring
+            ? "自动续费，可通过 Paddle 订单邮件管理或联系支持取消"
+            : "单次购买，不自动续费",
+          features: plan.features.map((feature) => feature === "到期后可手动续购"
+            ? verified.recurring ? "按结账周期自动续费，可取消" : "到期后可手动续购"
+            : feature),
+        }
+      : plan;
+  });
   const activePlanMeta =
     activeBilling === "top-up"
       ? {
           description: "灵活充值，积分永不过期。",
         }
       : {
-          description: "按周期获得固定额度，到期后可手动续购。",
+          description: "按周期获得积分，续费方式以套餐与结账页面为准。",
         };
 
   const handleSelectPlan = async (plan: CreditPlan) => {
-    const creditAmount = parseCreditAmount(plan.campaignCredits ?? plan.baseCredits);
+    if (
+      import.meta.env.PROD &&
+      (!catalogApproved || !verifiedPlans.some((item) => item.id === plan.id))
+    ) {
+      showPaymentNotice("套餐正在核对，暂时无法购买。既有积分照常使用。");
+      return;
+    }
+    const creditAmount = parseCreditAmount(
+      plan.campaignCredits ?? plan.baseCredits,
+    );
     const session = getAccountSnapshot().session;
     const usePaddle = isPaddleCheckoutConfigured();
     const missingPaddleConfig = getMissingPaddleCheckoutConfig(plan.id);
@@ -288,9 +341,13 @@ export function PricingPage({ onRequireLogin }: PricingPageProps = {}) {
       const result = await purchasePlan({
         credits: creditAmount,
         planId: plan.id,
+        verifiedPriceId: verifiedPlans.find((item) => item.id === plan.id)
+          ?.price_id,
         planName: plan.name,
         paymentChannel: usePaddle ? "paddle" : "mock",
-        note: usePaddle ? "Paddle checkout pending." : "订单已确认，积分已入账。",
+        note: usePaddle
+          ? "Paddle checkout pending."
+          : "订单已确认，积分已入账。",
         userId: session?.userId,
         email: session?.identifier,
       });
@@ -310,9 +367,11 @@ export function PricingPage({ onRequireLogin }: PricingPageProps = {}) {
         )} 积分已入账，当前余额 ${formatCredits(snapshot.balance)} 积分。`,
       );
     } catch (error) {
-      showPaymentNotice(error instanceof Error
-        ? error.message
-        : "支付通道暂时不可用，请稍后再试。");
+      showPaymentNotice(
+        error instanceof Error
+          ? error.message
+          : "支付通道暂时不可用，请稍后再试。",
+      );
     }
   };
 
@@ -323,6 +382,10 @@ export function PricingPage({ onRequireLogin }: PricingPageProps = {}) {
           <p className="eyebrow">Plan Settings</p>
           <h2>按你的电商创作节奏选择套餐</h2>
           <p>积分按实际生成消耗，失败任务不计入消耗。</p>
+          <p>
+            1K 每张 1 积分 · 2K 每张 2 积分 · 4K 每张 4
+            积分。品牌风格暂不额外收费。
+          </p>
         </div>
         {selectedPlan ? (
           <p className="pricing-payment-status" role="status">
@@ -331,6 +394,11 @@ export function PricingPage({ onRequireLogin }: PricingPageProps = {}) {
         ) : null}
       </section>
 
+      {!catalogApproved ? (
+        <p className="pricing-payment-status">
+          套餐价格与积分正在核对，暂时暂停新购买。既有积分和已购权益照常使用。
+        </p>
+      ) : null}
       <section className="pricing-section" aria-label="套餐列表">
         <div className="pricing-section-heading">
           <div className="pricing-plan-switch" aria-label="套餐类型">
@@ -355,7 +423,16 @@ export function PricingPage({ onRequireLogin }: PricingPageProps = {}) {
         </div>
         <div className="pricing-grid credit-plan-grid">
           {activePlans.map((plan) => (
-            <PricingCard key={plan.id} plan={plan} onSelect={handleSelectPlan} />
+            <PricingCard
+              key={plan.id}
+              plan={plan}
+              onSelect={handleSelectPlan}
+              available={
+                !import.meta.env.PROD ||
+                (catalogApproved &&
+                  verifiedPlans.some((item) => item.id === plan.id))
+              }
+            />
           ))}
         </div>
       </section>

@@ -52,7 +52,9 @@ describe("generationApi", () => {
       routeMode: "hd",
     });
     expect(response.taskId).toMatch(/^mock-generation-/);
-    expect(response.resultUrls[0]).toContain("data:image/svg+xml;charset=utf-8,");
+    expect(response.resultUrls[0]).toContain(
+      "data:image/svg+xml;charset=utf-8,",
+    );
   });
 
   it("submits generation tasks to the remote backend when VITE_API_BASE_URL is configured", async () => {
@@ -117,7 +119,10 @@ describe("generationApi", () => {
       resultUrls: ["https://cdn.example.com/kroma-result.png"],
       creditCost: 2,
     });
-    expect(fetchMock).toHaveBeenCalledWith("/sample/product.png");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/sample/product.png",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(fetchMock).toHaveBeenCalledWith(
       "http://127.0.0.1:8000/api/v1/image/generate",
       expect.objectContaining({ method: "POST" }),
@@ -287,7 +292,10 @@ describe("generationApi", () => {
       status: "completed",
       resultUrls: ["https://cdn.example.com/web-save-result.png"],
       resultAssets: [
-        { url: "https://cdn.example.com/web-save-result.png", label: "Hero KV" },
+        {
+          url: "https://cdn.example.com/web-save-result.png",
+          label: "Hero KV",
+        },
       ],
       creditCost: 1,
       createdAt: "2026-06-17T00:00:00.000Z",
@@ -341,7 +349,7 @@ describe("generationApi", () => {
       { url: result.resultUrls[0], label: "首屏 KV" },
       { url: result.resultUrls[1], label: "整体展示" },
     ]);
-    expect(result.creditCost).toBe(4);
+    expect(result.creditCost).toBe(2);
   });
 
   it("generates one result per selected detail page module count", async () => {
@@ -429,7 +437,9 @@ describe("generationApi", () => {
       "https://cdn.example.com/detail-5.png",
     ]);
     expect(
-      fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/image/generate")),
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith("/image/generate"),
+      ),
     ).toHaveLength(5);
   });
 
@@ -495,11 +505,31 @@ describe("generationApi", () => {
       "https://cdn.example.com/kroma-detail-5.png",
     ]);
     expect(result.resultAssets).toEqual([
-      { url: result.resultUrls[0], label: "博主穿搭", channelUsed: "rightcode" },
-      { url: result.resultUrls[1], label: "博主穿搭", channelUsed: "rightcode" },
-      { url: result.resultUrls[2], label: "主图展示", channelUsed: "rightcode" },
-      { url: result.resultUrls[3], label: "品牌介绍", channelUsed: "rightcode" },
-      { url: result.resultUrls[4], label: "品牌介绍", channelUsed: "rightcode" },
+      {
+        url: result.resultUrls[0],
+        label: "博主穿搭",
+        channelUsed: "rightcode",
+      },
+      {
+        url: result.resultUrls[1],
+        label: "博主穿搭",
+        channelUsed: "rightcode",
+      },
+      {
+        url: result.resultUrls[2],
+        label: "主图展示",
+        channelUsed: "rightcode",
+      },
+      {
+        url: result.resultUrls[3],
+        label: "品牌介绍",
+        channelUsed: "rightcode",
+      },
+      {
+        url: result.resultUrls[4],
+        label: "品牌介绍",
+        channelUsed: "rightcode",
+      },
     ]);
     expect(result.channelUsed).toBe("rightcode");
     expect(result.channelUsedByAsset).toEqual([
@@ -510,7 +540,9 @@ describe("generationApi", () => {
       "rightcode",
     ]);
     expect(
-      fetchMock.mock.calls.filter(([url]) => String(url).includes("/image/task/")),
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes("/image/task/"),
+      ),
     ).toHaveLength(5);
   });
 

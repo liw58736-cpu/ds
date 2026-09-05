@@ -7,10 +7,22 @@ import { createWebBackend } from "./app.mjs";
 import { resolveStaticAsset } from "./static-assets.mjs";
 
 const app = createWebBackend();
+void app
+  .recoverJobs()
+  .catch((error) => console.error("job_recovery_failed", error.message));
+setInterval(
+  () =>
+    void app
+      .recoverJobs()
+      .catch((error) => console.error("job_recovery_failed", error.message)),
+  30000,
+).unref();
 const port = Number.parseInt(process.env.PORT ?? "8080", 10);
 const currentDir = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = resolve(currentDir, "../..", "..");
-const staticRoot = resolve(process.env.WEB_STATIC_ROOT ?? join(repoRoot, "dist"));
+const staticRoot = resolve(
+  process.env.WEB_STATIC_ROOT ?? join(repoRoot, "dist"),
+);
 
 const server = createServer(async (request, response) => {
   if (await tryServeStaticAsset(request, response)) {
@@ -18,7 +30,14 @@ const server = createServer(async (request, response) => {
   }
 
   const chunks = [];
+  let receivedBytes = 0;
   for await (const chunk of request) {
+    receivedBytes += chunk.length;
+    if (receivedBytes > 22 * 1024 * 1024) {
+      response.writeHead(413);
+      response.end("Request too large");
+      return;
+    }
     chunks.push(chunk);
   }
 

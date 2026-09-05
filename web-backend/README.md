@@ -3,6 +3,15 @@
 This backend is for the ecommerce web product only. It must use a separate
 Supabase project from the mobile app.
 
+For the 2026-09 workflow revision, follow
+[the rollout guide](../docs/product/2026-09-04-rollout.md).
+Durable jobs require `supabase/20260904-durable-jobs.sql` and an explicit
+`WEB_DURABLE_JOBS=true` after the frontend rollout. Reviewed checkout requires
+`WEB_CHECKOUT_CATALOG_JSON` and `WEB_CHECKOUT_REVIEWED=true`; do not change
+existing purchased balances or infer package grants from frontend text.
+Run backend tests with `npm ci && npm test` in this directory; the development
+dependency includes the local PostgreSQL engine used for migration tests.
+
 ## Required Supabase Setup
 
 1. Create a new Supabase project, for example `kroma-web`.

@@ -11,27 +11,31 @@ export interface MaterialLibraryAsset {
   sourceLabel: string;
 }
 
-export async function listMaterialLibraryAssets(): Promise<MaterialLibraryAsset[]> {
+export async function listMaterialLibraryAssets(
+  offset = 0,
+): Promise<MaterialLibraryAsset[]> {
   const [savedResult, generatedResult] = await Promise.allSettled([
-    listSavedMaterials(100),
-    listGenerationTasks({ limit: 100 }),
+    listSavedMaterials(100, offset),
+    listGenerationTasks({ limit: 100, offset, strict: true }),
   ]);
   const assets: MaterialLibraryAsset[] = [];
 
   if (savedResult.status === "fulfilled") {
-    assets.push(...savedResult.value.map((material) => ({
-      id: `saved:${material.id}`,
-      imageUrl: material.imageUrl,
-      fileName: material.fileName,
-      createdAt: material.createdAt,
-      source: "saved" as const,
-      sourceLabel: "保存图片",
-    })));
+    assets.push(
+      ...savedResult.value.map((material) => ({
+        id: `saved:${material.id}`,
+        imageUrl: material.imageUrl,
+        fileName: material.fileName,
+        createdAt: material.createdAt,
+        source: "saved" as const,
+        sourceLabel: "保存图片",
+      })),
+    );
   }
 
   if (generatedResult.status === "fulfilled") {
     for (const task of generatedResult.value) {
-      if (task.status !== "completed") continue;
+      if (task.status !== "completed" && task.status !== "partial") continue;
       getTaskResultAssets(task).forEach((asset, index) => {
         assets.push({
           id: `generated:${task.id}:${index}`,
@@ -45,15 +49,20 @@ export async function listMaterialLibraryAssets(): Promise<MaterialLibraryAsset[
     }
   }
 
-  if (savedResult.status === "rejected" && generatedResult.status === "rejected") {
+  if (
+    assets.length === 0 &&
+    (savedResult.status === "rejected" || generatedResult.status === "rejected")
+  ) {
     throw new Error("图片库暂时无法同步，请稍后重试。");
   }
 
   const uniqueByUrl = new Map<string, MaterialLibraryAsset>();
   for (const asset of assets.sort(
-    (first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt),
+    (first, second) =>
+      Date.parse(second.createdAt) - Date.parse(first.createdAt),
   )) {
-    if (!uniqueByUrl.has(asset.imageUrl)) uniqueByUrl.set(asset.imageUrl, asset);
+    if (!uniqueByUrl.has(asset.imageUrl))
+      uniqueByUrl.set(asset.imageUrl, asset);
   }
   return Array.from(uniqueByUrl.values());
 }

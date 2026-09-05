@@ -5,6 +5,7 @@ import type { GenerationRouteMode } from "./apiContracts";
 
 export interface GenerationTaskResponse {
   taskId: string;
+  billingManaged?: boolean;
   status: "completed" | "failed";
   resultUrls: string[];
   creditCost: number;

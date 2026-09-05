@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from "./requestTimeout";
 import { refreshKromaSession } from "./accountApi";
 import { getAccountAccessToken } from "../storage/accountStore";
 
@@ -59,7 +60,7 @@ export async function importPublicMaterial(
   }
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await fetch(`${baseUrl}/materials/import`, {
+    const response = await fetchWithTimeout(`${baseUrl}/materials/import`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -119,7 +120,7 @@ export async function saveImportedMaterial(
   if (!token) throw new Error("请先登录后再保存公开素材。");
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await fetch(`${baseUrl}/materials/store`, {
+    const response = await fetchWithTimeout(`${baseUrl}/materials/store`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -163,13 +164,15 @@ export async function uploadLocalMaterial(file: File): Promise<SavedMaterial> {
     throw new Error("只支持 PNG、JPG、JPEG 和 WebP 图片。");
   }
   if (file.size <= 0 || file.size > 20 * 1024 * 1024) {
-    throw new Error(file.size <= 0 ? "图片文件不能为空。" : "单张图片不能超过 20MB。");
+    throw new Error(
+      file.size <= 0 ? "图片文件不能为空。" : "单张图片不能超过 20MB。",
+    );
   }
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const form = new FormData();
     form.append("image", file, file.name);
-    const response = await fetch(`${baseUrl}/materials/upload`, {
+    const response = await fetchWithTimeout(`${baseUrl}/materials/upload`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: form,
@@ -200,28 +203,41 @@ export async function uploadLocalMaterial(file: File): Promise<SavedMaterial> {
   throw new Error("登录状态已失效，请重新登录后上传图片。");
 }
 
-export async function listSavedMaterials(limit = 60): Promise<SavedMaterial[]> {
+export async function listSavedMaterials(
+  limit = 60,
+  offset = 0,
+): Promise<SavedMaterial[]> {
   const baseUrl = getMaterialApiBaseUrl();
   let token = getAccountAccessToken();
   if (!baseUrl || !token) return [];
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await fetch(`${baseUrl}/materials?limit=${Math.max(1, Math.min(100, limit))}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await fetchWithTimeout(
+      `${baseUrl}/materials?limit=${Math.max(1, Math.min(100, limit))}${offset ? `&offset=${offset}` : ""}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
     if (response.status === 401 && attempt === 0) {
       token = await refreshKromaSession();
       if (token) continue;
     }
-    if (!response.ok) throw new Error(`图片库读取失败（HTTP ${response.status}）`);
+    if (!response.ok)
+      throw new Error(`图片库读取失败（HTTP ${response.status}）`);
     const payload = (await response.json()) as SavedMaterialListResponse;
-    return (payload.materials ?? []).filter((item) => item.stored_url).map(normalizeSavedMaterial);
+    return (payload.materials ?? [])
+      .filter((item) => item.stored_url)
+      .map(normalizeSavedMaterial);
   }
   return [];
 }
 
-function normalizeSavedMaterial(payload: StoredMaterialResponse): SavedMaterial {
-  const fallbackName = decodeURIComponent(payload.stored_url.split("/").pop() ?? "已保存素材")
+function normalizeSavedMaterial(
+  payload: StoredMaterialResponse,
+): SavedMaterial {
+  const fallbackName = decodeURIComponent(
+    payload.stored_url.split("/").pop() ?? "已保存素材",
+  )
     .replace(/^\d{10,}-\d{6}-/, "")
     .replace(/\.(png|jpe?g|webp)$/i, "")
     .replace(/-/g, " ");

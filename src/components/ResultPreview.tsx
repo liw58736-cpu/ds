@@ -1,3 +1,4 @@
+import { exportDetailLongImage } from "../domain/imageExports";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   downloadTaskAsset,
@@ -5,7 +6,11 @@ import {
   getTaskResultAssets,
 } from "../domain/resultAssets";
 import { describeTaskFunction } from "../domain/taskDisplay";
-import type { GenerationResultAsset, GenerationTask, ProductInput } from "../domain/types";
+import type {
+  GenerationResultAsset,
+  GenerationTask,
+  ProductInput,
+} from "../domain/types";
 
 interface ResultPreviewProps {
   product: ProductInput | null;
@@ -27,6 +32,7 @@ const statusLabels = {
   queued: "排队中",
   processing: "处理中",
   completed: "已完成",
+  partial: "部分完成",
   failed: "失败",
 } as const;
 
@@ -43,7 +49,8 @@ function getDisplayTasks(
   tasks: GenerationTask[] | undefined,
   latestTask: GenerationTask | undefined,
 ): GenerationTask[] {
-  const sourceTasks = tasks && tasks.length > 0 ? tasks : latestTask ? [latestTask] : [];
+  const sourceTasks =
+    tasks && tasks.length > 0 ? tasks : latestTask ? [latestTask] : [];
 
   return [...sourceTasks].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
@@ -98,13 +105,15 @@ export function ResultPreview({
     <section className="panel result-panel" aria-labelledby="result-title">
       {!product && !hasTasks ? (
         <div className="preview-empty-state">
-          <h3>先上传{inputLabel}并填写生成设置</h3>
-          <p>左侧完成设置后，这里会显示生成预览和最终结果。</p>
+          <h3>先从图片库选择{inputLabel}</h3>
+          <p>完成左侧设置并提交后，图片会显示在这里。</p>
         </div>
       ) : null}
 
       <div className="preview-title-row preview-feed-heading">
-        <p className="preview-title" id="result-title">生成预览</p>
+        <p className="preview-title" id="result-title">
+          生成预览
+        </p>
         <span>{hasTasks ? "Recent" : "Draft"}</span>
       </div>
 
@@ -116,7 +125,9 @@ export function ResultPreview({
               task={task}
               onCancelTask={onCancelTask}
               onRetryTask={onRetryTask}
-              onOpenImage={(asset, index) => setLightbox({ asset, task, index })}
+              onOpenImage={(asset, index) =>
+                setLightbox({ asset, task, index })
+              }
               onOpenMotion={onOpenMotion}
             />
           ))}
@@ -140,7 +151,10 @@ export function ResultPreview({
           aria-label={lightbox.asset.label}
           onClick={() => setLightbox(null)}
         >
-          <div className="preview-lightbox-content" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="preview-lightbox-content"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="preview-lightbox-header">
               <strong>{lightbox.asset.label}</strong>
               <button
@@ -155,7 +169,9 @@ export function ResultPreview({
             <button
               type="button"
               className="ghost-action-button"
-              onClick={() => downloadTaskAsset(lightbox.task, lightbox.asset, lightbox.index)}
+              onClick={() =>
+                downloadTaskAsset(lightbox.task, lightbox.asset, lightbox.index)
+              }
             >
               下载
             </button>
@@ -179,11 +195,19 @@ function PreviewTaskCard({
   onOpenImage: (asset: GenerationResultAsset, index: number) => void;
   onOpenMotion?: (imageUrl: string, title: string) => void;
 }) {
-  const isTaskRunning = task.status === "queued" || task.status === "processing";
-  const resultAssets = task.status === "completed" ? getTaskResultAssets(task) : [];
+  const [exportError, setExportError] = useState("");
+  const isTaskRunning =
+    task.status === "queued" || task.status === "processing";
+  const resultAssets =
+    task.status === "completed" || task.status === "partial"
+      ? getTaskResultAssets(task)
+      : [];
   const canRetryFailedTask =
-    task.status === "failed" && task.errorCode !== "upload_source_unavailable";
-  const runningProgress = isTaskRunning ? getRunningProgress(task) : "正在生成图片";
+    (task.status === "failed" || task.status === "partial") &&
+    task.errorCode !== "upload_source_unavailable";
+  const runningProgress = isTaskRunning
+    ? getRunningProgress(task)
+    : "正在生成图片";
 
   return (
     <article className={`preview-task-card preview-task-${task.status}`}>
@@ -197,11 +221,37 @@ function PreviewTaskCard({
         </span>
       </div>
 
+      {task.failedItems?.length ? (
+        <div className="task-partial-status">
+          <p>{task.failedItems.length} 张未完成，已完成图片已保留。</p>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => onRetryTask?.(task)}
+          >
+            只重试未完成图片
+          </button>
+        </div>
+      ) : null}
       {resultAssets.length > 0 ? (
         <>
           <div className="preview-task-actions">
             <span>{resultAssets.length} 张图片</span>
-            {task.channelUsed ? <span>Channel: {task.channelUsed}</span> : null}
+            {task.config.module === "detail_page" ? (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  void exportDetailLongImage(task).catch((error) =>
+                    setExportError(error.message),
+                  )
+                }
+              >
+                导出详情长图
+              </button>
+            ) : null}
+            {exportError ? <span role="alert">{exportError}</span> : null}
+
             {resultAssets.length > 1 ? (
               <button
                 type="button"
@@ -212,28 +262,67 @@ function PreviewTaskCard({
               </button>
             ) : null}
           </div>
-          <div className={`preview-result-list preview-thumbnail-list${task.config.module === "lifestyle" ? " is-comparison-list" : ""}`}>
+          <div
+            className={`preview-result-list preview-thumbnail-list${task.config.module === "lifestyle" ? " is-comparison-list" : ""}`}
+          >
             {resultAssets.map((asset, index) => (
-              <figure className="preview-result-item" key={`${asset.url}-${index}`}>
+              <figure
+                className="preview-result-item"
+                key={`${asset.url}-${index}`}
+              >
                 {task.config.module === "lifestyle" ? (
                   <div className="inspiration-before-after">
-                    <button type="button" className="preview-thumbnail-button" aria-label="放大查看原图" onClick={() => onOpenImage({ url: task.productInput.imageUrl, label: "原图" }, index)}>
-                      <span>原图</span><img src={task.productInput.imageUrl} alt="创作原图" />
+                    <button
+                      type="button"
+                      className="preview-thumbnail-button"
+                      aria-label="放大查看原图"
+                      onClick={() =>
+                        onOpenImage(
+                          { url: task.productInput.imageUrl, label: "原图" },
+                          index,
+                        )
+                      }
+                    >
+                      <span>原图</span>
+                      <img src={task.productInput.imageUrl} alt="创作原图" />
                     </button>
-                    <button type="button" className="preview-thumbnail-button" aria-label={`放大查看 ${asset.label}`} onClick={() => onOpenImage(asset, index)}>
-                      <span>生成图</span><img src={asset.url} alt="生成结果" />
+                    <button
+                      type="button"
+                      className="preview-thumbnail-button"
+                      aria-label={`放大查看 ${asset.label}`}
+                      onClick={() => onOpenImage(asset, index)}
+                    >
+                      <span>生成图</span>
+                      <img src={asset.url} alt="生成结果" />
                     </button>
                   </div>
                 ) : (
-                  <button type="button" className="preview-thumbnail-button" aria-label={`放大查看 ${asset.label}`} onClick={() => onOpenImage(asset, index)}>
+                  <button
+                    type="button"
+                    className="preview-thumbnail-button"
+                    aria-label={`放大查看 ${asset.label}`}
+                    onClick={() => onOpenImage(asset, index)}
+                  >
                     <img src={asset.url} alt="生成结果" />
                   </button>
                 )}
                 <figcaption>{asset.label}</figcaption>
                 <div className="preview-result-actions">
-                  <button type="button" className="ghost-action-button" onClick={() => downloadTaskAsset(task, asset, index)}>下载</button>
+                  <button
+                    type="button"
+                    className="ghost-action-button"
+                    onClick={() => downloadTaskAsset(task, asset, index)}
+                  >
+                    下载
+                  </button>
                   {task.config.module === "lifestyle" && onOpenMotion ? (
-                    <button type="button" className="ghost-action-button" onClick={() => onOpenMotion(asset.url, asset.label)}>生成 Live 图</button>
+                    <button
+                      type="button"
+                      className="ghost-action-button"
+                      onClick={() => onOpenMotion(asset.url, asset.label)}
+                    >
+                      生成 Live 图
+                    </button>
                   ) : null}
                 </div>
               </figure>

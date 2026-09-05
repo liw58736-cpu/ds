@@ -31,6 +31,7 @@ type StudioModule = Extract<
 >;
 
 interface ParameterPanelProps {
+  footerTarget?: HTMLElement | null;
   activeModule: StudioModule;
   config: GenerationConfig;
   onChange: (config: GenerationConfig) => void;
@@ -51,7 +52,8 @@ const pageMeta = {
   white_background: {
     eyebrow: "AI Tools",
     title: "AI工具",
-    description: "选择常用 AI 商品图工具，从图片库选取商品图后快速生成对应素材。",
+    description:
+      "选择常用 AI 商品图工具，从图片库选取商品图后快速生成对应素材。",
   },
   detail_page: {
     eyebrow: "Detail Page Settings",
@@ -76,7 +78,7 @@ const moduleDisplayLabels: Record<StudioModule, string> = {
 };
 
 const aspectRatioOptions: Array<{ value: AspectRatio; label: string }> = [
-  { value: "original", label: "原图尺寸" },
+  { value: "original", label: "原图比例" },
   { value: "1:1", label: "1:1 方图" },
   { value: "4:5", label: "4:5 竖图" },
   { value: "3:4", label: "3:4 竖图" },
@@ -108,11 +110,11 @@ const versionOptions: Array<{
   description: string;
   recommended?: boolean;
 }> = [
-  { value: "standard", name: "标准版", description: "快速出图，适合批量 SKU" },
+  { value: "standard", name: "标准版", description: "干净清晰，突出商品细节" },
   {
     value: "brand",
     name: "品牌版",
-    description: "更重质感、光影和转化表达",
+    description: "杂志式留白、配色与光影",
     recommended: true,
   },
 ];
@@ -164,7 +166,9 @@ function isMainImageModuleId(moduleId: string): moduleId is MainImageModuleId {
   return mainImageModules.some((module) => module.id === moduleId);
 }
 
-function isDetailPageModuleId(moduleId: string): moduleId is DetailPageModuleId {
+function isDetailPageModuleId(
+  moduleId: string,
+): moduleId is DetailPageModuleId {
   return detailContentModules.some((module) => module.id === moduleId);
 }
 
@@ -178,7 +182,11 @@ const mainImageModules: Array<{
   { id: "detail_closeup", title: "细节特写", description: "放大材质与工艺" },
   { id: "use_scene", title: "使用场景", description: "呈现真实使用状态" },
   { id: "color_set", title: "多色套装", description: "展示多 SKU 与组合美感" },
-  { id: "function_compare", title: "功能对比", description: "参数、功效与差异说明" },
+  {
+    id: "function_compare",
+    title: "功能对比",
+    description: "参数、功效与差异说明",
+  },
   { id: "packaging", title: "包装展示", description: "礼盒、配件与开箱细节" },
   { id: "trust", title: "权益保障", description: "售后、质保与信任背书" },
 ];
@@ -188,12 +196,24 @@ const detailContentModules: Array<{
   title: string;
   description: string;
 }> = [
-  { id: "main_display", title: "主图展示", description: "首屏 KV：建立第一眼识别" },
-  { id: "brand_intro", title: "品牌介绍", description: "编辑式封面 + 品牌定位" },
+  {
+    id: "main_display",
+    title: "主图展示",
+    description: "首屏 KV：建立第一眼识别",
+  },
+  {
+    id: "brand_intro",
+    title: "品牌介绍",
+    description: "编辑式封面 + 品牌定位",
+  },
   { id: "style_selling", title: "款式卖点", description: "同造型多角度" },
   { id: "fabric_craft", title: "面料工艺", description: "穿着主图 + 工艺特写" },
   { id: "cutting", title: "版型剪裁", description: "动作展现廓形与垂坠" },
-  { id: "color_size", title: "颜色尺码", description: "穿着主体 + 色卡 / 尺码" },
+  {
+    id: "color_size",
+    title: "颜色尺码",
+    description: "穿着主体 + 色卡 / 尺码",
+  },
   { id: "multi_color", title: "多色组合", description: "同款多色并排对比" },
   { id: "promotion", title: "价格优惠", description: "克制促销卡" },
   { id: "specs", title: "规格参数", description: "穿着主体 + 引线规格卡" },
@@ -201,9 +221,17 @@ const detailContentModules: Array<{
   { id: "service", title: "售后保障", description: "三列等分保障卡" },
   { id: "faq", title: "常见问题", description: "问答卡 + 极细分隔线" },
   { id: "buyer_show", title: "买家秀", description: "伪 UGC 真实生活感" },
-  { id: "outfit_recommend", title: "搭配推荐", description: "同模特三套搭配并排" },
+  {
+    id: "outfit_recommend",
+    title: "搭配推荐",
+    description: "同模特三套搭配并排",
+  },
   { id: "scene_outfit", title: "场景穿搭", description: "场景情境化穿着" },
-  { id: "blogger_outfit", title: "博主穿搭", description: "OOTD 博主真实穿搭氛围" },
+  {
+    id: "blogger_outfit",
+    title: "博主穿搭",
+    description: "OOTD 博主真实穿搭氛围",
+  },
   { id: "flat_lay", title: "平铺图", description: "主商品 + 配饰自然俯拍" },
   { id: "hanger", title: "挂架展示", description: "服装店式真实陈列" },
   { id: "chapter", title: "章节过渡卡", description: "画册呼吸用纯文字过渡" },
@@ -219,6 +247,8 @@ const whiteBackgroundModes: Array<{
   { value: "retouch", label: "精修" },
   { value: "outfit_change", label: "换装" },
   { value: "model_change", label: "换模特" },
+  { value: "watermark_remove", label: "局部清理" },
+  { value: "remove_object", label: "移除物体" },
 ];
 
 const defaultInspirationSettings: InspirationSettings = {
@@ -241,10 +271,40 @@ const inspirationActionControls: Array<{
   label: string;
   options: Array<{ value: InspirationEditAction; label: string }>;
 }> = [
-  { key: "backgroundAction", label: "背景", options: [{ value: "keep", label: "保持" }, { value: "adjust", label: "调整" }] },
-  { key: "poseAction", label: "姿势", options: [{ value: "keep", label: "保持" }, { value: "adjust", label: "调整" }, { value: "replace", label: "替换" }] },
-  { key: "modelAction", label: "模特", options: [{ value: "keep", label: "保持" }, { value: "adjust", label: "调整" }, { value: "replace", label: "替换" }] },
-  { key: "productAction", label: "产品 / 服装", options: [{ value: "keep", label: "保持" }, { value: "replace", label: "替换" }] },
+  {
+    key: "backgroundAction",
+    label: "背景",
+    options: [
+      { value: "keep", label: "保持" },
+      { value: "adjust", label: "调整" },
+    ],
+  },
+  {
+    key: "poseAction",
+    label: "姿势",
+    options: [
+      { value: "keep", label: "保持" },
+      { value: "adjust", label: "调整" },
+      { value: "replace", label: "替换" },
+    ],
+  },
+  {
+    key: "modelAction",
+    label: "模特",
+    options: [
+      { value: "keep", label: "保持" },
+      { value: "adjust", label: "调整" },
+      { value: "replace", label: "替换" },
+    ],
+  },
+  {
+    key: "productAction",
+    label: "产品 / 服装",
+    options: [
+      { value: "keep", label: "保持" },
+      { value: "replace", label: "替换" },
+    ],
+  },
 ];
 
 const inspirationChangeOptions: Array<{
@@ -257,6 +317,7 @@ const inspirationChangeOptions: Array<{
 ];
 
 export function ParameterPanel({
+  footerTarget,
   activeModule,
   config,
   onChange,
@@ -267,9 +328,7 @@ export function ParameterPanel({
   runningTaskCount,
   isOutOfCredits = false,
 }: ParameterPanelProps) {
-  const [outputLanguage, setOutputLanguage] = useState(
-    config.outputLanguage ?? outputLanguages[0],
-  );
+  const outputLanguage = config.outputLanguage ?? outputLanguages[0];
   const [editingReferenceModule, setEditingReferenceModule] = useState<{
     id: string;
     title: string;
@@ -277,22 +336,20 @@ export function ParameterPanel({
   const [draftReferenceAssets, setDraftReferenceAssets] = useState<
     ModuleReferenceAsset[]
   >([]);
+  const [draftVisibleText, setDraftVisibleText] = useState("");
   const [draftReferenceNote, setDraftReferenceNote] = useState("");
   const [showProductRequiredNotice, setShowProductRequiredNotice] =
     useState(false);
-  const [
-    showOutfitChangeRequiredNotice,
-    setShowOutfitChangeRequiredNotice,
-  ] = useState(false);
-  const [
-    showModelChangeRequiredNotice,
-    setShowModelChangeRequiredNotice,
-  ] = useState(false);
+  const [showOutfitChangeRequiredNotice, setShowOutfitChangeRequiredNotice] =
+    useState(false);
+  const [showModelChangeRequiredNotice, setShowModelChangeRequiredNotice] =
+    useState(false);
+  const [detailGroup, setDetailGroup] = useState("all");
   const [libraryPickerTarget, setLibraryPickerTarget] = useState<
     "outfit_change" | "model_change" | "module_reference" | null
   >(null);
   const resolution = config.resolution ?? "1K";
-  const generationVersion = config.generationVersion ?? "brand";
+  const generationVersion = config.generationVersion ?? "standard";
   const selectedMainModules = config.selectedMainModules ?? [];
   const detailCounts = config.detailModuleCounts ?? {};
   const moduleReferenceAssets = config.moduleReferenceAssets ?? {};
@@ -370,7 +427,9 @@ export function ParameterPanel({
     }
 
     const nextModules = selectedMainModules.includes(moduleId)
-      ? selectedMainModules.filter((currentModule) => currentModule !== moduleId)
+      ? selectedMainModules.filter(
+          (currentModule) => currentModule !== moduleId,
+        )
       : [...selectedMainModules, moduleId];
 
     onChange({ ...config, selectedMainModules: nextModules });
@@ -404,10 +463,7 @@ export function ParameterPanel({
   };
 
   const selectWhiteBackgroundMode = (mode: WhiteBackgroundMode) => {
-    if (
-      mode !== whiteBackgroundMode &&
-      requireProductBeforeModuleSelection()
-    ) {
+    if (mode !== whiteBackgroundMode && requireProductBeforeModuleSelection()) {
       return;
     }
 
@@ -461,6 +517,11 @@ export function ParameterPanel({
     setEditingReferenceModule({ id: moduleId, title });
     setDraftReferenceAssets(assets);
     setDraftReferenceNote([...new Set(notes)].join("\n"));
+    setDraftVisibleText(
+      [
+        ...new Set(assets.map((asset) => asset.visibleText).filter(Boolean)),
+      ].join("\n"),
+    );
   };
 
   const removeOutfitChangeTargetAsset = () => {
@@ -481,19 +542,23 @@ export function ParameterPanel({
     };
 
     if (libraryPickerTarget === "outfit_change") {
-      saveModuleReferenceAssets("outfit_change", [{
-        ...baseAsset,
-        note: "Use this selected garment as the target clothing for outfit change.",
-      }]);
+      saveModuleReferenceAssets("outfit_change", [
+        {
+          ...baseAsset,
+          note: "Use this selected garment as the target clothing for outfit change.",
+        },
+      ]);
       setShowOutfitChangeRequiredNotice(false);
       return;
     }
 
     if (libraryPickerTarget === "model_change") {
-      saveModuleReferenceAssets("model_change", [{
-        ...baseAsset,
-        note: "Use this selected person as the target model reference. Preserve Image 1 clothing or product exactly.",
-      }]);
+      saveModuleReferenceAssets("model_change", [
+        {
+          ...baseAsset,
+          note: "Use this selected person as the target model reference. Preserve Image 1 clothing or product exactly.",
+        },
+      ]);
       setShowModelChangeRequiredNotice(false);
       return;
     }
@@ -503,7 +568,9 @@ export function ParameterPanel({
         const withoutDuplicate = currentAssets.filter(
           (asset) => asset.imageUrl !== baseAsset.imageUrl,
         );
-        return [...withoutDuplicate, baseAsset].slice(-maxModuleReferenceAssets);
+        return withoutDuplicate.length >= maxModuleReferenceAssets
+          ? currentAssets
+          : [...withoutDuplicate, baseAsset];
       });
     }
   };
@@ -515,15 +582,21 @@ export function ParameterPanel({
 
     const note = draftReferenceNote.trim();
     const nextReferenceAssets = { ...moduleReferenceAssets };
-    const savedAssets = draftReferenceAssets
+    const savedAssets: ModuleReferenceAsset[] = draftReferenceAssets
       .filter(hasModuleReferenceImage)
       .map((asset) => ({
         ...asset,
-        ...(note ? { note } : {}),
+        note: note || undefined,
+        noteMode: "instruction" as const,
+        visibleText: draftVisibleText.trim() || undefined,
       }));
 
-    if (savedAssets.length === 0 && note) {
-      savedAssets.push(createNoteOnlyReferenceAsset(note));
+    if (savedAssets.length === 0 && (note || draftVisibleText.trim())) {
+      savedAssets.push({
+        ...createNoteOnlyReferenceAsset(note || "仅使用指定画面文字"),
+        noteMode: "instruction",
+        visibleText: draftVisibleText.trim() || undefined,
+      });
     }
 
     if (savedAssets.length > 0) {
@@ -598,334 +671,467 @@ export function ParameterPanel({
     onGenerate();
   };
 
+  const footer = (
+    <div className="generation-footer">
+      <div className="generation-summary">
+        <span>
+          {activeModule === "white_background"
+            ? activeAiToolLabel
+            : moduleDisplayLabels[activeModule]}
+        </span>
+        <span>{config.aspectRatio}</span>
+        <span>{resolution}</span>
+        <span>
+          {
+            versionOptions.find((option) => option.value === generationVersion)
+              ?.name
+          }
+        </span>
+      </div>
+      <button
+        type="button"
+        className="primary-button generate-button"
+        onClick={isOutOfCredits ? onBuyCredits : handleGenerateClick}
+        disabled={!isOutOfCredits && isGenerateDisabled}
+      >
+        {isOutOfCredits
+          ? "购买积分"
+          : `生成${
+              activeModule === "white_background"
+                ? activeAiToolLabel
+                : moduleDisplayLabels[activeModule]
+            }`}
+      </button>
+      <p>
+        {`预计消耗 ${estimatedCredits} 积分（${estimatedImageCount} 张 × ${resolution} 每张 ${resolutionCreditCost} 分${generationVersion === "brand" && brandVersionExtraCredits > 0 ? ` + 品牌版 ${brandVersionExtraCredits} 分` : ""}），失败不扣点。当前进行中 ${runningTaskCount}。${isOutOfCredits ? "当前余额不足，请购买积分后继续生成。" : ""}`}
+      </p>
+    </div>
+  );
   return (
     <>
-    <aside className="panel parameter-panel" aria-labelledby="parameters-title">
-      <div className="panel-heading">
-        <p className="eyebrow">{meta.eyebrow}</p>
-        <h2 id="parameters-title">{meta.title}</h2>
-        <p>{meta.description}</p>
-      </div>
-      <label className="sr-only" htmlFor="module-label">
-        模块
-      </label>
-      <input
-        className="sr-only"
-        id="module-label"
-        value={moduleDisplayLabels[config.module as StudioModule] ?? moduleLabels[config.module]}
-        readOnly
-        aria-readonly="true"
-      />
+      <aside
+        className="panel parameter-panel"
+        aria-labelledby="parameters-title"
+      >
+        <div className="panel-heading">
+          <p className="eyebrow">{meta.eyebrow}</p>
+          <h2 id="parameters-title">{meta.title}</h2>
+          <p>{meta.description}</p>
+        </div>
+        <label className="sr-only" htmlFor="module-label">
+          模块
+        </label>
+        <input
+          className="sr-only"
+          id="module-label"
+          value={
+            moduleDisplayLabels[config.module as StudioModule] ??
+            moduleLabels[config.module]
+          }
+          readOnly
+          aria-readonly="true"
+        />
 
-      {activeModule === "main_image" ? (
-        <section className="setting-group" aria-labelledby="main-image-modules">
-          <div className="setting-group-heading">
-            <span id="main-image-modules">模块选择（多选）</span>
-            <small>新用户可体验前 4 个模块。</small>
-          </div>
-          <p className="selection-count">已选 {selectedMainModules.length}</p>
-          <div className="module-card-grid">
-            {mainImageModules.map((module) => {
-              const isActive = selectedMainModules.includes(module.id);
-              const referenceSummary = formatReferenceSummary(
-                getReferenceAssets(module.id),
-              );
+        {activeModule === "main_image" ? (
+          <section
+            className="setting-group"
+            aria-labelledby="main-image-modules"
+          >
+            <div className="setting-group-heading">
+              <span id="main-image-modules">模块选择（多选）</span>
+              <small>选择需要的画面，可多选。</small>
+            </div>
+            <p className="selection-count">已选 {selectedMainModules.length}</p>
+            <div className="module-card-grid">
+              {mainImageModules.map((module) => {
+                const isActive = selectedMainModules.includes(module.id);
+                const referenceSummary = formatReferenceSummary(
+                  getReferenceAssets(module.id),
+                );
 
-              return (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  key={module.id}
-                  className={`module-card-button${isActive ? " is-active" : ""}${
-                    !hasProduct && !isActive ? " is-disabled" : ""
-                  }`}
-                  aria-label={`${module.title} ${module.description}`}
-                  aria-pressed={isActive}
-                  aria-disabled={!hasProduct && !isActive}
-                  onClick={() => toggleMainModule(module.id)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") {
-                      return;
-                    }
-                    event.preventDefault();
-                    toggleMainModule(module.id);
-                  }}
-                >
-                  <div className="module-card-topline">
-                    <strong>{module.title}</strong>
-                    <button
-                      type="button"
-                      className="module-reference-button"
-                      aria-label="添加素材"
-                      title={`为${module.title}添加素材`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openReferenceEditor(module.id, module.title);
-                      }}
-                    >
-                      素材
-                    </button>
-                  </div>
-                  <span>{module.description}</span>
-                  {referenceSummary ? (
-                    <em className="module-reference-count">
-                      {referenceSummary}
-                    </em>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-
-      {activeModule === "detail_page" ? (
-        <section className="setting-group" aria-labelledby="detail-modules">
-          <div className="setting-group-heading">
-            <span id="detail-modules">服装详情内容模块</span>
-            <small>点击未选模块会添加 1 张图，右上角可继续叠加数量。</small>
-          </div>
-          <p className="selection-count">已选 {selectedDetailCount}</p>
-          <div className="detail-module-grid">
-            {detailContentModules.map((module) => {
-              const count = detailCounts[module.id] ?? 0;
-              const isActive = count > 0;
-              const referenceSummary = formatReferenceSummary(
-                getReferenceAssets(module.id),
-              );
-
-              return (
-                <div
-                  key={module.id}
-                  role="button"
-                  tabIndex={0}
-                  className={`detail-module-button${isActive ? " is-active" : ""}${
-                    !hasProduct && !isActive ? " is-disabled" : ""
-                  }`}
-                  aria-pressed={isActive}
-                  aria-disabled={!hasProduct && !isActive}
-                  aria-label={`${module.title} ${module.description}`}
-                  onClick={() => {
-                    if (!isActive) {
-                      addDetailModule(module.id);
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") {
-                      return;
-                    }
-                    event.preventDefault();
-                    if (!isActive) {
-                      addDetailModule(module.id);
-                    }
-                  }}
-                >
-                  <div className="module-card-topline">
-                    <strong>{module.title}</strong>
-                    <button
-                      type="button"
-                      className="module-reference-button"
-                      aria-label="添加素材"
-                      title={`为${module.title}添加素材`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openReferenceEditor(module.id, module.title);
-                      }}
-                    >
-                      素材
-                    </button>
-                  </div>
-                  <span>{module.description}</span>
+                return (
                   <div
-                    className="detail-module-stepper"
-                    onClick={(event) => event.stopPropagation()}
+                    role="button"
+                    tabIndex={0}
+                    key={module.id}
+                    className={`module-card-button${isActive ? " is-active" : ""}${
+                      !hasProduct && !isActive ? " is-disabled" : ""
+                    }`}
+                    aria-label={`${module.title} ${module.description}`}
+                    aria-pressed={isActive}
+                    aria-disabled={!hasProduct && !isActive}
+                    onClick={() => toggleMainModule(module.id)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") {
+                        return;
+                      }
+                      event.preventDefault();
+                      toggleMainModule(module.id);
+                    }}
                   >
-                    <button
-                      type="button"
-                      aria-label={`${module.title} 减少 1 张`}
-                      onClick={() => setDetailModuleCount(module.id, count - 1)}
-                      disabled={count === 0}
-                    >
-                      -
-                    </button>
-                    <b>{count}</b>
-                    <button
-                      type="button"
-                      aria-label={`${module.title} 增加 1 张`}
-                      onClick={() => addDetailModule(module.id)}
-                      disabled={count >= maxDetailModuleCount}
-                    >
-                      +
-                    </button>
+                    <div className="module-card-topline">
+                      <strong>{module.title}</strong>
+                      <button
+                        type="button"
+                        className="module-reference-button"
+                        aria-label="添加素材"
+                        title={`为${module.title}添加素材`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openReferenceEditor(module.id, module.title);
+                        }}
+                      >
+                        素材
+                      </button>
+                    </div>
+                    <span>{module.description}</span>
+                    {referenceSummary ? (
+                      <em className="module-reference-count">
+                        {referenceSummary}
+                      </em>
+                    ) : null}
                   </div>
-                  <em>{isActive ? "已加入，可继续加图" : "点击添加"}</em>
-                  {referenceSummary ? (
-                    <em className="module-reference-count">
-                      {referenceSummary}
-                    </em>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
-      {activeModule === "white_background" ? (
-        <section className="setting-group">
-          <div className="setting-group-heading">
-            <span>AI工具</span>
-            <small>选择要生成的工具类型</small>
-          </div>
-          <div className="segmented-control" aria-label="AI工具">
-            {whiteBackgroundModes.map((mode) => {
-              const isActive = mode.value === whiteBackgroundMode;
-
-              return (
+        {activeModule === "detail_page" ? (
+          <section className="setting-group" aria-labelledby="detail-modules">
+            <div className="setting-group-heading">
+              <span id="detail-modules">服装详情内容模块</span>
+              <small>点击未选模块会添加 1 张图，右上角可继续叠加数量。</small>
+            </div>
+            <p className="selection-count">已选 {selectedDetailCount}</p>
+            <div className="module-group-tabs" aria-label="详情模块分组">
+              {[
+                ["all", "全部"],
+                ["base", "基础信息"],
+                ["detail", "商品细节"],
+                ["scene", "穿搭场景"],
+              ].map(([id, label]) => (
                 <button
                   type="button"
-                  key={mode.value}
-                  className={`${isActive ? "is-active" : ""}${
-                    !hasProduct && !isActive ? " is-disabled" : ""
-                  }`.trim() || undefined}
-                  aria-pressed={isActive}
-                  aria-disabled={!hasProduct && !isActive}
-                  onClick={() => selectWhiteBackgroundMode(mode.value)}
+                  key={id}
+                  aria-pressed={detailGroup === id}
+                  onClick={() => setDetailGroup(id)}
                 >
-                  {mode.label}
+                  {label}
                 </button>
-              );
-            })}
-          </div>
-          {whiteBackgroundMode === "outfit_change" ? (
-            <div className="outfit-change-target-card">
-              <div className="setting-group-heading">
-                <span>换装服饰</span>
-                <small>多上传 1 张要换上的衣服，作为 Image 2 参考</small>
-              </div>
-              <button
-                type="button"
-                className="outfit-change-upload"
-                aria-label="从图片库选择换装服饰图"
-                onClick={() => setLibraryPickerTarget("outfit_change")}
-              >
-                <span>从图片库选择服饰图</span>
-                <small>建议选择清晰正面或半身服饰图</small>
-              </button>
-              {outfitChangeTargetAsset ? (
-                <div className="outfit-change-target-preview">
-                  <img
-                    src={outfitChangeTargetAsset.imageUrl}
-                    alt="要换上的服饰图"
-                  />
-                  <div>
-                    <p className="file-label">已选择服饰</p>
-                    <p className="file-name">
-                      {outfitChangeTargetAsset.fileName}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={removeOutfitChangeTargetAsset}
-                  >
-                    删除
-                  </button>
-                </div>
-              ) : null}
+              ))}
             </div>
-          ) : null}
-          {whiteBackgroundMode === "model_change" ? (
-            <div className="outfit-change-target-card model-change-target-card">
-              <div className="setting-group-heading">
-                <span>目标模特</span>
-                <small>多上传 1 张模特照片，作为 Image 2 人物参考</small>
-              </div>
-              <button
-                type="button"
-                className="outfit-change-upload"
-                aria-label="从图片库选择目标模特照片"
-                onClick={() => setLibraryPickerTarget("model_change")}
-              >
-                <span>从图片库选择目标模特</span>
-                <small>建议选择清晰正面或半身照，避免遮挡面部</small>
-              </button>
-              {modelChangeTargetAsset ? (
-                <div className="outfit-change-target-preview">
-                  <img
-                    src={modelChangeTargetAsset.imageUrl}
-                    alt="目标模特照片"
-                  />
-                  <div>
-                    <p className="file-label">已选择模特</p>
-                    <p className="file-name">
-                      {modelChangeTargetAsset.fileName}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={removeModelChangeTargetAsset}
-                  >
-                    删除
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {activeModule === "lifestyle" ? (
-        <section className="setting-group inspiration-creator-group" aria-labelledby="inspiration-controls">
-          <div className="setting-group-heading">
-            <span id="inspiration-controls">创作控制</span>
-            <small>按灵感原图决定哪些内容保持、调整或替换</small>
-          </div>
-          <div className="inspiration-action-list">
-            {inspirationActionControls.map((control) => {
-              const fallback = control.key === "productAction" ? "replace" : "keep";
-              const selectedAction = inspirationSettings[control.key] ?? fallback;
-              const changeKey = control.key === "backgroundAction"
-                ? "backgroundChange"
-                : control.key === "poseAction"
-                  ? "poseChange"
-                  : null;
-
-              return (
-                <div className="inspiration-action-control" key={control.key}>
-                  <div className="inspiration-action-row">
-                    <strong>{control.label}</strong>
-                    <div className="segmented-control" aria-label={control.label}>
-                      {control.options.map((option) => {
-                        const active = selectedAction === option.value;
-                        return (
+            {selectedDetailCount > 0 ? (
+              <ol className="selected-module-order">
+                {(
+                  config.detailModuleOrder ||
+                  detailContentModules.map((m) => m.id)
+                )
+                  .filter((id) => (detailCounts[id] || 0) > 0)
+                  .map((id, index, order) => (
+                    <li key={id}>
+                      {detailContentModules.find((m) => m.id === id)?.title}
+                      <div>
+                        {[-1, 1].map((delta) => (
                           <button
                             type="button"
-                            key={option.value}
-                            className={active ? "is-active" : undefined}
-                            aria-pressed={active}
-                            onClick={() => updateInspirationSetting(control.key, option.value)}
+                            key={delta}
+                            disabled={
+                              index + delta < 0 || index + delta >= order.length
+                            }
+                            aria-label={`${id} ${delta < 0 ? "上移" : "下移"}`}
+                            onClick={() => {
+                              const next = [...order];
+                              [next[index], next[index + delta]] = [
+                                next[index + delta],
+                                next[index],
+                              ];
+                              updateConfig("detailModuleOrder", [
+                                ...next,
+                                ...detailContentModules
+                                  .map((m) => m.id)
+                                  .filter((id) => !next.includes(id)),
+                              ]);
+                            }}
                           >
-                            {option.label}
+                            {delta < 0 ? "↑" : "↓"}
                           </button>
-                        );
-                      })}
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+              </ol>
+            ) : null}
+            <div className="detail-module-grid">
+              {detailContentModules
+                .filter(
+                  (module) =>
+                    detailGroup === "all" ||
+                    (detailGroup === "scene"
+                      ? [
+                          "buyer_show",
+                          "outfit_recommend",
+                          "scene_outfit",
+                          "blogger_outfit",
+                          "flat_lay",
+                          "hanger",
+                        ].includes(module.id)
+                      : detailGroup === "detail"
+                        ? [
+                            "fabric_craft",
+                            "cutting",
+                            "color_size",
+                            "multi_color",
+                            "specs",
+                            "care",
+                          ].includes(module.id)
+                        : [
+                            "main_display",
+                            "brand_intro",
+                            "style_selling",
+                            "promotion",
+                            "service",
+                            "faq",
+                            "chapter",
+                          ].includes(module.id)),
+                )
+                .map((module) => {
+                  const count = detailCounts[module.id] ?? 0;
+                  const isActive = count > 0;
+                  const referenceSummary = formatReferenceSummary(
+                    getReferenceAssets(module.id),
+                  );
+
+                  return (
+                    <div
+                      key={module.id}
+                      role="button"
+                      tabIndex={0}
+                      className={`detail-module-button${isActive ? " is-active" : ""}${
+                        !hasProduct && !isActive ? " is-disabled" : ""
+                      }`}
+                      aria-pressed={isActive}
+                      aria-disabled={!hasProduct && !isActive}
+                      aria-label={`${module.title} ${module.description}`}
+                      onClick={() => {
+                        if (!isActive) {
+                          addDetailModule(module.id);
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") {
+                          return;
+                        }
+                        event.preventDefault();
+                        if (!isActive) {
+                          addDetailModule(module.id);
+                        }
+                      }}
+                    >
+                      <div className="module-card-topline">
+                        <strong>{module.title}</strong>
+                        <button
+                          type="button"
+                          className="module-reference-button"
+                          aria-label="添加素材"
+                          title={`为${module.title}添加素材`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openReferenceEditor(module.id, module.title);
+                          }}
+                        >
+                          素材
+                        </button>
+                      </div>
+                      <span>{module.description}</span>
+                      <div
+                        className="detail-module-stepper"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          aria-label={`${module.title} 减少 1 张`}
+                          onClick={() =>
+                            setDetailModuleCount(module.id, count - 1)
+                          }
+                          disabled={count === 0}
+                        >
+                          -
+                        </button>
+                        <b>{count}</b>
+                        <button
+                          type="button"
+                          aria-label={`${module.title} 增加 1 张`}
+                          onClick={() => addDetailModule(module.id)}
+                          disabled={count >= maxDetailModuleCount}
+                        >
+                          +
+                        </button>
+                      </div>
+                      <em>{isActive ? "已加入，可继续加图" : "点击添加"}</em>
+                      {referenceSummary ? (
+                        <em className="module-reference-count">
+                          {referenceSummary}
+                        </em>
+                      ) : null}
                     </div>
+                  );
+                })}
+            </div>
+          </section>
+        ) : null}
+
+        {activeModule === "white_background" ? (
+          <section className="setting-group">
+            <div className="setting-group-heading">
+              <span>AI工具</span>
+              <small>选择要生成的工具类型</small>
+            </div>
+            <div className="segmented-control" aria-label="AI工具">
+              {whiteBackgroundModes.map((mode) => {
+                const isActive = mode.value === whiteBackgroundMode;
+
+                return (
+                  <button
+                    type="button"
+                    key={mode.value}
+                    className={
+                      `${isActive ? "is-active" : ""}${
+                        !hasProduct && !isActive ? " is-disabled" : ""
+                      }`.trim() || undefined
+                    }
+                    aria-pressed={isActive}
+                    aria-disabled={!hasProduct && !isActive}
+                    onClick={() => selectWhiteBackgroundMode(mode.value)}
+                  >
+                    {mode.label}
+                  </button>
+                );
+              })}
+            </div>
+            {whiteBackgroundMode === "outfit_change" ? (
+              <div className="outfit-change-target-card">
+                <div className="setting-group-heading">
+                  <span>换装服饰</span>
+                  <small>多上传 1 张要换上的衣服，作为 Image 2 参考</small>
+                </div>
+                <button
+                  type="button"
+                  className="outfit-change-upload"
+                  aria-label="从图片库选择换装服饰图"
+                  onClick={() => setLibraryPickerTarget("outfit_change")}
+                >
+                  <span>从图片库选择服饰图</span>
+                  <small>建议选择清晰正面或半身服饰图</small>
+                </button>
+                {outfitChangeTargetAsset ? (
+                  <div className="outfit-change-target-preview">
+                    <img
+                      src={outfitChangeTargetAsset.imageUrl}
+                      alt="要换上的服饰图"
+                    />
+                    <div>
+                      <p className="file-label">已选择服饰</p>
+                      <p className="file-name">
+                        {outfitChangeTargetAsset.fileName}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={removeOutfitChangeTargetAsset}
+                    >
+                      删除
+                    </button>
                   </div>
-                  {changeKey && selectedAction === "adjust" ? (
-                    <div className="inspiration-change-row">
-                      <span>{control.label}变化幅度</span>
-                      <div className="segmented-control" aria-label={`${control.label}变化幅度`}>
-                        {inspirationChangeOptions.map((option) => {
-                          const active = (inspirationSettings[changeKey] ?? "medium") === option.value;
+                ) : null}
+              </div>
+            ) : null}
+            {whiteBackgroundMode === "model_change" ? (
+              <div className="outfit-change-target-card model-change-target-card">
+                <div className="setting-group-heading">
+                  <span>目标模特</span>
+                  <small>多上传 1 张模特照片，作为 Image 2 人物参考</small>
+                </div>
+                <button
+                  type="button"
+                  className="outfit-change-upload"
+                  aria-label="从图片库选择目标模特照片"
+                  onClick={() => setLibraryPickerTarget("model_change")}
+                >
+                  <span>从图片库选择目标模特</span>
+                  <small>建议选择清晰正面或半身照，避免遮挡面部</small>
+                </button>
+                {modelChangeTargetAsset ? (
+                  <div className="outfit-change-target-preview">
+                    <img
+                      src={modelChangeTargetAsset.imageUrl}
+                      alt="目标模特照片"
+                    />
+                    <div>
+                      <p className="file-label">已选择模特</p>
+                      <p className="file-name">
+                        {modelChangeTargetAsset.fileName}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={removeModelChangeTargetAsset}
+                    >
+                      删除
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {activeModule === "lifestyle" ? (
+          <section
+            className="setting-group inspiration-creator-group"
+            aria-labelledby="inspiration-controls"
+          >
+            <div className="setting-group-heading">
+              <span id="inspiration-controls">创作控制</span>
+              <small>按灵感原图决定哪些内容保持、调整或替换</small>
+            </div>
+            <div className="inspiration-action-list">
+              {inspirationActionControls.map((control) => {
+                const fallback =
+                  control.key === "productAction" ? "replace" : "keep";
+                const selectedAction =
+                  inspirationSettings[control.key] ?? fallback;
+                const changeKey =
+                  control.key === "backgroundAction"
+                    ? "backgroundChange"
+                    : control.key === "poseAction"
+                      ? "poseChange"
+                      : null;
+
+                return (
+                  <div className="inspiration-action-control" key={control.key}>
+                    <div className="inspiration-action-row">
+                      <strong>{control.label}</strong>
+                      <div
+                        className="segmented-control"
+                        aria-label={control.label}
+                      >
+                        {control.options.map((option) => {
+                          const active = selectedAction === option.value;
                           return (
                             <button
                               type="button"
                               key={option.value}
                               className={active ? "is-active" : undefined}
                               aria-pressed={active}
-                              onClick={() => updateInspirationSetting(changeKey, option.value)}
+                              onClick={() =>
+                                updateInspirationSetting(
+                                  control.key,
+                                  option.value,
+                                )
+                              }
                             >
                               {option.label}
                             </button>
@@ -933,263 +1139,297 @@ export function ParameterPanel({
                         })}
                       </div>
                     </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-          <p className="inspiration-action-summary">
-            默认保持背景、姿势和模特，只替换产品 / 服装；如需更大变化再调整对应选项。
-          </p>
-        </section>
-      ) : null}
+                    {changeKey && selectedAction === "adjust" ? (
+                      <div className="inspiration-change-row">
+                        <span>{control.label}变化幅度</span>
+                        <div
+                          className="segmented-control"
+                          aria-label={`${control.label}变化幅度`}
+                        >
+                          {inspirationChangeOptions.map((option) => {
+                            const active =
+                              (inspirationSettings[changeKey] ?? "medium") ===
+                              option.value;
+                            return (
+                              <button
+                                type="button"
+                                key={option.value}
+                                className={active ? "is-active" : undefined}
+                                aria-pressed={active}
+                                onClick={() =>
+                                  updateInspirationSetting(
+                                    changeKey,
+                                    option.value,
+                                  )
+                                }
+                              >
+                                {option.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="inspiration-action-summary">
+              默认保持背景、姿势和模特，只替换产品 /
+              服装；如需更大变化再调整对应选项。
+            </p>
+          </section>
+        ) : null}
 
-      {activeModule !== "white_background" ? (
+        {activeModule !== "white_background" ? (
+          <div className="setting-group">
+            <div className="field">
+              <label htmlFor="output-language">输出语言</label>
+              <select
+                id="output-language"
+                value={outputLanguage}
+                onChange={(event) => {
+                  updateConfig("outputLanguage", event.target.value);
+                }}
+              >
+                {outputLanguages.map((language) => (
+                  <option key={language} value={language}>
+                    {language}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        ) : null}
+
         <div className="setting-group">
-          <div className="field">
-            <label htmlFor="output-language">输出语言</label>
-            <select
-              id="output-language"
-              value={outputLanguage}
-              onChange={(event) => {
-                setOutputLanguage(event.target.value);
-                updateConfig("outputLanguage", event.target.value);
-              }}
-            >
-              {outputLanguages.map((language) => (
-                <option key={language} value={language}>
-                  {language}
-                </option>
-              ))}
-            </select>
+          <div className="setting-group-heading">
+            <span>尺寸</span>
+            <small>按页面预设</small>
           </div>
-        </div>
-      ) : null}
-
-      <div className="setting-group">
-        <div className="setting-group-heading">
-          <span>尺寸</span>
-          <small>按页面预设</small>
-        </div>
-        <div className="segmented-control" aria-label="尺寸">
-          {aspectRatioOptions.map((option) => (
-            <button
-              type="button"
-              key={option.value}
-              className={config.aspectRatio === option.value ? "is-active" : undefined}
-              aria-pressed={config.aspectRatio === option.value}
-              onClick={() => updateConfig("aspectRatio", option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="setting-group">
-        <div className="setting-group-heading">
-          <span>分辨率</span>
-          <small>可切换</small>
-        </div>
-        <div className="segmented-control" aria-label="分辨率">
-          {resolutionOptions.map((option) => (
-            <button
-              type="button"
-              key={option}
-              className={resolution === option ? "is-active" : undefined}
-              aria-pressed={resolution === option}
-              onClick={() => updateConfig("resolution", option)}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {activeModule !== "white_background" ? (
-        <>
-          <div className="field">
-            <label htmlFor="selling-points">
-              {activeModule === "detail_page"
-                ? "组图要求"
-                : activeModule === "lifestyle"
-                  ? "创作要求"
-                  : "设计简报"}
-            </label>
-            <textarea
-              id="selling-points"
-              value={config.sellingPoints}
-              rows={activeModule === "detail_page" ? 6 : activeModule === "lifestyle" ? 4 : 4}
-              onChange={(event) => updateConfig("sellingPoints", event.target.value)}
-              placeholder={
-                activeModule === "detail_page"
-                  ? "描述您的产品信息和期望的图片风格。例如：这是一款法式复古连衣裙，采用重磅真丝面料，特色是蕾丝拼接和珍珠扣设计，适合25-35岁都市女性通勤或约会穿。"
-                  : activeModule === "lifestyle"
-                    ? "补充你希望保留或强调的商品细节、画面气质和内容要求。"
-                  : "描述产品核心卖点、视觉方向和希望强调的主图风格。"
-              }
-            />
-          </div>
-
-          <div className="field">
-            <label htmlFor="promotion-info">
-              {activeModule === "lifestyle" ? "画面文字" : "促销信息"}
-            </label>
-            <textarea
-              id="promotion-info"
-              value={config.specifications}
-              rows={4}
-              onChange={(event) =>
-                updateConfig("specifications", event.target.value)
-              }
-              placeholder={activeModule === "lifestyle" ? "需要出现在画面中的商品名称、卖点或短文案。" : "填写促销活动详情，如折扣信息、活动名称、优惠力度等。"}
-            />
-          </div>
-        </>
-      ) : null}
-
-      <div className="setting-group">
-        <div className="setting-group-heading">
-          <span>出图版本</span>
-          <small>成功后扣点</small>
-        </div>
-        <div className="version-grid">
-          {versionOptions.map((option) => (
-            <button
-              type="button"
-              key={option.value}
-              className={
-                generationVersion === option.value ? "is-active" : undefined
-              }
-              aria-pressed={generationVersion === option.value}
-              onClick={() => updateConfig("generationVersion", option.value)}
-            >
-              {option.recommended ? <em>推荐</em> : null}
-              <strong>{option.name}</strong>
-              <span>{option.description}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="generation-footer">
-        <div className="generation-summary">
-          <span>
-            {activeModule === "white_background"
-              ? activeAiToolLabel
-              : moduleDisplayLabels[activeModule]}
-          </span>
-          <span>{config.aspectRatio}</span>
-          <span>{resolution}</span>
-          <span>
-            {
-              versionOptions.find((option) => option.value === generationVersion)
-                ?.name
-            }
-          </span>
-        </div>
-        <button
-          type="button"
-          className="primary-button generate-button"
-          onClick={isOutOfCredits ? onBuyCredits : handleGenerateClick}
-          disabled={!isOutOfCredits && isGenerateDisabled}
-        >
-          {isOutOfCredits
-            ? "购买积分"
-            : `生成${
-                activeModule === "white_background"
-                  ? activeAiToolLabel
-                  : moduleDisplayLabels[activeModule]
-              }`}
-        </button>
-        <p>
-          {`预计消耗 ${estimatedCredits} 积分（${estimatedImageCount} 张 × ${resolution} 每张 ${resolutionCreditCost} 分${generationVersion === "brand" ? ` + 品牌版 ${brandVersionExtraCredits} 分` : ""}），失败不扣点。当前进行中 ${runningTaskCount}。${isOutOfCredits ? "当前余额不足，请购买积分后继续生成。" : ""}`}
-        </p>
-      </div>
-    </aside>
-      {editingReferenceModule ? createPortal(
-        <div
-          className="module-reference-modal-backdrop"
-          role="presentation"
-          onClick={() => setEditingReferenceModule(null)}
-        >
-          <section
-            className="module-reference-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="module-reference-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="module-reference-modal-heading">
-              <div>
-                <p className="eyebrow">Module Material</p>
-                <h3 id="module-reference-title">
-                  {editingReferenceModule.title}素材
-                </h3>
-              </div>
+          <div className="segmented-control" aria-label="尺寸">
+            {aspectRatioOptions.map((option) => (
               <button
                 type="button"
-                aria-label="关闭素材弹窗"
-                onClick={() => setEditingReferenceModule(null)}
+                key={option.value}
+                className={
+                  config.aspectRatio === option.value ? "is-active" : undefined
+                }
+                aria-pressed={config.aspectRatio === option.value}
+                onClick={() => updateConfig("aspectRatio", option.value)}
               >
-                ×
+                {option.label}
               </button>
-            </div>
-            <button
-              type="button"
-              className="module-reference-upload"
-              aria-label="从图片库添加模块参考图"
-              onClick={() => setLibraryPickerTarget("module_reference")}
-            >
-              <span>从图片库添加参考图</span>
-              <small>最多 {maxModuleReferenceAssets} 张，作为 Image 2 参考素材</small>
-            </button>
-            {draftImageReferenceAssets.length > 0 ? (
-              <div className="module-reference-list">
-                {draftImageReferenceAssets.map((asset) => (
-                  <div className="module-reference-item" key={asset.id}>
-                    <img src={asset.imageUrl} alt={asset.fileName} />
-                    <span>{asset.fileName}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeDraftReferenceAsset(asset.id)}
-                    >
-                      删除
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
+            ))}
+          </div>
+        </div>
+
+        <div className="setting-group">
+          <div className="setting-group-heading">
+            <span>分辨率</span>
+            <small>可切换</small>
+          </div>
+          <div className="segmented-control" aria-label="分辨率">
+            {resolutionOptions.map((option) => (
+              <button
+                type="button"
+                key={option}
+                className={resolution === option ? "is-active" : undefined}
+                aria-pressed={resolution === option}
+                onClick={() => updateConfig("resolution", option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {activeModule !== "white_background" ? (
+          <>
             <div className="field">
-              <label htmlFor="module-reference-note">素材备注</label>
+              <label htmlFor="selling-points">
+                {activeModule === "detail_page"
+                  ? "组图要求"
+                  : activeModule === "lifestyle"
+                    ? "创作要求"
+                    : "设计简报"}
+              </label>
               <textarea
-                id="module-reference-note"
-                rows={4}
-                value={draftReferenceNote}
-                onChange={(event) => setDraftReferenceNote(event.target.value)}
-                placeholder="例如：这是我的包装盒，请在包装展示中使用；这是红色和蓝色款，请用于多色套装。"
+                id="selling-points"
+                value={config.sellingPoints}
+                rows={
+                  activeModule === "detail_page"
+                    ? 6
+                    : activeModule === "lifestyle"
+                      ? 4
+                      : 4
+                }
+                onChange={(event) =>
+                  updateConfig("sellingPoints", event.target.value)
+                }
+                placeholder={
+                  activeModule === "detail_page"
+                    ? "描述您的产品信息和期望的图片风格。例如：这是一款法式复古连衣裙，采用重磅真丝面料，特色是蕾丝拼接和珍珠扣设计，适合25-35岁都市女性通勤或约会穿。"
+                    : activeModule === "lifestyle"
+                      ? "补充你希望保留或强调的商品细节、画面气质和内容要求。"
+                      : "描述产品核心卖点、视觉方向和希望强调的主图风格。"
+                }
               />
             </div>
-            <div className="module-reference-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setEditingReferenceModule(null)}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                onClick={saveReferenceAssets}
-              >
-                保存素材
-              </button>
+
+            <div className="field">
+              <label htmlFor="promotion-info">
+                {activeModule === "lifestyle" ? "画面文字" : "促销信息"}
+              </label>
+              <textarea
+                id="promotion-info"
+                value={config.specifications}
+                rows={4}
+                onChange={(event) =>
+                  updateConfig("specifications", event.target.value)
+                }
+                placeholder={
+                  activeModule === "lifestyle"
+                    ? "需要出现在画面中的商品名称、卖点或短文案。"
+                    : "填写促销活动详情，如折扣信息、活动名称、优惠力度等。"
+                }
+              />
             </div>
-          </section>
-        </div>,
-        document.body,
-      ) : null}
+          </>
+        ) : null}
+
+        <div className="setting-group">
+          <div className="setting-group-heading">
+            <span>画面风格</span>
+            <small>品牌风格当前不额外收费</small>
+          </div>
+          <div className="version-grid">
+            {versionOptions.map((option) => (
+              <button
+                type="button"
+                key={option.value}
+                className={
+                  generationVersion === option.value ? "is-active" : undefined
+                }
+                aria-pressed={generationVersion === option.value}
+                onClick={() => updateConfig("generationVersion", option.value)}
+              >
+                {option.recommended ? <em>推荐</em> : null}
+                <strong>{option.name}</strong>
+                <span>{option.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </aside>
+      {footerTarget ? createPortal(footer, footerTarget) : footer}
+      {editingReferenceModule
+        ? createPortal(
+            <div
+              className="module-reference-modal-backdrop"
+              role="presentation"
+              onClick={() => setEditingReferenceModule(null)}
+            >
+              <section
+                className="module-reference-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="module-reference-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="module-reference-modal-heading">
+                  <div>
+                    <p className="eyebrow">Module Material</p>
+                    <h3 id="module-reference-title">
+                      {editingReferenceModule.title}素材
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="关闭素材弹窗"
+                    onClick={() => setEditingReferenceModule(null)}
+                  >
+                    ×
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="module-reference-upload"
+                  aria-label="从图片库添加模块参考图"
+                  disabled={
+                    draftImageReferenceAssets.length >= maxModuleReferenceAssets
+                  }
+                  onClick={() => setLibraryPickerTarget("module_reference")}
+                >
+                  <span>从图片库添加参考图</span>
+                  <small>
+                    最多 {maxModuleReferenceAssets} 张，作为 Image 2 参考素材
+                  </small>
+                </button>
+                {draftImageReferenceAssets.length > 0 ? (
+                  <div className="module-reference-list">
+                    {draftImageReferenceAssets.map((asset) => (
+                      <div className="module-reference-item" key={asset.id}>
+                        <img src={asset.imageUrl} alt={asset.fileName} />
+                        <span>{asset.fileName}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeDraftReferenceAsset(asset.id)}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="field">
+                  <label htmlFor="module-reference-note">素材备注</label>
+                  <small>
+                    只用于生成要求，不直接写到图片上。需要显示的字请填下方“画面文字”。
+                  </small>
+                  <textarea
+                    id="module-reference-note"
+                    rows={4}
+                    value={draftReferenceNote}
+                    onChange={(event) =>
+                      setDraftReferenceNote(event.target.value)
+                    }
+                    placeholder="例如：这是我的包装盒，请在包装展示中使用；这是红色和蓝色款，请用于多色套装。"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="module-visible-text">画面文字</label>
+                  <textarea
+                    id="module-visible-text"
+                    rows={3}
+                    value={draftVisibleText}
+                    onChange={(event) =>
+                      setDraftVisibleText(event.target.value)
+                    }
+                    placeholder="填写需要显示的准确文字，如：仅售 XL、限时 4 折"
+                  />
+                </div>
+                <div className="module-reference-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setEditingReferenceModule(null)}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={saveReferenceAssets}
+                  >
+                    保存素材
+                  </button>
+                </div>
+              </section>
+            </div>,
+            document.body,
+          )
+        : null}
       <NoticeDialog
         open={showProductRequiredNotice}
         title="请先选择商品图"

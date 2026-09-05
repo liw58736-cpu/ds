@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { defaultConfig } from "../domain/defaults";
+import { ImageCleanupPage } from "./ImageCleanupPage";
+import {
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { estimateGenerationCredits } from "../domain/creditCost";
 import {
   completeTask,
@@ -30,12 +36,19 @@ import {
   saveGenerationTaskHistory,
   saveGenerationTasks,
 } from "../api/generationApi";
+import { shouldUseKromaGenerationBackend } from "../api/kromaGenerationAdapter";
 import { GenerationProviderError } from "../providers/generationProvider";
 import { ParameterPanel } from "./ParameterPanel";
 import { ResultPreview } from "./ResultPreview";
 import { UploadPanel } from "./UploadPanel";
 import { InspirationUploadPanel } from "./InspirationUploadPanel";
 import { NoticeDialog } from "./NoticeDialog";
+import {
+  getStorageOwner,
+  loadWorkspaceDrafts,
+  saveWorkspaceDraft,
+  reuseTaskDraft,
+} from "../storage/workspaceDraftStore";
 
 function moveTaskToTop(
   tasks: GenerationTask[],
@@ -98,35 +111,6 @@ interface WorkspaceProps {
   onOpenMotion?: (imageUrl: string, title: string) => void;
 }
 
-type WorkspaceModule = NonNullable<WorkspaceProps["activeModule"]>;
-type ProductByModule = Partial<Record<WorkspaceModule, ProductInput | null>>;
-
-function getModuleDefaults(module: GenerationModule): Partial<GenerationConfig> {
-  if (module === "detail_page") {
-    return { module, aspectRatio: "long_page", outputFormat: "jpg" };
-  }
-
-  if (module === "white_background") {
-    return {
-      module,
-      aspectRatio: "original",
-      outputFormat: "png",
-      whiteBackgroundMode: "white_background",
-    };
-  }
-
-  if (module === "lifestyle") {
-    return {
-      module,
-      aspectRatio: "4:5",
-      outputFormat: "jpg",
-      style: "lifestyle",
-    };
-  }
-
-  return { module, aspectRatio: "1:1", outputFormat: "png" };
-}
-
 export function Workspace({
   activeModule = "main_image",
   isVisible = true,
@@ -135,10 +119,26 @@ export function Workspace({
   onRequireLogin,
   onOpenMotion,
 }: WorkspaceProps) {
-  const [config, setConfig] = useState<GenerationConfig>(defaultConfig);
-  const [productsByModule, setProductsByModule] = useState<ProductByModule>({});
-  const [tasks, setTasks] = useState<GenerationTask[]>(
-    () => getGenerationTaskSnapshot(),
+  const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
+  const [owner] = useState(getStorageOwner);
+  const [drafts, setDrafts] = useState(() => loadWorkspaceDrafts(owner));
+  const draftsRef = useRef(drafts);
+  const [draftSaveFailed, setDraftSaveFailed] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<"settings" | "results">(
+    "settings",
+  );
+  const config = drafts[activeModule].config;
+  const setConfig = (update: SetStateAction<GenerationConfig>) => {
+    const current = draftsRef.current[activeModule];
+    const nextConfig =
+      typeof update === "function" ? update(current.config) : update;
+    const nextDraft = { ...current, config: nextConfig };
+    draftsRef.current = { ...draftsRef.current, [activeModule]: nextDraft };
+    setDrafts(draftsRef.current);
+    setDraftSaveFailed(!saveWorkspaceDraft(owner, activeModule, nextDraft));
+  };
+  const [tasks, setTasks] = useState<GenerationTask[]>(() =>
+    getGenerationTaskSnapshot(),
   );
   const [accountBalance, setAccountBalance] = useState(
     () => getCurrentAccountSnapshot().balance,
@@ -147,53 +147,42 @@ export function Workspace({
     string | null | undefined
   >(undefined);
   const [showLoginRequiredNotice, setShowLoginRequiredNotice] = useState(false);
-  const [showReplacementRequiredNotice, setShowReplacementRequiredNotice] = useState(false);
-  const productsByModuleRef = useRef<ProductByModule>({});
+  const [showReplacementRequiredNotice, setShowReplacementRequiredNotice] =
+    useState(false);
+
   const hasLoadedTasksRef = useRef(true);
   const taskRunTokensRef = useRef<Record<string, number>>({});
+  const taskRunSequenceRef = useRef(0);
+  useEffect(
+    () => () => {
+      taskRunTokensRef.current = {};
+    },
+    [],
+  );
   const latestTask = tasks[0];
   const runningTaskCount = tasks.filter(
     (task) => task.status === "queued" || task.status === "processing",
   ).length;
   const previewTasks = tasks.slice(0, 8);
-  const product = productsByModule[activeModule] ?? null;
+  const product = drafts[activeModule].product;
   const estimatedCreditCost = estimateGenerationCredits(config);
   const isOutOfCredits = accountBalance < estimatedCreditCost;
 
-  const revokeUploadedProduct = (productToRevoke: ProductInput | null) => {
-    if (
-      productToRevoke?.source === "upload" &&
-      productToRevoke.imageUrl.startsWith("blob:")
-    ) {
-      URL.revokeObjectURL(productToRevoke.imageUrl);
-    }
-  };
-
   const startTaskRun = (taskId: string): number => {
-    const nextToken = (taskRunTokensRef.current[taskId] ?? 0) + 1;
+    const nextToken = ++taskRunSequenceRef.current;
     taskRunTokensRef.current[taskId] = nextToken;
     return nextToken;
   };
 
   const isTaskRunCurrent = (taskId: string, token: number): boolean =>
-    taskRunTokensRef.current[taskId] === token;
+    getStorageOwner() === owner && taskRunTokensRef.current[taskId] === token;
 
   const handleProductChange = (nextProduct: ProductInput) => {
-    const module = activeModule;
-    const previousProduct = productsByModuleRef.current[module] ?? null;
-
-    if (previousProduct?.imageUrl !== nextProduct.imageUrl) {
-      revokeUploadedProduct(previousProduct);
-    }
-
-    productsByModuleRef.current = {
-      ...productsByModuleRef.current,
-      [module]: nextProduct,
-    };
-    setProductsByModule((currentProducts) => ({
-      ...currentProducts,
-      [module]: nextProduct,
-    }));
+    const current = draftsRef.current[activeModule];
+    const nextDraft = { ...current, product: nextProduct };
+    draftsRef.current = { ...draftsRef.current, [activeModule]: nextDraft };
+    setDrafts(draftsRef.current);
+    setDraftSaveFailed(!saveWorkspaceDraft(owner, activeModule, nextDraft));
   };
 
   const replacementAsset =
@@ -210,6 +199,16 @@ export function Workspace({
       },
     }));
   };
+
+  useEffect(() => {
+    const reload = () => {
+      const next = loadWorkspaceDrafts(owner);
+      draftsRef.current = next;
+      setDrafts(next);
+    };
+    window.addEventListener("kroma-reuse-task", reload);
+    return () => window.removeEventListener("kroma-reuse-task", reload);
+  }, [owner]);
 
   const runProcessingTask = useCallback(
     async (
@@ -234,11 +233,7 @@ export function Workspace({
               ),
             );
           },
-          onTaskStarted: (
-            backendTaskId: string,
-            index = 0,
-            total = 1,
-          ) => {
+          onTaskStarted: (backendTaskId: string, index = 0, total = 1) => {
             if (!isTaskRunCurrent(processingTask.id, runToken)) {
               return;
             }
@@ -255,7 +250,8 @@ export function Workspace({
                     (_, taskIndex) =>
                       taskIndex === index
                         ? backendTaskId
-                        : currentProcessingTask.backendTaskIds?.[taskIndex] ?? "",
+                        : (currentProcessingTask.backendTaskIds?.[taskIndex] ??
+                          ""),
                   )
                 : undefined;
 
@@ -285,6 +281,8 @@ export function Workspace({
                 {
                   product: processingTask.productInput,
                   config: processingTask.config,
+                  groupId: processingTask.id,
+                  taskAttempt: processingTask.attempt,
                 },
                 generationOptions,
               );
@@ -294,6 +292,8 @@ export function Workspace({
 
         const completedTask = completeTask(currentProcessingTask, {
           resultUrls: result.resultUrls,
+          failedItems: result.failedItems,
+          billingManaged: result.billingManaged,
           resultAssets: result.resultAssets,
           channelUsed: result.channelUsed,
           channelUsedByAsset: result.channelUsedByAsset,
@@ -304,10 +304,12 @@ export function Workspace({
         setTasks((currentTasks) => moveTaskToTop(currentTasks, completedTask));
         void saveGenerationTaskHistory(completedTask);
         try {
-          const account = await consumeCredits({
-            amount: result.creditCost,
-            label: "生成商品素材",
-          });
+          const account = result.billingManaged
+            ? await getCurrentAccount()
+            : await consumeCredits({
+                amount: result.creditCost,
+                label: "生成商品素材",
+              });
 
           setAccountBalance(account.balance);
         } catch {
@@ -347,7 +349,11 @@ export function Workspace({
       return;
     }
 
-    if (config.module === "lifestyle" && !replacementAsset) {
+    if (
+      config.module === "lifestyle" &&
+      config.inspirationSettings?.productAction !== "keep" &&
+      !replacementAsset
+    ) {
       setShowReplacementRequiredNotice(true);
       return;
     }
@@ -361,17 +367,28 @@ export function Workspace({
 
     setTasks((currentTasks) => [processingTask, ...currentTasks]);
     setActivePreviewTaskId(processingTask.id);
+    setMobilePanel("results");
     void runProcessingTask(processingTask, startTaskRun(processingTask.id));
   };
 
-  const handleCancelTask = (taskToCancel: GenerationTask) => {
+  const handleCancelTask = async (taskToCancel: GenerationTask) => {
     if (taskToCancel.status !== "processing") {
       return;
     }
 
+    const canceled =
+      !shouldUseKromaGenerationBackend() ||
+      (await cancelGenerationTask(taskToCancel));
+    if (!canceled) {
+      void listGenerationTasks().then((stored) =>
+        setTasks((current) =>
+          mergeLoadedTasksWithCurrent(current, stored, new Set()),
+        ),
+      );
+      return;
+    }
     taskRunTokensRef.current[taskToCancel.id] =
       (taskRunTokensRef.current[taskToCancel.id] ?? 0) + 1;
-    void cancelGenerationTask(taskToCancel);
 
     const canceledTask = failTask(taskToCancel, {
       errorCode: "task_canceled",
@@ -383,7 +400,15 @@ export function Workspace({
   };
 
   const handleRetryTask = (taskToRetry: GenerationTask) => {
-    if (taskToRetry.status !== "failed") {
+    if (
+      ["watermark_remove", "remove_object"].includes(
+        taskToRetry.config.whiteBackgroundMode || "",
+      )
+    ) {
+      reuseTaskDraft(taskToRetry);
+      return;
+    }
+    if (taskToRetry.status !== "failed" && taskToRetry.status !== "partial") {
       return;
     }
 
@@ -397,12 +422,43 @@ export function Workspace({
       return;
     }
 
+    const retryConfig = taskToRetry.failedItems?.length
+      ? {
+          ...taskToRetry.config,
+          ...(taskToRetry.config.module === "main_image"
+            ? {
+                selectedMainModules: taskToRetry.failedItems.flatMap(
+                  (item) => item.config.selectedMainModules || [],
+                ),
+              }
+            : {}),
+          ...(taskToRetry.config.module === "detail_page"
+            ? {
+                detailModuleCounts: taskToRetry.failedItems.reduce(
+                  (counts, item) => {
+                    for (const [key, value] of Object.entries(
+                      item.config.detailModuleCounts || {},
+                    ))
+                      counts[key] = (counts[key] || 0) + (value || 0);
+                    return counts;
+                  },
+                  {} as Record<string, number>,
+                ),
+              }
+            : {}),
+        }
+      : taskToRetry.config;
     const processingTask = markProcessing(
-      retryTask(taskToRetry, new Date().toISOString()),
+      createTask({
+        product: taskToRetry.productInput,
+        config: retryConfig,
+        now: new Date().toISOString(),
+      }),
     );
 
     setTasks((currentTasks) => moveTaskToTop(currentTasks, processingTask));
     setActivePreviewTaskId(processingTask.id);
+    setMobilePanel("results");
     void runProcessingTask(processingTask, startTaskRun(processingTask.id));
   };
 
@@ -413,7 +469,9 @@ export function Workspace({
   }, [tasks]);
 
   useEffect(() => {
+    let disposed = false;
     void listGenerationTasks().then((storedTasks) => {
+      if (disposed) return;
       hasLoadedTasksRef.current = true;
       setTasks((currentTasks) =>
         mergeLoadedTasksWithCurrent(
@@ -428,7 +486,7 @@ export function Workspace({
             task.status === "processing" &&
             Boolean(
               task.backendTaskId ||
-                (task.backendTaskIds && task.backendTaskIds.length > 0),
+              (task.backendTaskIds && task.backendTaskIds.length > 0),
             ),
         )
         .forEach((task) => {
@@ -439,6 +497,9 @@ export function Workspace({
           void runProcessingTask(task, startTaskRun(task.id), "resume");
         });
     });
+    return () => {
+      disposed = true;
+    };
   }, [runProcessingTask]);
 
   useEffect(() => {
@@ -449,53 +510,98 @@ export function Workspace({
     }
   }, [isVisible]);
 
-  useEffect(() => {
-    setConfig((currentConfig) => ({
-      ...currentConfig,
-      ...getModuleDefaults(activeModule),
-    }));
-
-  }, [activeModule]);
-
-  useEffect(() => {
-    return () => {
-      Object.values(productsByModuleRef.current).forEach((savedProduct) => {
-        revokeUploadedProduct(savedProduct ?? null);
-      });
-    };
-  }, []);
-
+  if (
+    activeModule === "white_background" &&
+    ["watermark_remove", "remove_object"].includes(
+      config.whiteBackgroundMode || "",
+    )
+  )
+    return (
+      <>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() =>
+            setConfig((current) => ({
+              ...current,
+              whiteBackgroundMode: "white_background",
+            }))
+          }
+        >
+          返回 AI 工具
+        </button>
+        <ImageCleanupPage
+          initialProduct={product}
+          initialMode={
+            config.whiteBackgroundMode as "watermark_remove" | "remove_object"
+          }
+          isAuthenticated={isAuthenticated}
+          onRequireLogin={onRequireLogin || (() => {})}
+          onOpenPricing={onOpenPricing || (() => {})}
+        />
+      </>
+    );
   return (
-    <main className="workspace">
+    <main className="workspace" data-mobile-panel={mobilePanel}>
+      <div className="workspace-mobile-tabs" aria-label="工作台视图">
+        <button
+          type="button"
+          aria-pressed={mobilePanel === "settings"}
+          onClick={() => setMobilePanel("settings")}
+        >
+          设置
+        </button>
+        <button
+          type="button"
+          aria-pressed={mobilePanel === "results"}
+          onClick={() => setMobilePanel("results")}
+        >
+          结果{runningTaskCount ? `（${runningTaskCount} 进行中）` : ""}
+        </button>
+      </div>
+      {draftSaveFailed ? (
+        <p role="alert">草稿暂未保存，浏览器存储空间不足，请先保留当前页面。</p>
+      ) : null}
       <div className="studio-split">
         <section className="studio-settings" aria-label="生成设置">
-          {activeModule === "lifestyle" ? (
-            <InspirationUploadPanel
-              inspiration={product}
-              replacement={replacementAsset}
-              onInspirationChange={handleProductChange}
-              onReplacementChange={handleReplacementChange}
+          <div className="studio-settings-scroll">
+            {activeModule === "lifestyle" ? (
+              <InspirationUploadPanel
+                inspiration={product}
+                replacement={replacementAsset}
+                onInspirationChange={handleProductChange}
+                onReplacementChange={handleReplacementChange}
+              />
+            ) : (
+              <UploadPanel
+                product={product}
+                onProductChange={handleProductChange}
+              />
+            )}
+            <ParameterPanel
+              footerTarget={footerTarget}
+              activeModule={activeModule}
+              config={config}
+              onChange={setConfig}
+              onGenerate={handleGenerate}
+              onBuyCredits={onOpenPricing}
+              hasProduct={Boolean(product)}
+              isGenerateDisabled={!product || estimatedCreditCost === 0}
+              runningTaskCount={runningTaskCount}
+              isOutOfCredits={isAuthenticated && isOutOfCredits}
             />
-          ) : (
-            <UploadPanel product={product} onProductChange={handleProductChange} />
-          )}
-          <ParameterPanel
-            activeModule={activeModule}
-            config={config}
-            onChange={setConfig}
-            onGenerate={handleGenerate}
-            onBuyCredits={onOpenPricing}
-            hasProduct={Boolean(product)}
-            isGenerateDisabled={!product}
-            runningTaskCount={runningTaskCount}
-            isOutOfCredits={isAuthenticated && isOutOfCredits}
-          />
+          </div>
+          <div className="studio-settings-footer" ref={setFooterTarget} />
         </section>
         <section className="studio-preview" aria-label="生成预览">
           <ResultPreview
             product={product}
             inputLabel={activeModule === "lifestyle" ? "灵感原图" : "商品图"}
-            latestTask={activePreviewTaskId ? tasks.find((task) => task.id === activePreviewTaskId) : latestTask}
+            latestTask={
+              activePreviewTaskId
+                ? tasks.find((task) => task.id === activePreviewTaskId)
+                : latestTask
+            }
             tasks={previewTasks}
             onCancelTask={handleCancelTask}
             onRetryTask={handleRetryTask}

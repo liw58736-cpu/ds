@@ -67,6 +67,8 @@ export function completeTask(
   task: GenerationTask,
   input: {
     resultUrls: string[];
+    failedItems?: GenerationTask["failedItems"];
+    billingManaged?: boolean;
     resultAssets?: GenerationResultAsset[];
     channelUsed?: string;
     channelUsedByAsset?: string[];
@@ -85,7 +87,9 @@ export function completeTask(
 
   return {
     ...rest,
-    status: "completed",
+    status: input.failedItems?.length ? "partial" : "completed",
+    failedItems: input.failedItems,
+    billingManaged: input.billingManaged,
     resultUrls: input.resultUrls,
     ...(input.resultAssets ? { resultAssets: input.resultAssets } : {}),
     ...(input.channelUsed ? { channelUsed: input.channelUsed } : {}),

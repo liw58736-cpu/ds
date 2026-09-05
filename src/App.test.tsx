@@ -1,3 +1,4 @@
+import { getTaskStorageKey } from "./storage/taskStore";
 import {
   cleanup,
   fireEvent,
@@ -56,25 +57,19 @@ describe("App", () => {
   it("renders the kroma homepage", () => {
     render(<App />);
 
-    expect(
-      screen.getByRole("heading", { name: "kroma" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "kroma" })).toBeInTheDocument();
     expect(screen.getByText("跨境电商 AI 生图工作台")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
         name: "AI 商品图，一键生成可上架素材",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByAltText("kroma 商品图生成首页主视觉")).toBeInTheDocument();
     expect(
-      screen.getByAltText("商品主图和首屏 KV出图前"),
+      screen.getByAltText("kroma 商品图生成首页主视觉"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByAltText("白底图和平台抠图出图后"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByAltText("服装详情页组图出图后"),
-    ).toBeInTheDocument();
+    expect(screen.getByAltText("商品主图和首屏 KV出图前")).toBeInTheDocument();
+    expect(screen.getByAltText("白底图和平台抠图出图后")).toBeInTheDocument();
+    expect(screen.getByAltText("服装详情页组图出图后")).toBeInTheDocument();
   });
 
   it("switches the homepage production showcase", async () => {
@@ -110,14 +105,23 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.queryByRole("button", { name: "账户" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "历史任务" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "账户" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "任务中心" }),
+    ).not.toBeInTheDocument();
 
+    if (!screen.queryByRole("button", { name: "商品主图" }))
+      await user.click(screen.getByRole("button", { name: "创作工作台" }));
     await user.click(screen.getByRole("button", { name: "商品主图" }));
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
     await user.click(screen.getByRole("button", { name: "生成商品主图" }));
 
-    expect(screen.getByRole("alertdialog", { name: "请先登录" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("alertdialog", { name: "请先登录" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "去登录" }));
     expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
     expect(screen.queryByAltText("生成结果")).not.toBeInTheDocument();
@@ -137,36 +141,52 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    if (!screen.queryByRole("button", { name: "AI工具" }))
+      await user.click(screen.getByRole("button", { name: "创作工作台" }));
     await user.click(screen.getByRole("button", { name: "AI工具" }));
 
-    expect(
-      screen.getByRole("heading", { name: "AI工具" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "AI工具" })).toBeInTheDocument();
   });
 
   it("opens the inspiration creator from top navigation", async () => {
     const user = userEvent.setup();
     render(<App />);
 
+    if (!screen.queryByRole("button", { name: "灵感创作" }))
+      await user.click(screen.getByRole("button", { name: "创作工作台" }));
     await user.click(screen.getByRole("button", { name: "灵感创作" }));
 
     expect(
       screen.getByRole("heading", { name: "灵感创作" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "从图片库选择灵感原图" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "从图片库选择产品服装图" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "小红书图片提取" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "从图片库选择灵感原图" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "从图片库选择产品服装图" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "小红书图片提取" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the local still-to-motion workspace", async () => {
     const user = userEvent.setup();
     render(<App />);
 
+    if (!screen.queryByRole("button", { name: "Live图" }))
+      await user.click(screen.getByRole("button", { name: "创作工作台" }));
     await user.click(screen.getByRole("button", { name: "Live图" }));
 
-    expect(screen.getByRole("heading", { name: "Live 图生成" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "从图片库选择动态源图" })).toBeInTheDocument();
-    expect(screen.getByLabelText("动态提示词")).toHaveValue("画面缓慢自然推进，主体保持居中，整体稳定流畅。");
+    expect(
+      screen.getByRole("heading", { name: "Live 图生成" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "从图片库选择动态源图" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("动态提示词")).toHaveValue(
+      "画面缓慢自然推进，主体保持居中，整体稳定流畅。",
+    );
     expect(screen.getByText("固定 3 秒")).toBeInTheDocument();
     expect(screen.queryByLabelText("运镜方式")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("时长")).not.toBeInTheDocument();
@@ -180,8 +200,13 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "图片库" }));
 
     expect(screen.getByRole("heading", { name: "图片库" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "链接提取" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "图片清理" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "链接提取" }));
+    expect(
+      screen.getByRole("heading", { name: "链接提取" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "图片清理" }),
+    ).not.toBeInTheDocument();
   });
 
   it("places AI tools after the detail page in the top navigation", () => {
@@ -191,17 +216,7 @@ describe("App", () => {
       (button) => button.textContent,
     );
 
-    expect(navLabels).toEqual([
-      "首页",
-      "商品主图",
-      "详情页",
-      "AI工具",
-      "灵感创作",
-      "Live图",
-      "图片库",
-      "价格",
-      "登录",
-    ]);
+    expect(navLabels).toEqual(["首页", "创作工作台", "图片库", "价格", "登录"]);
   });
 
   it("opens pricing and returns to the workspace", async () => {
@@ -213,16 +228,22 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "按你的电商创作节奏选择套餐" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "会员礼遇" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "会员礼遇" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "一次性购买" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(screen.queryByRole("heading", { name: "订阅方案" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "订阅方案" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "产品素材" }),
     ).not.toBeInTheDocument();
 
+    if (!screen.queryByRole("button", { name: "商品主图" }))
+      await user.click(screen.getByRole("button", { name: "创作工作台" }));
     await user.click(screen.getByRole("button", { name: "商品主图" }));
 
     expect(
@@ -245,8 +266,8 @@ describe("App", () => {
     );
     expect(screen.queryByText(/视频积分/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Nano Banana 2/)).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "支付" })).toHaveLength(3);
-    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+    expect(screen.getAllByRole("button", { name: "购买积分" })).toHaveLength(3);
+    await user.click(screen.getAllByRole("button", { name: "购买积分" })[2]);
     expect(screen.getByRole("status")).toHaveTextContent(
       "已确认 专业包，10,500 积分已入账，当前余额 10,505 积分。",
     );
@@ -257,9 +278,13 @@ describe("App", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.queryByRole("heading", { name: "一次性购买" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "支付" })).toHaveLength(3);
-    expect(screen.getByRole("heading", { name: "轻度创作首选" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "一次性购买" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "购买积分" })).toHaveLength(3);
+    expect(
+      screen.getByRole("heading", { name: "轻度创作首选" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/视频积分/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Nano Banana 2/)).not.toBeInTheDocument();
   });
@@ -270,7 +295,7 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "价格" }));
-    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+    await user.click(screen.getAllByRole("button", { name: "购买积分" })[2]);
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "已确认 专业包，10,500 积分已入账，当前余额 10,505 积分。",
@@ -290,11 +315,16 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "价格" }));
-    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+    await user.click(screen.getAllByRole("button", { name: "购买积分" })[2]);
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "支付通道未配置，请稍后再试或联系支持。",
-    );
+    expect(
+      screen.getAllByRole("button", { name: "购买积分" })[2],
+    ).toBeDisabled();
+    expect(
+      screen.getByText(
+        "套餐价格与积分正在核对，暂时暂停新购买。既有积分和已购权益照常使用。",
+      ),
+    ).toBeVisible();
     expect(getAccountSnapshot().balance).toBe(5);
   });
 
@@ -347,7 +377,7 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "价格" }));
-    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+    await user.click(screen.getAllByRole("button", { name: "购买积分" })[2]);
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "已打开 专业包 支付窗口，付款成功后积分会自动入账。",
@@ -360,7 +390,9 @@ describe("App", () => {
         }),
       }),
     );
-    expect(checkoutOpen.mock.calls[0][0].customData).not.toHaveProperty("credits");
+    expect(checkoutOpen.mock.calls[0][0].customData).not.toHaveProperty(
+      "credits",
+    );
     expect(getAccountSnapshot().balance).toBe(5);
   });
 
@@ -379,7 +411,7 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "价格" }));
-    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+    await user.click(screen.getAllByRole("button", { name: "购买积分" })[2]);
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "支付套餐未配置完成：VITE_PADDLE_PRICE_PRO_TOP_UP。",
@@ -441,7 +473,7 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "价格" }));
-    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+    await user.click(screen.getAllByRole("button", { name: "购买积分" })[2]);
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "已打开 专业包 支付窗口，付款成功后积分会自动入账。",
@@ -502,7 +534,7 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "价格" }));
-    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+    await user.click(screen.getAllByRole("button", { name: "购买积分" })[2]);
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "支付入账暂未配置完成，请稍后再试或联系支持。",
@@ -551,12 +583,14 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "价格" }));
-    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+    await user.click(screen.getAllByRole("button", { name: "购买积分" })[2]);
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "请先登录 kroma 账户，再购买积分。",
     );
-    expect(screen.getByRole("alertdialog", { name: "请先登录" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("alertdialog", { name: "请先登录" }),
+    ).toBeInTheDocument();
     expect(checkoutOpen).not.toHaveBeenCalled();
   });
 
@@ -565,7 +599,8 @@ describe("App", () => {
     signInForTest();
     const { container } = render(<App />);
 
-    const topNavButtons = container.querySelectorAll<HTMLButtonElement>(".topnav-button");
+    const topNavButtons =
+      container.querySelectorAll<HTMLButtonElement>(".topnav-button");
     const accountButton = topNavButtons[topNavButtons.length - 1];
     await user.click(accountButton);
 
@@ -575,7 +610,7 @@ describe("App", () => {
     );
     expect(screen.queryByText("Account Settings")).not.toBeInTheDocument();
     expect(container.querySelector(".login-form")).toBeNull();
-    expect(container.querySelectorAll(".topnav-button")).toHaveLength(10);
+    expect(container.querySelectorAll(".topnav-button")).toHaveLength(6);
 
     const logoutButton = container.querySelector<HTMLButtonElement>(
       ".account-logout-button",
@@ -662,7 +697,9 @@ describe("App", () => {
     expect(screen.queryByText("支付入账")).not.toBeInTheDocument();
     expect(screen.queryByText("真实生图")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("生成成功后才会扣除积分；失败、取消或通道异常的任务不会计入成功消耗。"),
+      screen.queryByText(
+        "生成成功后才会扣除积分；失败、取消或通道异常的任务不会计入成功消耗。",
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -712,7 +749,9 @@ describe("App", () => {
     expect(screen.queryByText("支付入账")).not.toBeInTheDocument();
     expect(screen.queryByText(/内部入账密钥/)).not.toBeInTheDocument();
     expect(
-      screen.queryByText("生成成功后才会扣除积分；失败、取消或通道异常的任务不会计入成功消耗。"),
+      screen.queryByText(
+        "生成成功后才会扣除积分；失败、取消或通道异常的任务不会计入成功消耗。",
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -740,7 +779,7 @@ describe("App", () => {
     expect(screen.getByText("云端积分余额")).toBeInTheDocument();
     await waitFor(() => {
       expect(
-        screen.getByText("登录状态可能已过期，请退出后重新登录以同步云端余额。"),
+        screen.getByText("余额暂未同步，当前显示上次余额；请刷新重试。"),
       ).toBeInTheDocument();
     });
     expect(screen.queryByText("试用积分余额")).not.toBeInTheDocument();
@@ -750,21 +789,29 @@ describe("App", () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
 
-    const topNavButtons = container.querySelectorAll<HTMLButtonElement>(".topnav-button");
+    const topNavButtons =
+      container.querySelectorAll<HTMLButtonElement>(".topnav-button");
     await user.click(topNavButtons[topNavButtons.length - 1]);
 
     const loginForm = container.querySelector<HTMLFormElement>(".login-form");
     expect(loginForm).not.toBeNull();
     expect(container.querySelector(".login-auth-switch")).not.toBeNull();
 
-    const submitButton = loginForm!.querySelector<HTMLButtonElement>(".login-submit");
+    const submitButton =
+      loginForm!.querySelector<HTMLButtonElement>(".login-submit");
     expect(submitButton).not.toBeNull();
     await user.click(submitButton!);
     expect(loginForm!.querySelector('[role="alert"]')).not.toBeNull();
 
-    const identifierInput = loginForm!.querySelector<HTMLInputElement>('input[type="email"]');
-    const passwordInput = loginForm!.querySelector<HTMLInputElement>('input[type="password"]');
-    const agreementInput = loginForm!.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    const identifierInput = loginForm!.querySelector<HTMLInputElement>(
+      'input[type="email"]',
+    );
+    const passwordInput = loginForm!.querySelector<HTMLInputElement>(
+      'input[type="password"]',
+    );
+    const agreementInput = loginForm!.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    );
     expect(identifierInput).not.toBeNull();
     expect(passwordInput).not.toBeNull();
     expect(agreementInput).not.toBeNull();
@@ -836,7 +883,8 @@ describe("App", () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
 
-    const topNavButtons = container.querySelectorAll<HTMLButtonElement>(".topnav-button");
+    const topNavButtons =
+      container.querySelectorAll<HTMLButtonElement>(".topnav-button");
     await user.click(topNavButtons[topNavButtons.length - 1]);
     const loginForm = await screen.findByRole("form", { name: "登录表单" });
 
@@ -844,9 +892,14 @@ describe("App", () => {
       within(loginForm).getByLabelText("邮箱"),
       "seller@example.com",
     );
-    await user.type(within(loginForm).getByLabelText("密码"), "secret-password");
+    await user.type(
+      within(loginForm).getByLabelText("密码"),
+      "secret-password",
+    );
     await user.click(within(loginForm).getByLabelText("我已阅读并同意"));
-    await user.click(within(loginForm).getByRole("button", { name: "登录 kroma" }));
+    await user.click(
+      within(loginForm).getByRole("button", { name: "登录 kroma" }),
+    );
 
     await waitFor(() => {
       expect(container.querySelector(".account-panel")).not.toBeNull();
@@ -854,8 +907,9 @@ describe("App", () => {
       expect(container.querySelector(".account-email")?.textContent).toContain(
         "seller@example.com",
       );
-      logoutButton =
-        container.querySelector<HTMLButtonElement>(".account-logout-button");
+      logoutButton = container.querySelector<HTMLButtonElement>(
+        ".account-logout-button",
+      );
       expect(logoutButton).not.toBeNull();
       expect(
         Array.from(container.querySelectorAll(".topnav-button")).some(
@@ -871,6 +925,7 @@ describe("App", () => {
       "http://127.0.0.1:8000/api/v1/auth/login",
       "http://127.0.0.1:8000/api/v1/user/credits",
       "http://127.0.0.1:8000/api/v1/user/credits",
+      "http://127.0.0.1:8000/api/v1/user/transactions",
     ]);
   });
 
@@ -914,20 +969,27 @@ describe("App", () => {
     const registerForm = screen.getByRole("form", { name: "注册表单" });
 
     expect(screen.getByRole("heading", { name: "注册" })).toBeInTheDocument();
-    await user.click(within(registerForm).getByRole("button", { name: "注册 kroma" }));
+    await user.click(
+      within(registerForm).getByRole("button", { name: "注册 kroma" }),
+    );
     expect(screen.getByRole("alert")).toHaveTextContent("请输入邮箱。");
 
     await user.type(
       within(registerForm).getByLabelText("邮箱"),
       "new-seller@example.com",
     );
-    await user.type(within(registerForm).getByLabelText("密码"), "new-password");
+    await user.type(
+      within(registerForm).getByLabelText("密码"),
+      "new-password",
+    );
     await user.type(
       within(registerForm).getByLabelText("确认密码"),
       "different-password",
     );
     await user.click(within(registerForm).getByLabelText("我已阅读并同意"));
-    await user.click(within(registerForm).getByRole("button", { name: "注册 kroma" }));
+    await user.click(
+      within(registerForm).getByRole("button", { name: "注册 kroma" }),
+    );
     expect(screen.getByRole("alert")).toHaveTextContent("两次输入的密码不一致");
 
     await user.clear(within(registerForm).getByLabelText("确认密码"));
@@ -935,21 +997,25 @@ describe("App", () => {
       within(registerForm).getByLabelText("确认密码"),
       "new-password",
     );
-    await user.click(within(registerForm).getByRole("button", { name: "注册 kroma" }));
-
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "验证码已发送至邮箱",
+    await user.click(
+      within(registerForm).getByRole("button", { name: "注册 kroma" }),
     );
+
+    expect(screen.getByRole("status")).toHaveTextContent("验证码已发送至邮箱");
     expect(screen.getByRole("status")).toHaveTextContent(
       "只输入 kroma 邮件里的 6 位数字验证码",
     );
-    expect(within(registerForm).getByLabelText("邮箱验证码")).toBeInTheDocument();
+    expect(
+      within(registerForm).getByLabelText("邮箱验证码"),
+    ).toBeInTheDocument();
     expect(getAccountSnapshot().session).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://127.0.0.1:8000/api/v1/auth/signup",
       expect.objectContaining({ method: "POST" }),
     );
-    await user.click(within(registerForm).getByRole("button", { name: "重新发送验证码" }));
+    await user.click(
+      within(registerForm).getByRole("button", { name: "重新发送验证码" }),
+    );
     expect(screen.getByRole("status")).toHaveTextContent(
       "验证码已重新发送至邮箱，请查看最新邮件。",
     );
@@ -959,7 +1025,10 @@ describe("App", () => {
       ),
     ).toHaveLength(2);
 
-    await user.type(within(registerForm).getByLabelText("邮箱验证码"), "12345678");
+    await user.type(
+      within(registerForm).getByLabelText("邮箱验证码"),
+      "12345678",
+    );
     await user.click(
       within(registerForm).getByRole("button", { name: "验证并完成注册" }),
     );
@@ -968,7 +1037,10 @@ describe("App", () => {
     );
     await user.clear(within(registerForm).getByLabelText("邮箱验证码"));
 
-    await user.type(within(registerForm).getByLabelText("邮箱验证码"), "123456");
+    await user.type(
+      within(registerForm).getByLabelText("邮箱验证码"),
+      "123456",
+    );
     await user.click(
       within(registerForm).getByRole("button", { name: "验证并完成注册" }),
     );
@@ -1013,13 +1085,18 @@ describe("App", () => {
       within(registerForm).getByLabelText("邮箱"),
       "seller@example.com",
     );
-    await user.type(within(registerForm).getByLabelText("密码"), "new-password");
+    await user.type(
+      within(registerForm).getByLabelText("密码"),
+      "new-password",
+    );
     await user.type(
       within(registerForm).getByLabelText("确认密码"),
       "new-password",
     );
     await user.click(within(registerForm).getByLabelText("我已阅读并同意"));
-    await user.click(within(registerForm).getByRole("button", { name: "注册 kroma" }));
+    await user.click(
+      within(registerForm).getByRole("button", { name: "注册 kroma" }),
+    );
 
     expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -1041,15 +1118,20 @@ describe("App", () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
 
-    const topNavButtons = container.querySelectorAll<HTMLButtonElement>(".topnav-button");
+    const topNavButtons =
+      container.querySelectorAll<HTMLButtonElement>(".topnav-button");
     await user.click(topNavButtons[topNavButtons.length - 1]);
-    const authSwitchButtons =
-      container.querySelectorAll<HTMLButtonElement>(".login-auth-switch button");
+    const authSwitchButtons = container.querySelectorAll<HTMLButtonElement>(
+      ".login-auth-switch button",
+    );
     await user.click(authSwitchButtons[1]);
 
-    const registerForm = container.querySelector<HTMLFormElement>(".login-form");
+    const registerForm =
+      container.querySelector<HTMLFormElement>(".login-form");
     expect(registerForm).not.toBeNull();
-    const emailInput = registerForm!.querySelector<HTMLInputElement>('input[type="email"]');
+    const emailInput = registerForm!.querySelector<HTMLInputElement>(
+      'input[type="email"]',
+    );
     const passwordInput = registerForm!.querySelector<HTMLInputElement>(
       'input[type="password"]',
     );
@@ -1064,7 +1146,9 @@ describe("App", () => {
     expect(submitButton).not.toBeNull();
     const initialButtonText = submitButton!.textContent;
     const confirmPasswordInput = Array.from(
-      registerForm!.querySelectorAll<HTMLInputElement>('input[type="password"]'),
+      registerForm!.querySelectorAll<HTMLInputElement>(
+        'input[type="password"]',
+      ),
     )[1];
     expect(confirmPasswordInput).not.toBeNull();
 
@@ -1099,8 +1183,12 @@ describe("App", () => {
 
     expect(within(loginForm).getByLabelText("邮箱")).toBeInTheDocument();
     expect(within(loginForm).getByLabelText("密码")).toBeInTheDocument();
-    expect(within(loginForm).queryByRole("button", { name: "使用验证码登录" })).not.toBeInTheDocument();
-    expect(within(loginForm).queryByLabelText("验证码")).not.toBeInTheDocument();
+    expect(
+      within(loginForm).queryByRole("button", { name: "使用验证码登录" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(loginForm).queryByLabelText("验证码"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("店铺或团队名称")).not.toBeInTheDocument();
     expect(screen.queryByText("或使用快捷方式")).not.toBeInTheDocument();
     expect(screen.queryByText("企业账号登录")).not.toBeInTheDocument();
@@ -1111,12 +1199,19 @@ describe("App", () => {
     signInForTest();
     render(<App />);
 
+    if (!screen.queryByRole("button", { name: "商品主图" }))
+      await user.click(screen.getByRole("button", { name: "创作工作台" }));
     await user.click(screen.getByRole("button", { name: "商品主图" }));
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    await user.type(screen.getByLabelText("设计简报"), "Waterproof steel bottle");
+    await user.type(
+      screen.getByLabelText("设计简报"),
+      "Waterproof steel bottle",
+    );
 
     await user.click(screen.getByRole("button", { name: "账户" }));
-    expect(screen.getByRole("heading", { name: "账户与用量" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "账户与用量" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("最近积分记录")).not.toBeInTheDocument();
     expect(screen.queryByText("新用户试用额度")).not.toBeInTheDocument();
 
@@ -1125,6 +1220,8 @@ describe("App", () => {
       screen.getByRole("heading", { name: "按你的电商创作节奏选择套餐" }),
     ).toBeInTheDocument();
 
+    if (!screen.queryByRole("button", { name: "商品主图" }))
+      await user.click(screen.getByRole("button", { name: "创作工作台" }));
     await user.click(screen.getByRole("button", { name: "商品主图" }));
 
     expect(screen.getByText("sample-product.jpg")).toBeInTheDocument();
@@ -1138,10 +1235,15 @@ describe("App", () => {
     signInForTest();
     render(<App />);
 
+    if (!screen.queryByRole("button", { name: "商品主图" }))
+      await user.click(screen.getByRole("button", { name: "创作工作台" }));
     await user.click(screen.getByRole("button", { name: "商品主图" }));
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
     fireEvent.click(screen.getByRole("button", { name: "生成商品主图" }));
-    expect(screen.getByRole("button", { name: "取消生成" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "取消生成" }),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "价格" }));
     expect(
@@ -1150,12 +1252,12 @@ describe("App", () => {
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as Array<{ status?: string }>;
 
       expect(storedTasks[0]?.status).toBe("completed");
     });
-    fireEvent.click(screen.getByRole("button", { name: "商品主图" }));
+    fireEvent.click(screen.getByRole("button", { name: "创作工作台" }));
 
     expect(screen.getByAltText("生成结果")).toBeInTheDocument();
     expect(screen.queryByText("已生成")).not.toBeInTheDocument();
@@ -1166,10 +1268,13 @@ describe("App", () => {
     signInForTest();
     render(<App />);
 
+    if (!screen.queryByRole("button", { name: "商品主图" }))
+      await user.click(screen.getByRole("button", { name: "创作工作台" }));
     await user.click(screen.getByRole("button", { name: "商品主图" }));
     expect(getAccountSnapshot().balance).toBe(5);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
     await user.click(screen.getByRole("button", { name: /标准版/ }));
     await user.click(screen.getByRole("button", { name: "生成商品主图" }));
     expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
@@ -1178,7 +1283,9 @@ describe("App", () => {
 
     await user.type(screen.getByLabelText("设计简报"), "fail");
     await user.click(screen.getByRole("button", { name: "生成商品主图" }));
-    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(1);
+    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(
+      1,
+    );
 
     expect(getAccountSnapshot().balance).toBe(4);
   });
@@ -1190,11 +1297,14 @@ describe("App", () => {
     deductCredits(5, "试用额度耗尽");
     render(<App />);
 
+    if (!screen.queryByRole("button", { name: "商品主图" }))
+      await user.click(screen.getByRole("button", { name: "创作工作台" }));
     await user.click(screen.getByRole("button", { name: "商品主图" }));
 
     expect(getAccountSnapshot().balance).toBe(0);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
     await user.click(screen.getByRole("button", { name: "购买积分" }));
 
     expect(
@@ -1204,11 +1314,13 @@ describe("App", () => {
       screen.queryByRole("heading", { name: "产品素材" }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getAllByRole("button", { name: "支付" })[2]);
+    await user.click(screen.getAllByRole("button", { name: "购买积分" })[2]);
     expect(screen.getByRole("status")).toHaveTextContent(
       "已确认 专业包，10,500 积分已入账，当前余额 10,500 积分。",
     );
 
+    if (!screen.queryByRole("button", { name: "商品主图" }))
+      await user.click(screen.getByRole("button", { name: "创作工作台" }));
     await user.click(screen.getByRole("button", { name: "商品主图" }));
 
     expect(getAccountSnapshot().balance).toBe(10500);
@@ -1222,13 +1334,13 @@ describe("App", () => {
     signInForTest();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "历史任务" }));
+    await user.click(screen.getByRole("button", { name: "任务中心" }));
 
+    expect(screen.getByRole("button", { name: "任务中心" })).toHaveClass(
+      "nav-active",
+    );
     expect(
-      screen.getByRole("button", { name: "历史任务" }),
-    ).toHaveClass("nav-active");
-    expect(
-      screen.getByRole("heading", { name: "历史任务" }),
+      screen.getByRole("heading", { name: "任务中心" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "历史任务统计" }),
@@ -1236,14 +1348,18 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "最近任务" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "产品素材" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "实时预览" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "产品素材" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "实时预览" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "服装详情页生成" }),
     ).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "历史任务" })).toHaveAttribute(
+      expect(screen.getByRole("button", { name: "任务中心" })).toHaveAttribute(
         "aria-current",
         "page",
       );
@@ -1263,12 +1379,16 @@ describe("App", () => {
       { button: "关于我们", title: "关于我们", text: "产品原则" },
     ];
 
-    expect(screen.queryByRole("button", { name: "企业采购" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "企业采购" }),
+    ).not.toBeInTheDocument();
 
     for (const item of pages) {
       await user.click(screen.getByRole("link", { name: item.button }));
 
-      expect(screen.getByRole("heading", { name: item.title })).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: item.title }),
+      ).toBeInTheDocument();
       expect(
         screen.getByText((content) => content.includes(item.text)),
       ).toBeInTheDocument();

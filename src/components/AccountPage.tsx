@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import {
+  getAccountTransactions,
+  type AccountTransaction,
   getCurrentAccountSnapshot,
   getCurrentAccountWithCreditSync,
 } from "../api/accountApi";
@@ -15,26 +17,42 @@ interface AccountPageProps {
 }
 
 export function AccountPage({ paymentStatus, onLogout }: AccountPageProps) {
+  const [loading, setLoading] = useState(true);
+  const [transactions, setTransactions] = useState<AccountTransaction[]>([]);
+  const [ledgerError, setLedgerError] = useState("");
   const [account, setAccount] = useState(() => getCurrentAccountSnapshot());
   const [creditSyncStatus, setCreditSyncStatus] =
     useState<AccountCreditSyncStatus>(() =>
       getCurrentAccountSnapshot().session ? "cloud_sync_failed" : "trial",
     );
 
+  const refresh = async () => {
+    setLoading(true);
+    setLedgerError("");
+    const [balance, ledger] = await Promise.allSettled([
+      getCurrentAccountWithCreditSync(),
+      getAccountTransactions(),
+    ]);
+    if (balance.status === "fulfilled") {
+      setAccount(balance.value.account);
+      setCreditSyncStatus(balance.value.creditSyncStatus);
+    }
+    if (ledger.status === "fulfilled") setTransactions(ledger.value);
+    else setLedgerError("记录暂时无法读取，可稍后刷新。");
+    setLoading(false);
+  };
   useEffect(() => {
-    void getCurrentAccountWithCreditSync().then((result) => {
-      setAccount(result.account);
-      setCreditSyncStatus(result.creditSyncStatus);
-    });
+    void refresh();
   }, []);
 
   const isCloudAccount = Boolean(account.session?.provider === "kroma");
   const balanceLabel = isCloudAccount ? "云端积分余额" : "试用积分余额";
-  const balanceNote =
-    creditSyncStatus === "cloud"
+  const balanceNote = loading
+    ? "正在同步余额…"
+    : creditSyncStatus === "cloud"
       ? "当前显示网页端云端积分余额。"
       : creditSyncStatus === "cloud_sync_failed"
-        ? "登录状态可能已过期，请退出后重新登录以同步云端余额。"
+        ? "余额暂未同步，当前显示上次余额；请刷新重试。"
         : "未登录时仅显示本机试用积分，登录后同步云端余额。";
 
   const usageItems = [
@@ -105,6 +123,49 @@ export function AccountPage({ paymentStatus, onLogout }: AccountPageProps) {
             </article>
           ))}
         </div>
+      </section>
+      <section className="panel account-ledger">
+        <div className="library-toolbar">
+          <h2>积分与订单记录</h2>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={loading}
+            onClick={() => void refresh()}
+          >
+            {loading ? "正在同步" : "刷新余额与记录"}
+          </button>
+        </div>
+        {ledgerError ? <p role="status">{ledgerError}</p> : null}
+        {transactions.length ? (
+          <div className="ledger-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>内容</th>
+                  <th>积分变化</th>
+                  <th>订单 / 任务</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.map((item) => (
+                  <tr key={item.id}>
+                    <td>{new Date(item.created_at).toLocaleString()}</td>
+                    <td>{item.description}</td>
+                    <td>
+                      {item.amount > 0 ? "+" : ""}
+                      {item.amount}
+                    </td>
+                    <td>{item.reference_id || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : !loading && !ledgerError ? (
+          <p>暂无积分变动记录。</p>
+        ) : null}
       </section>
     </main>
   );

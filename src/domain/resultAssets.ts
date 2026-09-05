@@ -22,7 +22,9 @@ function getFallbackLabels(task: GenerationTask): string[] {
   return moduleLabels;
 }
 
-export function getTaskResultAssets(task: GenerationTask): GenerationResultAsset[] {
+export function getTaskResultAssets(
+  task: GenerationTask,
+): GenerationResultAsset[] {
   if (task.resultAssets && task.resultAssets.length > 0) {
     return task.resultAssets.filter((asset) => asset.url && asset.label);
   }
@@ -31,7 +33,8 @@ export function getTaskResultAssets(task: GenerationTask): GenerationResultAsset
 
   return task.resultUrls.map((url, index) => ({
     url,
-    label: labels[index] ?? labels[labels.length - 1] ?? `生成结果 ${index + 1}`,
+    label:
+      labels[index] ?? labels[labels.length - 1] ?? `生成结果 ${index + 1}`,
   }));
 }
 
@@ -60,7 +63,17 @@ export async function downloadTaskAsset(
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;
-  anchor.download = getTaskDownloadName(task, asset, index);
+  const ext = blob.type.includes("jpeg")
+    ? "jpg"
+    : blob.type.includes("webp")
+      ? "webp"
+      : blob.type.includes("png")
+        ? "png"
+        : task.config.outputFormat;
+  anchor.download = getTaskDownloadName(task, asset, index).replace(
+    /\.[^.]+$/,
+    `.${ext}`,
+  );
   anchor.rel = "noreferrer";
   document.body.append(anchor);
   anchor.click();

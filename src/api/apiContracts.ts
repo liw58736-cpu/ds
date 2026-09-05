@@ -35,6 +35,17 @@ export interface GenerationAccountContext {
 
 export interface GenerationTaskRequestBody {
   product: ProductInput;
+  context?: {
+    requestId: string;
+    groupId: string;
+    index: number;
+    total: number;
+    attempt: number;
+    product: ProductInput;
+    config: GenerationConfig;
+    childConfig: GenerationConfig;
+    label: string;
+  };
   config: GenerationConfig & { resolution: GenerationResolution };
   routeMode: GenerationRouteMode;
   route: GenerationRoute;
@@ -50,8 +61,7 @@ export interface GenerationTaskRequestBody {
   };
 }
 
-export type GenerationTaskCreateRequest =
-  ApiRequest<GenerationTaskRequestBody>;
+export type GenerationTaskCreateRequest = ApiRequest<GenerationTaskRequestBody>;
 
 export interface PurchasePlanRequestBody extends PurchasePlanInput {
   currency: "CNY";
@@ -78,6 +88,17 @@ export function buildGenerationTaskRequest(
     method: "POST",
     body: {
       product: input.product,
+      context: {
+        requestId: `${input.groupId || input.product.id}:${input.taskAttempt || 1}:${input.requestIndex || 0}`,
+        groupId: input.groupId || input.product.id,
+        index: input.requestIndex || 0,
+        total: input.requestTotal || 1,
+        attempt: input.taskAttempt || 1,
+        product: input.product,
+        config: input.groupConfig || config,
+        childConfig: config,
+        label: buildGenerationPrompt(config).modules[0]?.title || "生成图片",
+      },
       config,
       routeMode: getRouteMode(config, route),
       route,
@@ -127,7 +148,9 @@ export function buildTaskListRequest(accountId = "guest"): ApiReadRequest {
   };
 }
 
-export function buildCurrentAccountRequest(accountId = "guest"): ApiReadRequest {
+export function buildCurrentAccountRequest(
+  accountId = "guest",
+): ApiReadRequest {
   return {
     endpoint: `/api/account/current?accountId=${encodeURIComponent(accountId)}`,
     method: "GET",

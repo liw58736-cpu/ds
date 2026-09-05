@@ -1,3 +1,5 @@
+import { exportDetailLongImage } from "../domain/imageExports";
+import { reuseTaskDraft } from "../storage/workspaceDraftStore";
 import { useEffect, useMemo, useState } from "react";
 import {
   getGenerationTaskSnapshot,
@@ -9,7 +11,11 @@ import {
   getTaskResultAssets,
 } from "../domain/resultAssets";
 import { describeTaskFunction } from "../domain/taskDisplay";
-import type { GenerationResultAsset, GenerationTask, TaskStatus } from "../domain/types";
+import type {
+  GenerationResultAsset,
+  GenerationTask,
+  TaskStatus,
+} from "../domain/types";
 
 interface LightboxState {
   asset: GenerationResultAsset;
@@ -21,6 +27,7 @@ const statusLabels = {
   queued: "排队中",
   processing: "处理中",
   completed: "已完成",
+  partial: "部分完成",
   failed: "失败",
 } as const satisfies Record<TaskStatus, string>;
 
@@ -44,8 +51,14 @@ function isThisMonth(dateValue: string): boolean {
 }
 
 export function HistoryPage() {
-  const [tasks, setTasks] = useState<GenerationTask[]>(
-    () => getGenerationTaskSnapshot(),
+  const [exportError, setExportError] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [tasks, setTasks] = useState<GenerationTask[]>(() =>
+    getGenerationTaskSnapshot(),
   );
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
@@ -54,26 +67,58 @@ export function HistoryPage() {
   }, []);
 
   const stats = useMemo(() => {
-    const completedCount = tasks.filter((task) => task.status === "completed").length;
+    const completedCount = tasks.filter(
+      (task) => task.status === "completed" || task.status === "partial",
+    ).length;
     const failedCount = tasks.filter((task) => task.status === "failed").length;
     const monthlyCredits = tasks
-      .filter((task) => task.status === "completed" && isThisMonth(task.createdAt))
+      .filter(
+        (task) =>
+          (task.status === "completed" || task.status === "partial") &&
+          isThisMonth(task.createdAt),
+      )
       .reduce((sum, task) => sum + task.creditCost, 0);
 
     return [
-      { label: "全部任务", value: String(tasks.length), note: "本机保存的生成记录" },
-      { label: "完成素材", value: String(completedCount), note: "可继续下载或复用" },
-      { label: "失败任务", value: String(failedCount), note: "失败不计入成功消耗" },
-      { label: "本月消耗", value: `${monthlyCredits} credits`, note: "仅统计成功任务" },
+      {
+        label: "全部任务",
+        value: String(tasks.length),
+        note: "本机保存的生成记录",
+      },
+      {
+        label: "完成素材",
+        value: String(completedCount),
+        note: "可继续下载或复用",
+      },
+      {
+        label: "失败任务",
+        value: String(failedCount),
+        note: "失败不计入成功消耗",
+      },
+      {
+        label: "本月消耗",
+        value: `${monthlyCredits} credits`,
+        note: "仅统计成功任务",
+      },
     ];
   }, [tasks]);
 
+  const filteredTasks = tasks.filter(
+    (task) =>
+      (statusFilter === "all" || task.status === statusFilter) &&
+      `${task.productInput.fileName} ${describeTaskFunction(task)}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+  );
   return (
     <main className="page-surface history-page">
-      <section className="page-heading history-page-heading" aria-labelledby="history-page-title">
+      <section
+        className="page-heading history-page-heading"
+        aria-labelledby="history-page-title"
+      >
         <p className="eyebrow">History</p>
-        <h1 id="history-page-title">历史任务</h1>
-        <p>集中查看已生成、失败和中断的任务，不再混入任一生成页面的设置面板。</p>
+        <h1 id="history-page-title">任务中心</h1>
+        <p>查看所有任务进度、生成结果与实际积分消耗。</p>
       </section>
 
       <section className="history-stats" aria-label="历史任务统计">
@@ -86,13 +131,48 @@ export function HistoryPage() {
         ))}
       </section>
 
-      <section className="history-table-panel" aria-labelledby="history-list-title">
+      <section
+        className="history-table-panel"
+        aria-labelledby="history-list-title"
+      >
         <div className="panel-heading">
           <p className="eyebrow">Recent Tasks</p>
           <h2 id="history-list-title">最近任务</h2>
           <p>这里仅展示任务记录。需要继续生成时，从顶部导航进入对应工作台。</p>
         </div>
 
+        <div className="library-toolbar">
+          <input
+            aria-label="搜索任务"
+            placeholder="搜索商品名称或功能"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            aria-label="任务状态"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">全部状态</option>
+            <option value="processing">进行中</option>
+            <option value="completed">已完成</option>
+            <option value="partial">部分完成</option>
+            <option value="failed">失败</option>
+          </select>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={loading}
+            onClick={() => {
+              setLoading(true);
+              void listGenerationTasks({ limit: 100 })
+                .then(setTasks)
+                .finally(() => setLoading(false));
+            }}
+          >
+            刷新任务
+          </button>
+        </div>
         {tasks.length === 0 ? (
           <div className="history-empty">
             <h3>暂无历史任务</h3>
@@ -100,7 +180,7 @@ export function HistoryPage() {
           </div>
         ) : (
           <div className="history-task-list">
-            {tasks.map((task) => (
+            {filteredTasks.map((task) => (
               <article className="history-task-row" key={task.id}>
                 <div>
                   <small>功能</small>
@@ -121,19 +201,36 @@ export function HistoryPage() {
                   <small>消耗</small>
                   <span>{task.creditCost} credits</span>
                 </div>
-                {task.channelUsed ? (
-                  <div>
-                    <small>Channel</small>
-                    <span>{task.channelUsed}</span>
-                  </div>
-                ) : null}
                 <span className={`task-status task-status-${task.status}`}>
                   {statusLabels[task.status]}
                 </span>
-                {task.status === "completed" && getTaskResultAssets(task).length > 0 ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => reuseTaskDraft(task)}
+                >
+                  复用设置
+                </button>
+                {task.errorMessage ? <p>{task.errorMessage}</p> : null}
+                {(task.status === "completed" || task.status === "partial") &&
+                getTaskResultAssets(task).length > 0 ? (
                   <div className="history-result-strip">
                     <div className="history-result-actions">
                       <span>{getTaskResultAssets(task).length} 张图片</span>
+                      {task.config.module === "detail_page" ? (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() =>
+                            void exportDetailLongImage(task).catch((error) =>
+                              setExportError(error.message),
+                            )
+                          }
+                        >
+                          导出详情长图
+                        </button>
+                      ) : null}
+                      {exportError ? <p role="alert">{exportError}</p> : null}
                       {getTaskResultAssets(task).length > 1 ? (
                         <button
                           type="button"
@@ -183,6 +280,36 @@ export function HistoryPage() {
           </div>
         )}
       </section>
+      {loadError ? <p role="status">{loadError}</p> : null}
+      {hasMore ? (
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={loading}
+          onClick={async () => {
+            setLoading(true);
+            try {
+              const next = await listGenerationTasks({
+                limit: 100,
+                offset: tasks.length,
+                strict: true,
+              });
+              setTasks((current) => [
+                ...new Map(
+                  [...current, ...next].map((task) => [task.id, task]),
+                ).values(),
+              ]);
+              setHasMore(next.length === 100);
+            } catch {
+              setLoadError("较早任务暂未读取成功，请重试。");
+            } finally {
+              setLoading(false);
+            }
+          }}
+        >
+          更多历史任务
+        </button>
+      ) : null}
       {lightbox ? (
         <div
           className="preview-lightbox"
@@ -191,7 +318,10 @@ export function HistoryPage() {
           aria-label={lightbox.asset.label}
           onClick={() => setLightbox(null)}
         >
-          <div className="preview-lightbox-content" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="preview-lightbox-content"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="preview-lightbox-header">
               <strong>{lightbox.asset.label}</strong>
               <button
@@ -206,7 +336,9 @@ export function HistoryPage() {
             <button
               type="button"
               className="ghost-action-button"
-              onClick={() => downloadTaskAsset(lightbox.task, lightbox.asset, lightbox.index)}
+              onClick={() =>
+                downloadTaskAsset(lightbox.task, lightbox.asset, lightbox.index)
+              }
             >
               下载
             </button>

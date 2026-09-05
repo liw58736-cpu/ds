@@ -9,6 +9,11 @@ import { buildGenerationPrompt } from "../domain/promptBuilder";
 export interface GenerateInput {
   product: ProductInput;
   config: GenerationConfig;
+  groupId?: string;
+  taskAttempt?: number;
+  requestIndex?: number;
+  requestTotal?: number;
+  groupConfig?: GenerationConfig;
 }
 
 export interface GenerationProvider {

@@ -1,15 +1,25 @@
 import { type ChangeEvent, useEffect, useState } from "react";
-import { Download, ImagePlus, Link2, LoaderCircle, RefreshCw } from "lucide-react";
+import {
+  Download,
+  ImagePlus,
+  Link2,
+  LoaderCircle,
+  RefreshCw,
+} from "lucide-react";
 import {
   importPublicMaterial,
   saveImportedMaterial,
   uploadLocalMaterial,
 } from "../api/materialImportApi";
-import { listMaterialLibraryAssets, type MaterialLibraryAsset } from "../api/materialLibraryApi";
+import {
+  listMaterialLibraryAssets,
+  type MaterialLibraryAsset,
+} from "../api/materialLibraryApi";
 import { NoticeDialog } from "./NoticeDialog";
 
 interface MaterialLibraryPageProps {
   isAuthenticated: boolean;
+  onReturn?: () => void;
   onRequireLogin: () => void;
 }
 
@@ -20,7 +30,20 @@ interface PageNotice {
   onPrimary?: () => void;
 }
 
-export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: MaterialLibraryPageProps) {
+export function MaterialLibraryPage({
+  isAuthenticated,
+  onRequireLogin,
+  onReturn,
+}: MaterialLibraryPageProps) {
+  const [importMode, setImportMode] = useState<"upload" | "link" | null>(null);
+  const [search, setSearch] = useState("");
+  const [source, setSource] = useState("all");
+  const [lightbox, setLightbox] = useState<MaterialLibraryAsset | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [remoteOffset, setRemoteOffset] = useState(0);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasOlder, setHasOlder] = useState(true);
+  const [pageLimit, setPageLimit] = useState(40);
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [images, setImages] = useState<string[]>([]);
@@ -28,10 +51,15 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
   const [assets, setAssets] = useState<MaterialLibraryAsset[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [failedUploads, setFailedUploads] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState("可一次选择多张图片，每张不超过 20MB。");
+  const [uploadStatus, setUploadStatus] = useState(
+    "可一次选择多张图片，每张不超过 20MB。",
+  );
   const [libraryStatus, setLibraryStatus] = useState("");
-  const [message, setMessage] = useState("粘贴小红书分享文案或公开链接，提取后只保存需要的照片。");
+  const [message, setMessage] = useState(
+    "粘贴小红书分享文案或公开链接，提取后只保存需要的照片。",
+  );
   const [notice, setNotice] = useState<PageNotice | null>(null);
 
   const loadLibrary = async () => {
@@ -44,10 +72,11 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
     try {
       const nextAssets = await listMaterialLibraryAssets();
       setAssets(nextAssets);
-      setLibraryStatus(nextAssets.length > 0 ? "" : "图片库还是空的，先提取、上传或生成图片。");
+      setLibraryStatus(
+        nextAssets.length > 0 ? "" : "图片库还是空的，先提取、上传或生成图片。",
+      );
     } catch {
-      setAssets([]);
-      setLibraryStatus("图片库暂时无法同步。点击“重新读取”重试。");
+      setLibraryStatus("图片库暂时无法同步，已保留上次图片。请重新读取。");
     }
   };
 
@@ -68,7 +97,10 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
 
   const handleExtract = async () => {
     if (!url.trim()) {
-      setNotice({ title: "还没有链接", message: "请粘贴小红书分享文案或公开笔记链接。" });
+      setNotice({
+        title: "还没有链接",
+        message: "请粘贴小红书分享文案或公开笔记链接。",
+      });
       return;
     }
     if (requireLogin()) return;
@@ -80,9 +112,12 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
       setTitle(result.title);
       setImages(result.images);
       setSelectedImages(new Set());
-      setMessage(`已提取 ${result.images.length} 张图片，请勾选需要保存的照片。`);
+      setMessage(
+        `已提取 ${result.images.length} 张图片，请勾选需要保存的照片。`,
+      );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "图片提取失败。";
+      const errorMessage =
+        error instanceof Error ? error.message : "图片提取失败。";
       setMessage(errorMessage);
       setNotice({ title: "图片提取失败", message: errorMessage });
     } finally {
@@ -90,39 +125,47 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
     }
   };
 
-  const handleLocalUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []).slice(0, 30);
-    event.target.value = "";
+  const runUploads = async (files: File[]) => {
     if (files.length === 0 || requireLogin()) return;
-
+    if (files.length > 30) {
+      setNotice({
+        title: "本次最多上传 30 张",
+        message: "请分批上传，本次没有忽略任何图片。",
+      });
+      return;
+    }
     setIsUploading(true);
-    setUploadStatus(`正在上传 0 / ${files.length} 张…`);
-    let uploadedCount = 0;
-    const failedNames: string[] = [];
-
-    for (const file of files) {
+    setFailedUploads([]);
+    let succeeded = 0;
+    const failures: File[] = [];
+    const errors: string[] = [];
+    for (const [index, file] of files.entries()) {
+      setUploadStatus(`正在上传 ${index + 1} / ${files.length}：${file.name}`);
       try {
         await uploadLocalMaterial(file);
-        uploadedCount += 1;
-      } catch {
-        failedNames.push(file.name);
+        succeeded++;
+      } catch (error) {
+        failures.push(file);
+        errors.push(
+          `${file.name}：${error instanceof Error ? error.message : "上传失败"}`,
+        );
       }
-      setUploadStatus(`正在上传 ${uploadedCount + failedNames.length} / ${files.length} 张…`);
     }
-
     setIsUploading(false);
+    setFailedUploads(failures);
     setUploadStatus(
-      failedNames.length === 0
-        ? `已上传 ${uploadedCount} 张图片。`
-        : `已上传 ${uploadedCount} 张，${failedNames.length} 张失败。`,
+      failures.length
+        ? `已上传 ${succeeded} 张，${failures.length} 张失败。`
+        : `已上传 ${succeeded} 张图片。`,
     );
     await loadLibrary();
-    if (failedNames.length > 0) {
-      setNotice({
-        title: "部分图片上传失败",
-        message: `以下图片未能上传：${failedNames.join("、")}。请确认格式为 JPG、PNG 或 WebP，且单张不超过 20MB。`,
-      });
-    }
+    if (errors.length)
+      setNotice({ title: "部分图片上传失败", message: errors.join("；") });
+  };
+  const handleLocalUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    await runUploads(files);
   };
 
   const toggleImage = (imageUrl: string) => {
@@ -136,7 +179,10 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
 
   const handleSave = async () => {
     if (selectedImages.size === 0) {
-      setNotice({ title: "还没有选择照片", message: "请勾选需要保存到图片库的照片。" });
+      setNotice({
+        title: "还没有选择照片",
+        message: "请勾选需要保存到图片库的照片。",
+      });
       return;
     }
     if (requireLogin()) return;
@@ -144,13 +190,15 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
     setIsSaving(true);
     const selected = images.filter((imageUrl) => selectedImages.has(imageUrl));
     try {
-      await Promise.all(selected.map((imageUrl, index) =>
-        saveImportedMaterial(
-          imageUrl,
-          true,
-          `${title.replace(/\s+-\s+小红书$/u, "") || "小红书素材"}-${index + 1}`,
+      await Promise.all(
+        selected.map((imageUrl, index) =>
+          saveImportedMaterial(
+            imageUrl,
+            true,
+            `${title.replace(/\s+-\s+小红书$/u, "") || "小红书素材"}-${index + 1}`,
+          ),
         ),
-      ));
+      );
       setSelectedImages(new Set());
       setMessage(`已保存 ${selected.length} 张照片。`);
       await loadLibrary();
@@ -164,22 +212,65 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
     }
   };
 
+  const filtered = assets.filter(
+    (asset) =>
+      (source === "all" || asset.source === source) &&
+      asset.fileName.toLowerCase().includes(search.toLowerCase()),
+  );
   return (
     <main className="page-surface material-library-page">
       <section className="page-heading">
         <p className="eyebrow">Image Library</p>
         <h1>图片库</h1>
         <p>统一管理小红书提取图片、手动保存图片和所有生成结果。</p>
+        <div className="library-toolbar">
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() =>
+              setImportMode(importMode === "upload" ? null : "upload")
+            }
+          >
+            批量上传
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setImportMode(importMode === "link" ? null : "link")}
+          >
+            链接提取
+          </button>
+          {onReturn ? (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={isUploading || isSaving}
+              onClick={onReturn}
+            >
+              返回创作并选图
+            </button>
+          ) : null}
+        </div>
       </section>
 
-      <section className="panel material-local-upload-panel" aria-labelledby="material-local-upload-title">
+      <section
+        hidden={importMode !== "upload"}
+        className="panel material-local-upload-panel"
+        aria-labelledby="material-local-upload-title"
+      >
         <div className="panel-heading">
           <p className="eyebrow">Local Upload</p>
           <h2 id="material-local-upload-title">从本地批量上传</h2>
           <p>本地照片先统一保存到图片库，再到各个工具中选择使用。</p>
         </div>
-        <label className={`material-local-upload${isUploading ? " is-uploading" : ""}`}>
-          {isUploading ? <LoaderCircle className="is-spinning" aria-hidden="true" /> : <ImagePlus aria-hidden="true" />}
+        <label
+          className={`material-local-upload${isUploading ? " is-uploading" : ""}`}
+        >
+          {isUploading ? (
+            <LoaderCircle className="is-spinning" aria-hidden="true" />
+          ) : (
+            <ImagePlus aria-hidden="true" />
+          )}
           <strong>{isUploading ? "正在上传图片" : "选择本地图片"}</strong>
           <span>支持 JPG、PNG、WebP，可一次选择多张</span>
           <input
@@ -191,10 +282,26 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
             onChange={(event) => void handleLocalUpload(event)}
           />
         </label>
-        <p className="material-library-inline-status" role="status">{uploadStatus}</p>
+        <p className="material-library-inline-status" role="status">
+          {uploadStatus}
+        </p>
+        {failedUploads.length > 0 ? (
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={isUploading}
+            onClick={() => void runUploads(failedUploads)}
+          >
+            重试失败的 {failedUploads.length} 张
+          </button>
+        ) : null}
       </section>
 
-      <section className="panel material-extract-panel" aria-labelledby="material-extract-title">
+      <section
+        hidden={importMode !== "link"}
+        className="panel material-extract-panel"
+        aria-labelledby="material-extract-title"
+      >
         <div className="panel-heading">
           <p className="eyebrow">Xiaohongshu Extractor</p>
           <h2 id="material-extract-title">链接提取</h2>
@@ -205,30 +312,70 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
             <span>分享文案或公开链接</span>
             <div className="material-import-url-row">
               <Link2 aria-hidden="true" />
-              <input value={url} onChange={(event) => setUrl(event.target.value)} aria-label="小红书素材链接" placeholder="粘贴整段分享文案，或 https://…" />
+              <input
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                aria-label="小红书素材链接"
+                placeholder="粘贴整段分享文案，或 https://…"
+              />
             </div>
           </label>
-          <button type="button" className="primary-button" disabled={isExtracting} onClick={() => void handleExtract()}>
-            {isExtracting ? <LoaderCircle className="is-spinning" aria-hidden="true" /> : <Link2 aria-hidden="true" />}
+          <button
+            type="button"
+            className="primary-button"
+            disabled={isExtracting}
+            onClick={() => void handleExtract()}
+          >
+            {isExtracting ? (
+              <LoaderCircle className="is-spinning" aria-hidden="true" />
+            ) : (
+              <Link2 aria-hidden="true" />
+            )}
             {isExtracting ? "正在提取" : "提取图片"}
           </button>
-          <p className="material-import-message" role="status">{message}</p>
+          <p className="material-import-message" role="status">
+            {message}
+          </p>
         </div>
 
         {images.length > 0 ? (
           <div className="material-pick-section">
             <div className="material-section-heading">
-              <div><strong>选择要保存的照片</strong><span>已选 {selectedImages.size} / {images.length}</span></div>
-              <button type="button" className="primary-button" disabled={isSaving} onClick={() => void handleSave()}>
-                {isSaving ? "保存中…" : `保存选中照片（${selectedImages.size}）`}
+              <div>
+                <strong>选择要保存的照片</strong>
+                <span>
+                  已选 {selectedImages.size} / {images.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={isSaving}
+                onClick={() => void handleSave()}
+              >
+                {isSaving
+                  ? "保存中…"
+                  : `保存选中照片（${selectedImages.size}）`}
               </button>
             </div>
             <div className="material-import-grid">
               {images.map((imageUrl, index) => (
-                <label className={`material-pick-card${selectedImages.has(imageUrl) ? " is-selected" : ""}`} key={imageUrl}>
-                  <img src={imageUrl} alt={`提取照片 ${index + 1}`} referrerPolicy="no-referrer" />
+                <label
+                  className={`material-pick-card${selectedImages.has(imageUrl) ? " is-selected" : ""}`}
+                  key={imageUrl}
+                >
+                  <img
+                    src={imageUrl}
+                    alt={`提取照片 ${index + 1}`}
+                    referrerPolicy="no-referrer"
+                  />
                   <span className="material-pick-check">
-                    <input type="checkbox" checked={selectedImages.has(imageUrl)} onChange={() => toggleImage(imageUrl)} aria-label={`选择照片 ${index + 1}`} />
+                    <input
+                      type="checkbox"
+                      checked={selectedImages.has(imageUrl)}
+                      onChange={() => toggleImage(imageUrl)}
+                      aria-label={`选择照片 ${index + 1}`}
+                    />
                     保存第 {index + 1} 张
                   </span>
                 </label>
@@ -238,51 +385,221 @@ export function MaterialLibraryPage({ isAuthenticated, onRequireLogin }: Materia
         ) : null}
       </section>
 
-      <section className="panel material-assets-panel" aria-labelledby="material-assets-title">
+      <section
+        className="panel material-assets-panel"
+        aria-labelledby="material-assets-title"
+      >
         <div className="material-section-heading">
-          <div><p className="eyebrow">All Images</p><h2 id="material-assets-title">全部图片</h2><span>保存图片与生成结果都会显示在这里</span></div>
-          <button type="button" className="secondary-button" onClick={() => void loadLibrary()}><RefreshCw aria-hidden="true" />重新读取</button>
+          <div>
+            <p className="eyebrow">All Images</p>
+            <h2 id="material-assets-title">全部图片</h2>
+            <span>保存图片与生成结果都会显示在这里</span>
+          </div>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void loadLibrary()}
+          >
+            <RefreshCw aria-hidden="true" />
+            重新读取
+          </button>
         </div>
+        <div className="library-toolbar">
+          <input
+            aria-label="搜索图片名称"
+            placeholder="搜索图片名称"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPageLimit(40);
+            }}
+          />
+          <select
+            aria-label="图片来源"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+          >
+            <option value="all">全部图片</option>
+            <option value="saved">已上传 / 已提取</option>
+            <option value="generated">生成结果</option>
+          </select>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!selected.size}
+            onClick={async () => {
+              try {
+                for (const asset of assets.filter((a) => selected.has(a.id)))
+                  await downloadLibraryImage(asset);
+              } catch (error) {
+                setNotice({
+                  title: "下载未完成",
+                  message:
+                    error instanceof Error ? error.message : "下载失败，请重试",
+                });
+              }
+            }}
+          >
+            下载已选（{selected.size}）
+          </button>
+        </div>
+        {libraryStatus && assets.length > 0 ? (
+          <p role="status">{libraryStatus}</p>
+        ) : null}
         {assets.length > 0 ? (
           <div className="material-library-grid">
-            {assets.map((asset) => <MaterialAssetCard key={asset.id} asset={asset} />)}
+            {filtered.slice(0, pageLimit).map((asset) => (
+              <MaterialAssetCard
+                key={asset.id}
+                asset={asset}
+                onPreview={() => setLightbox(asset)}
+                selected={selected.has(asset.id)}
+                onToggle={() =>
+                  setSelected((current) => {
+                    const next = new Set(current);
+                    next.has(asset.id)
+                      ? next.delete(asset.id)
+                      : next.add(asset.id);
+                    return next;
+                  })
+                }
+              />
+            ))}
           </div>
         ) : (
-          <div className="material-library-empty"><ImagePlus aria-hidden="true" /><p>{libraryStatus}</p></div>
+          <div className="material-library-empty">
+            <ImagePlus aria-hidden="true" />
+            <p>{libraryStatus}</p>
+          </div>
         )}
       </section>
 
-      <NoticeDialog open={Boolean(notice)} title={notice?.title ?? "提示"} message={notice?.message ?? ""} primaryLabel={notice?.primaryLabel} onPrimary={notice?.onPrimary} onClose={() => setNotice(null)} />
+      {hasOlder ? (
+        <button
+          type="button"
+          disabled={loadingOlder}
+          className="secondary-button"
+          onClick={async () => {
+            setLoadingOlder(true);
+            try {
+              const next = await listMaterialLibraryAssets(remoteOffset + 100);
+              setRemoteOffset(remoteOffset + 100);
+              setHasOlder(next.length > 0);
+              setAssets((current) => [
+                ...new Map(
+                  [...current, ...next].map((asset) => [asset.id, asset]),
+                ).values(),
+              ]);
+              setPageLimit((current) => current + 100);
+            } catch {
+              setLibraryStatus("较早图片暂未读取成功，请重试。");
+            } finally {
+              setLoadingOlder(false);
+            }
+          }}
+        >
+          {loadingOlder ? "正在读取" : "读取更早图片"}
+        </button>
+      ) : null}
+      {filtered.length > pageLimit ? (
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => setPageLimit((current) => current + 40)}
+        >
+          显示更多图片
+        </button>
+      ) : null}
+      {lightbox ? (
+        <div
+          className="preview-lightbox"
+          role="dialog"
+          aria-label="图片预览"
+          onClick={() => setLightbox(null)}
+        >
+          <div className="preview-lightbox-content">
+            <button type="button" onClick={() => setLightbox(null)}>
+              关闭
+            </button>
+            <img src={lightbox.imageUrl} alt={lightbox.fileName} />
+          </div>
+        </div>
+      ) : null}
+      <NoticeDialog
+        open={Boolean(notice)}
+        title={notice?.title ?? "提示"}
+        message={notice?.message ?? ""}
+        primaryLabel={notice?.primaryLabel}
+        onPrimary={notice?.onPrimary}
+        onClose={() => setNotice(null)}
+      />
     </main>
   );
 }
 
-function MaterialAssetCard({ asset }: { asset: MaterialLibraryAsset }) {
-  const [downloadError, setDownloadError] = useState("");
-  const handleDownload = async () => {
-    try {
-      const response = await fetch(asset.imageUrl);
-      if (!response.ok) throw new Error(`下载失败（HTTP ${response.status}）`);
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = `${asset.fileName.replace(/[\\/:*?"<>|]+/g, "-") || "kroma-material"}.png`;
-      document.body.append(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(objectUrl);
-    } catch {
-      setDownloadError("下载失败，请稍后重试。");
-    }
-  };
-
+export async function downloadLibraryImage(asset: MaterialLibraryAsset) {
+  const response = await fetch(asset.imageUrl);
+  if (!response.ok) throw new Error("下载失败，请重试");
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const ext = blob.type.includes("jpeg")
+    ? "jpg"
+    : blob.type.includes("webp")
+      ? "webp"
+      : blob.type.includes("png")
+        ? "png"
+        : "img";
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${asset.fileName.replace(/\.[^.]+$/, "")}.${ext}`;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function MaterialAssetCard({
+  asset,
+  onPreview,
+  selected,
+  onToggle,
+}: {
+  asset: MaterialLibraryAsset;
+  onPreview: () => void;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  const [error, setError] = useState("");
   return (
     <article>
-      <img src={asset.imageUrl} alt={asset.fileName} loading="lazy" referrerPolicy="no-referrer" />
-      <div><strong>{asset.fileName}</strong><span>{asset.sourceLabel}</span></div>
-      <button type="button" className="ghost-action-button" onClick={() => void handleDownload()}><Download aria-hidden="true" />下载</button>
-      {downloadError ? <small>{downloadError}</small> : null}
+      <button
+        type="button"
+        onClick={onPreview}
+        aria-label={`预览 ${asset.fileName}`}
+        className="library-image-preview"
+      >
+        <img
+          src={asset.imageUrl}
+          alt={asset.fileName}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+      </button>
+      <label>
+        <input type="checkbox" checked={selected} onChange={onToggle} />
+        {asset.fileName}
+      </label>
+      <span>{asset.sourceLabel}</span>
+      <button
+        type="button"
+        className="ghost-action-button"
+        onClick={() =>
+          void downloadLibraryImage(asset).catch(() =>
+            setError("下载失败，请稍后重试。"),
+          )
+        }
+      >
+        <Download aria-hidden="true" />
+        下载
+      </button>
+      {error ? <small role="alert">{error}</small> : null}
     </article>
   );
 }

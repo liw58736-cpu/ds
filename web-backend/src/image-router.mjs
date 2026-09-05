@@ -45,6 +45,18 @@ export function createImageRouter({
 
       return toTaskResponse(task);
     },
+    execute: async (requestBody, authUser, taskId) => {
+      const task = {
+        task_id: taskId,
+        user_id: authUser.id,
+        status: "processing",
+        created_at: Date.now(),
+        cancel_requested: false,
+      };
+      tasks.set(taskId, task);
+      await runTask({ task, requestBody, pool, env, fetchImpl });
+      return toTaskResponse(task);
+    },
     get: (taskId) => {
       cleanupTasks(tasks);
       return tasks.get(taskId) ?? null;
@@ -66,7 +78,7 @@ export function createImageRouter({
 }
 
 function runTask({ task, requestBody, pool, env, fetchImpl }) {
-  Promise.resolve()
+  return Promise.resolve()
     .then(async () => {
       const result = await routeGeneration({
         requestBody,
@@ -102,7 +114,8 @@ function runTask({ task, requestBody, pool, env, fetchImpl }) {
       }
 
       task.status = "error";
-      task.error = result.error ?? "All providers failed.";
+      task.error =
+        storedResult.error ?? result.error ?? "All providers failed.";
       task.progress = "生成失败";
     })
     .catch((error) => {
@@ -124,6 +137,31 @@ async function routeGeneration({
 }) {
   const attempts = [];
   const plan = planForRequest(requestBody);
+  const started = Date.now();
+  while (
+    pool.providers.some((key) =>
+      plan.some(
+        (step) => step.provider === key.provider && step.tier === key.tier,
+      ),
+    ) &&
+    !pool.providers.some(
+      (key) =>
+        plan.some(
+          (step) => step.provider === key.provider && step.tier === key.tier,
+        ) &&
+        pool.providers
+          .filter(
+            (other) =>
+              other.provider === key.provider && other.apiKey === key.apiKey,
+          )
+          .reduce((n, k) => n + k.currentConcurrent, 0) < key.maxConcurrent,
+    )
+  ) {
+    if (Date.now() - started > 10 * 60 * 1000)
+      return { error: "queue_timeout" };
+    updateProgress("排队中");
+    await wait(500);
+  }
 
   for (const step of plan) {
     const key = acquireProviderKey(pool, step.provider, step.tier);
@@ -148,13 +186,19 @@ async function routeGeneration({
         return { ...validatedResult, provider: key.provider };
       }
 
-      attempts.push({ ...step, reason: validatedResult.error ?? "invalid_result" });
+      attempts.push({
+        ...step,
+        reason: validatedResult.error ?? "invalid_result",
+      });
       if (shouldStopFallback(validatedResult.error)) {
         return { error: validatedResult.error };
       }
     } catch (error) {
       releaseProviderKey(key, false);
-      attempts.push({ ...step, reason: error?.message ?? "provider_exception" });
+      attempts.push({
+        ...step,
+        reason: error?.message ?? "provider_exception",
+      });
     }
   }
 
@@ -203,16 +247,20 @@ function planForRequest(requestBody) {
 }
 
 function isHdRequest(requestBody) {
-  return ["hd", "2k", "4k"].includes(String(requestBody.quality ?? "").toLowerCase());
+  return ["hd", "2k", "4k"].includes(
+    String(requestBody.quality ?? "").toLowerCase(),
+  );
 }
 
 function isBuyerShowTemplateRequest(requestBody) {
   return (
-    String(requestBody.style ?? "").toLowerCase().includes("buyer_show") &&
+    String(requestBody.style ?? "")
+      .toLowerCase()
+      .includes("buyer_show") &&
     Boolean(
       requestBody.template_image_base64 ||
-        (Array.isArray(requestBody.template_image_base64s) &&
-          requestBody.template_image_base64s.length > 0),
+      (Array.isArray(requestBody.template_image_base64s) &&
+        requestBody.template_image_base64s.length > 0),
     )
   );
 }
@@ -232,7 +280,10 @@ function isEditToolRequest(requestBody) {
     "image_edit",
   ];
 
-  return editModes.includes(taskType) || editModes.some((mode) => style.includes(mode));
+  return (
+    editModes.includes(taskType) ||
+    editModes.some((mode) => style.includes(mode))
+  );
 }
 
 async function tryProvider({ key, requestBody, env, fetchImpl }) {
@@ -298,14 +349,22 @@ async function requestPackyTemplateEdit({ key, requestBody, env, fetchImpl }) {
         error: `input_image_upload_failed: image ${index + 1} could not be prepared for PackyAPI`,
       };
     }
-    form.append("image", file, `image_${index + 1}.${extensionFromContentType(file.type)}`);
+    form.append(
+      "image",
+      file,
+      `image_${index + 1}.${extensionFromContentType(file.type)}`,
+    );
   }
 
   if (requestBody.mask_base64) {
-    const mask = await imageInputToBlob(String(requestBody.mask_base64), fetchImpl);
+    const mask = await imageInputToBlob(
+      String(requestBody.mask_base64),
+      fetchImpl,
+    );
     if (!mask) {
       return {
-        error: "input_mask_upload_failed: painted mask could not be prepared for PackyAPI",
+        error:
+          "input_mask_upload_failed: painted mask could not be prepared for PackyAPI",
       };
     }
     form.append("mask", mask, `mask.${extensionFromContentType(mask.type)}`);
@@ -332,15 +391,15 @@ async function requestPackyTemplateEdit({ key, requestBody, env, fetchImpl }) {
 
 function shouldUsePackyImageEdit(provider, requestBody) {
   return (
-    provider === "packyapi" &&
-    Boolean(sourceImageInputFromRequest(requestBody))
+    provider === "packyapi" && Boolean(sourceImageInputFromRequest(requestBody))
   );
 }
 
 function buildOpenAICompatiblePayload(provider, requestBody, env) {
-  const model = provider === "packyapi"
-    ? env.PACKYAPI_IMAGE_MODEL?.trim() || defaultModel
-    : defaultModel;
+  const model =
+    provider === "packyapi"
+      ? env.PACKYAPI_IMAGE_MODEL?.trim() || defaultModel
+      : defaultModel;
   const payload = {
     model,
     prompt: String(requestBody.prompt ?? ""),
@@ -433,7 +492,10 @@ async function imageInputToBlob(input, fetchImpl) {
 }
 
 function normalizeImageContentType(value) {
-  const contentType = String(value ?? "").split(";")[0].trim().toLowerCase();
+  const contentType = String(value ?? "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
   return contentType.startsWith("image/") ? contentType : "image/png";
 }
 
@@ -473,7 +535,11 @@ function clampImageSize(size) {
   const maxEdge = Math.max(rawWidth, rawHeight);
   const maxPixels = 3840 * 2160;
 
-  if (!rawWidth || !rawHeight || (maxEdge <= 3840 && rawWidth * rawHeight <= maxPixels)) {
+  if (
+    !rawWidth ||
+    !rawHeight ||
+    (maxEdge <= 3840 && rawWidth * rawHeight <= maxPixels)
+  ) {
     return `${rawWidth}x${rawHeight}`;
   }
 
@@ -565,7 +631,11 @@ function normalizeGptsapiResult(image) {
 
   return String(image).startsWith("http")
     ? { image_url: String(image) }
-    : { image_base64: String(image).startsWith("data:") ? String(image) : `data:image/png;base64,${image}` };
+    : {
+        image_base64: String(image).startsWith("data:")
+          ? String(image)
+          : `data:image/png;base64,${image}`,
+      };
 }
 
 async function requestWuyinkeji({ key, requestBody, fetchImpl }) {
@@ -580,8 +650,16 @@ async function requestWuyinkeji({ key, requestBody, fetchImpl }) {
     body: JSON.stringify({
       prompt: String(requestBody.prompt ?? ""),
       size: sizeToRatio(requestBody.size),
-      urls: [requestBody.image_url, requestBody.image_base64, requestBody.template_image_base64]
-        .concat(Array.isArray(requestBody.template_image_base64s) ? requestBody.template_image_base64s : [])
+      urls: [
+        requestBody.image_url,
+        requestBody.image_base64,
+        requestBody.template_image_base64,
+      ]
+        .concat(
+          Array.isArray(requestBody.template_image_base64s)
+            ? requestBody.template_image_base64s
+            : [],
+        )
         .filter(Boolean),
     }),
   });
@@ -597,10 +675,13 @@ async function requestWuyinkeji({ key, requestBody, fetchImpl }) {
   }
 
   for (let attempt = 0; attempt < 36; attempt += 1) {
-    const poll = await fetchImpl(`${detailUrl}?id=${encodeURIComponent(providerTaskId)}`, {
-      method: "GET",
-      headers: { Authorization: key.apiKey },
-    });
+    const poll = await fetchImpl(
+      `${detailUrl}?id=${encodeURIComponent(providerTaskId)}`,
+      {
+        method: "GET",
+        headers: { Authorization: key.apiKey },
+      },
+    );
     const pollData = await parseJsonResponse(poll);
     const taskData = pollData?.data ?? {};
 
@@ -659,11 +740,7 @@ function isValidInlineImage(image) {
     return false;
   }
 
-  return (
-    isValidPng(decoded) ||
-    isValidJpeg(decoded) ||
-    isValidWebp(decoded)
-  );
+  return isValidPng(decoded) || isValidJpeg(decoded) || isValidWebp(decoded);
 }
 
 function decodeInlineImage(image) {
@@ -688,11 +765,10 @@ function decodeInlineImage(image) {
 
 function isValidPng(buffer) {
   const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-  const iend = [0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82];
-  return (
-    startsWithBytes(buffer, signature) &&
-    endsWithBytes(buffer, iend)
-  );
+  const iend = [
+    0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+  ];
+  return startsWithBytes(buffer, signature) && endsWithBytes(buffer, iend);
 }
 
 function isValidJpeg(buffer) {
@@ -746,7 +822,11 @@ function normalizeWuyinkejiResult(result) {
 
   return String(image).startsWith("http")
     ? { image_url: image }
-    : { image_base64: String(image).startsWith("data:") ? image : `data:image/png;base64,${image}` };
+    : {
+        image_base64: String(image).startsWith("data:")
+          ? image
+          : `data:image/png;base64,${image}`,
+      };
 }
 
 async function parseJsonResponse(response) {
@@ -758,7 +838,8 @@ async function parseJsonResponse(response) {
 }
 
 function providerError(status, data) {
-  const message = data?.error?.message ?? data?.message ?? data?.msg ?? data?.detail;
+  const message =
+    data?.error?.message ?? data?.message ?? data?.msg ?? data?.detail;
   if (status === 401 || status === 403) {
     return "banned";
   }
@@ -773,7 +854,10 @@ function providerError(status, data) {
 
 function shouldStopFallback(error) {
   const text = String(error ?? "").toLowerCase();
-  return text.includes("input_image_upload_failed") || text.includes("result_image_upload_failed");
+  return (
+    text.includes("input_image_upload_failed") ||
+    text.includes("result_image_upload_failed")
+  );
 }
 
 function buildProviderPool(env) {
@@ -797,7 +881,9 @@ function buildProviderKeys(env, provider, prefix, defaultMaxKeys) {
     1,
     Number.parseInt(env[`${prefix}_CONCURRENT`] ?? "10", 10) || 10,
   );
-  const indices = new Set(Array.from({ length: defaultMaxKeys }, (_, index) => index + 1));
+  const indices = new Set(
+    Array.from({ length: defaultMaxKeys }, (_, index) => index + 1),
+  );
   for (const key of Object.keys(env)) {
     const match = key.match(new RegExp(`^${prefix}_KEY_(\\d+)$`));
     if (match) {
@@ -811,23 +897,27 @@ function buildProviderKeys(env, provider, prefix, defaultMaxKeys) {
     if (!apiKey) {
       continue;
     }
-    keys.push(createProviderKey({
-      id: `${provider}_${index}`,
-      provider,
-      tier: "standard",
-      baseUrl,
-      apiKey,
-      maxConcurrent,
-    }));
-    if (provider !== "gptsapi") {
-      keys.push(createProviderKey({
-        id: `${provider}_hd_${index}`,
+    keys.push(
+      createProviderKey({
+        id: `${provider}_${index}`,
         provider,
-        tier: "hd",
+        tier: "standard",
         baseUrl,
         apiKey,
         maxConcurrent,
-      }));
+      }),
+    );
+    if (provider !== "gptsapi") {
+      keys.push(
+        createProviderKey({
+          id: `${provider}_hd_${index}`,
+          provider,
+          tier: "hd",
+          baseUrl,
+          apiKey,
+          maxConcurrent,
+        }),
+      );
     }
   }
 
@@ -845,18 +935,27 @@ function createProviderKey(input) {
 }
 
 function acquireProviderKey(pool, provider, tier) {
-  const candidates = pool.providers.filter((key) => (
-    key.provider === provider &&
-    key.tier === tier &&
-    key.currentConcurrent < key.maxConcurrent &&
-    key.cooldownUntil < Date.now()
-  ));
+  const candidates = pool.providers.filter(
+    (key) =>
+      key.provider === provider &&
+      key.tier === tier &&
+      pool.providers
+        .filter(
+          (other) =>
+            other.provider === key.provider && other.apiKey === key.apiKey,
+        )
+        .reduce((count, other) => count + other.currentConcurrent, 0) <
+        key.maxConcurrent &&
+      key.cooldownUntil < Date.now(),
+  );
 
   if (candidates.length === 0) {
     return null;
   }
 
-  candidates.sort((left, right) => left.currentConcurrent - right.currentConcurrent);
+  candidates.sort(
+    (left, right) => left.currentConcurrent - right.currentConcurrent,
+  );
   const key = candidates[0];
   key.currentConcurrent += 1;
   return key;
@@ -894,7 +993,9 @@ function normalizeSize(size) {
 
 function sizeToRatio(size) {
   const value = normalizeSize(size);
-  const [width, height] = value.split("x").map((part) => Number.parseInt(part, 10));
+  const [width, height] = value
+    .split("x")
+    .map((part) => Number.parseInt(part, 10));
   if (!width || !height) {
     return "1:1";
   }
@@ -935,7 +1036,9 @@ function sizeToSupportedGptsapiRatio(size) {
     [21, 9],
   ];
   const value = normalizeSize(size);
-  const [width, height] = value.split("x").map((part) => Number.parseInt(part, 10));
+  const [width, height] = value
+    .split("x")
+    .map((part) => Number.parseInt(part, 10));
 
   if (!width || !height) {
     return "1:1";
@@ -967,11 +1070,17 @@ function wuyinkejiCreateUrl(baseUrl, requestBody) {
   const endpoint = isHdRequest(requestBody) ? "image_nanoBanana2" : "image_gpt";
 
   if (/\/api\/async\/(image_gpt|image_nanoBanana2)$/i.test(normalized)) {
-    return normalized.replace(/\/api\/async\/(image_gpt|image_nanoBanana2)$/i, `/api/async/${endpoint}`);
+    return normalized.replace(
+      /\/api\/async\/(image_gpt|image_nanoBanana2)$/i,
+      `/api/async/${endpoint}`,
+    );
   }
 
   if (/\/api\/async\/detail$/i.test(normalized)) {
-    return normalized.replace(/\/api\/async\/detail$/i, `/api/async/${endpoint}`);
+    return normalized.replace(
+      /\/api\/async\/detail$/i,
+      `/api/async/${endpoint}`,
+    );
   }
 
   if (/\/api\/async$/i.test(normalized)) {
@@ -985,7 +1094,10 @@ function wuyinkejiDetailUrl(baseUrl) {
   const normalized = baseUrl.replace(/\/+$/, "");
 
   if (/\/api\/async\/(image_gpt|image_nanoBanana2|detail)$/i.test(normalized)) {
-    return normalized.replace(/\/api\/async\/(image_gpt|image_nanoBanana2|detail)$/i, "/api/async/detail");
+    return normalized.replace(
+      /\/api\/async\/(image_gpt|image_nanoBanana2|detail)$/i,
+      "/api/async/detail",
+    );
   }
 
   if (/\/api\/async$/i.test(normalized)) {
@@ -1008,19 +1120,56 @@ function toTaskResponse(task) {
 }
 
 async function storeInlineImageResult({ result, task, env, fetchImpl }) {
-  if (!result?.image_base64) {
+  if (
+    !result?.image_base64 &&
+    !(env.WEB_DURABLE_JOBS === "true" && result?.image_url)
+  ) {
     return result;
   }
 
-  const bucket = env.WEB_GENERATION_STORAGE_BUCKET?.trim() || "web-generation-results";
+  const bucket =
+    env.WEB_GENERATION_STORAGE_BUCKET?.trim() || "web-generation-results";
 
-  if (!bucket || !task.user_id || !env.WEB_SUPABASE_URL || !env.WEB_SUPABASE_SERVICE_ROLE_KEY) {
+  if (
+    !bucket ||
+    !task.user_id ||
+    !env.WEB_SUPABASE_URL ||
+    !env.WEB_SUPABASE_SERVICE_ROLE_KEY
+  ) {
     return result;
   }
 
   try {
     await ensureImageResultStorageBucket(fetchImpl, env, bucket);
-    const image = parseInlineImageForStorage(result.image_base64);
+    let image;
+    if (result.image_base64)
+      image = parseInlineImageForStorage(result.image_base64);
+    else {
+      if (
+        result.image_url.startsWith(
+          `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/`,
+        )
+      )
+        return result;
+      const downloaded = await fetchImpl(result.image_url, {
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!downloaded.ok) throw new Error("result_image_fetch_failed");
+      const contentType = (downloaded.headers.get("content-type") || "").split(
+        ";",
+      )[0];
+      if (!["image/png", "image/jpeg", "image/webp"].includes(contentType))
+        throw new Error("result_image_invalid_format");
+      const buffer = Buffer.from(await downloaded.arrayBuffer());
+      if (!buffer.length || buffer.length > 20 * 1024 * 1024)
+        throw new Error("result_image_invalid_size");
+      image = {
+        buffer,
+        contentType,
+        extension:
+          contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1],
+      };
+    }
     const objectPath = [
       sanitizeStoragePathSegment(task.user_id),
       sanitizeStoragePathSegment(task.task_id),
@@ -1047,7 +1196,9 @@ async function storeInlineImageResult({ result, task, env, fetchImpl }) {
       image_url: `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath}`,
       image_base64: null,
     };
-  } catch {
+  } catch (error) {
+    if (env.WEB_DURABLE_JOBS === "true")
+      return { error: "result_image_upload_failed: " + error.message };
     return result;
   }
 }
@@ -1095,7 +1246,10 @@ function parseInlineImageForStorage(value) {
 }
 
 function normalizeInlineImageContentType(value) {
-  const contentType = String(value ?? "image/png").split(";")[0].trim().toLowerCase();
+  const contentType = String(value ?? "image/png")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
 
   return ["image/png", "image/jpeg", "image/webp"].includes(contentType)
     ? contentType
@@ -1103,11 +1257,13 @@ function normalizeInlineImageContentType(value) {
 }
 
 function sanitizeStoragePathSegment(value) {
-  return String(value ?? "item")
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 96) || "item";
+  return (
+    String(value ?? "item")
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 96) || "item"
+  );
 }
 
 function supabaseUrl(env) {
@@ -1118,7 +1274,9 @@ async function parseJsonResponseOrThrow(response) {
   const data = await parseJsonResponse(response);
 
   if (!response.ok) {
-    throw new Error(data?.msg ?? data?.message ?? data?.error ?? "Storage request failed");
+    throw new Error(
+      data?.msg ?? data?.message ?? data?.error ?? "Storage request failed",
+    );
   }
 
   return data;
@@ -1127,7 +1285,10 @@ async function parseJsonResponseOrThrow(response) {
 function cleanupTasks(tasks) {
   const now = Date.now();
   for (const [taskId, task] of tasks.entries()) {
-    if (now - task.created_at > defaultTaskTtlMs) {
+    if (
+      terminalStatuses.has(task.status) &&
+      now - task.created_at > defaultTaskTtlMs
+    ) {
       tasks.delete(taskId);
     }
   }

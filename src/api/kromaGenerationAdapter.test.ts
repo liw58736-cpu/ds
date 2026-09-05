@@ -271,7 +271,9 @@ describe("kromaGenerationAdapter", () => {
     expect(kromaRequest).not.toHaveProperty("template_image_base64s");
     expect(kromaRequest.use_template_mode).toBe(false);
     expect(kromaRequest.prompt).toContain("只有 XL 码");
-    expect(kromaRequest.prompt).toContain("Render only this size or availability copy");
+    expect(kromaRequest.prompt).toContain(
+      "Render only this size or availability copy",
+    );
   });
 
   it("maps AI tool 1K work to the standard ecommerce backend path", () => {
@@ -388,7 +390,9 @@ describe("kromaGenerationAdapter", () => {
       use_template_mode: true,
       keep_user_outfit_pose: true,
     });
-    expect(kromaRequest.prompt).toContain("Image 2 is the target model reference");
+    expect(kromaRequest.prompt).toContain(
+      "Image 2 is the target model reference",
+    );
     expect(kromaRequest.prompt).toContain("Preserve the exact Image 1 product");
   });
 
@@ -535,7 +539,9 @@ describe("kromaGenerationAdapter", () => {
         ok: false,
         status: 504,
         text: () =>
-          Promise.resolve(JSON.stringify({ detail: "Supabase request failed" })),
+          Promise.resolve(
+            JSON.stringify({ detail: "Supabase request failed" }),
+          ),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -709,9 +715,9 @@ describe("kromaGenerationAdapter", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(
-      cancelKromaGenerationTask("kroma-task-cancel"),
-    ).resolves.toBe(true);
+    await expect(cancelKromaGenerationTask("kroma-task-cancel")).resolves.toBe(
+      true,
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://127.0.0.1:8000/api/v1/image/task/kroma-task-cancel/cancel",
@@ -767,7 +773,11 @@ describe("kromaGenerationAdapter", () => {
       { pollIntervalMs: 0 },
     );
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "/assets/product.png");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/assets/product.png",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "http://127.0.0.1:8000/api/v1/image/generate",

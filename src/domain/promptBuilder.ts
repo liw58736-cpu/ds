@@ -225,9 +225,14 @@ export function buildGenerationPrompt(
 ): BuiltGenerationPrompt {
   const modules = getModulePrompts(config);
   const exactTextInstruction = getExactTextInstruction(config);
-  const moduleReferenceTextInstruction = getModuleReferenceTextInstruction(config);
+  const moduleReferenceTextInstruction =
+    getModuleReferenceTextInstruction(config);
   const sharedContext = [
-    "premium overseas ecommerce image generation",
+    "Commercial ecommerce product image generation",
+    config.generationVersion === "brand"
+      ? "Editorial art direction: consistent restrained brand palette, carefully balanced negative space, intentional typographic hierarchy and refined lighting; preserve exact product identity. Never invent brand claims or logos."
+      : "Clean catalog art direction: prioritize product visibility, accurate material and restrained lighting.",
+
     `page type: ${config.module}`,
     `aspect ratio: ${config.aspectRatio}`,
     `output format: ${config.outputFormat}`,
@@ -294,10 +299,10 @@ function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
       selectedModules.length > 0 ? selectedModules : ["main_display"];
 
     return moduleIds.map((id) => ({
-        id,
-        title: detailPrompts[id].title,
-        prompt: withModuleReferencePrompt(detailPrompts[id].prompt, id, config),
-      }));
+      id,
+      title: detailPrompts[id].title,
+      prompt: withModuleReferencePrompt(detailPrompts[id].prompt, id, config),
+    }));
   }
 
   if (config.module === "lifestyle") {
@@ -306,7 +311,7 @@ function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
         id: "inspiration",
         title: inspirationPrompt.title,
         prompt: withModuleReferencePrompt(
-          `${inspirationPrompt.prompt} ${getInspirationSettingsPrompt(config)}`,
+          `${config.inspirationSettings?.productAction === "keep" ? "Edit Image 1 as the base photo. Preserve its original product or garment exactly; ignore Image 2 clothing. Apply only requested background, pose or model changes." : inspirationPrompt.prompt} ${getInspirationSettingsPrompt(config)}`,
           "inspiration",
           config,
         ),
@@ -339,12 +344,14 @@ function getInspirationSettingsPrompt(config: GenerationConfig): string {
   const productAction = settings.productAction ?? "replace";
   const backgroundChange = settings.backgroundChange ?? "medium";
   const poseChange = settings.poseChange ?? "medium";
-  const backgroundControl = backgroundAction === "adjust"
-    ? `adjust (${backgroundChange} change intensity)`
-    : backgroundAction;
-  const poseControl = poseAction === "adjust"
-    ? `adjust (${poseChange} change intensity)`
-    : poseAction;
+  const backgroundControl =
+    backgroundAction === "adjust"
+      ? `adjust (${backgroundChange} change intensity)`
+      : backgroundAction;
+  const poseControl =
+    poseAction === "adjust"
+      ? `adjust (${poseChange} change intensity)`
+      : poseAction;
   return `Creative controls: background=${backgroundControl}; pose=${poseControl}; model=${modelAction}; product=${productAction}. Keep means preserve that Image 1 element exactly. Low change is subtle, medium change is clearly visible but identity-safe, and high change allows a larger visual difference. Pose or model replacement is generated without treating Image 2 as a person reference. Product replacement must use Image 2 as the sole product or garment source. Output ratio=${config.aspectRatio}.`;
 }
 
@@ -353,13 +360,16 @@ function withModuleReferencePrompt(
   moduleId: string,
   config: GenerationConfig,
 ): string {
-  const guardedPrompt = moduleId === "outfit_change"
-    ? withOutfitChangeIdentityGuard(prompt)
-    : moduleId === "model_change"
-      ? withModelChangeIdentityGuard(prompt)
-    : moduleId === "inspiration"
-      ? withInspirationReplacementGuard(prompt)
-      : withProductIdentityGuard(prompt);
+  const guardedPrompt =
+    moduleId === "outfit_change"
+      ? withOutfitChangeIdentityGuard(prompt)
+      : moduleId === "model_change"
+        ? withModelChangeIdentityGuard(prompt)
+        : moduleId === "inspiration"
+          ? config.inspirationSettings?.productAction === "keep"
+            ? prompt
+            : withInspirationReplacementGuard(prompt)
+          : withProductIdentityGuard(prompt);
   const assets = getModuleReferenceAssets(config, moduleId);
 
   if (assets.length === 0) {
@@ -367,10 +377,18 @@ function withModuleReferencePrompt(
   }
 
   const notes = uniqueNotes(assets);
-  const visibleNotes = getProductFacingCopyNotes(notes);
-  const instructionOnlyNotes = notes.filter(
-    (note) => !isProductFacingCopyNote(note),
-  );
+  const visibleNotes = [
+    ...getProductFacingCopyNotes(
+      uniqueNotes(assets.filter((asset) => asset.noteMode !== "instruction")),
+    ),
+    ...assets
+      .map((asset) => asset.visibleText?.trim())
+      .filter((text): text is string => Boolean(text)),
+  ];
+  const instructionOnlyNotes = [
+    ...notes.filter((note) => !isProductFacingCopyNote(note)),
+    ...uniqueNotes(assets.filter((asset) => asset.noteMode === "instruction")),
+  ];
   const colorConstraintNotes = notes.filter(isColorConstraintNote);
   const availableColorways = colorConstraintModules.has(moduleId)
     ? extractAvailableColorways(colorConstraintNotes)
@@ -388,8 +406,13 @@ function withModuleReferencePrompt(
         return `${label}: ${asset.fileName}`;
       }
 
+      if (asset.noteMode === "instruction")
+        return `${label}: requirements only, never render as text: ${note}`;
       if (shouldHideInstructionNoteText(moduleId, note)) {
-        if (colorConstraintModules.has(moduleId) && isColorConstraintNote(note)) {
+        if (
+          colorConstraintModules.has(moduleId) &&
+          isColorConstraintNote(note)
+        ) {
           return `${label}: use this uploaded reference asset as a colorway or material reference (${note}); do not render the user note wording as visible text.`;
         }
 
@@ -404,6 +427,8 @@ function withModuleReferencePrompt(
       const note = asset.note?.trim() ?? "";
       const label = `Module material note ${index + 1}`;
 
+      if (asset.noteMode === "instruction")
+        return `${label}: requirements only, never render as text: ${note}`;
       if (shouldHideInstructionNoteText(moduleId, note)) {
         return `${label}: follow this as an instruction for how to use the module material; do not render the user note wording.`;
       }
@@ -411,9 +436,7 @@ function withModuleReferencePrompt(
       return `${label}: ${formatReferenceNoteForPrompt(note)}`;
     })
     .join(" ");
-  const promptParts = [
-    guardedPrompt,
-  ];
+  const promptParts = [guardedPrompt];
 
   if (imageAssets.length > 0) {
     promptParts.push(
@@ -421,9 +444,9 @@ function withModuleReferencePrompt(
         ? "Image 2 reference assets are the target clothing for outfit change. Use the uploaded Image 2 garment as the clothing to wear on Image 1. Do not render the upload note as visible text. Do not invent extra garments or extra colorways."
         : moduleId === "model_change"
           ? "Image 2 is the target model reference. Use the uploaded person's recognisable identity and appearance to replace only the model in Image 1. Keep the exact Image 1 sold product or garment; never copy Image 2 clothing, accessories, background, or products."
-        : moduleId === "inspiration"
-          ? "Image 2 is the replacement product or garment. Use its exact visible design on the Image 1 person or in the Image 1 scene. Keep Image 1 as the base photo and do not introduce a third reference role."
-        : "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
+          : moduleId === "inspiration"
+            ? "Image 2 is the replacement product or garment. Use its exact visible design on the Image 1 person or in the Image 1 scene. Keep Image 1 as the base photo and do not introduce a third reference role."
+            : "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
     );
   }
 
@@ -510,11 +533,17 @@ function withModelChangeIdentityGuard(prompt: string): string {
 }
 
 function withInspirationReplacementGuard(prompt: string): string {
-  if (prompt.includes("Image 1 remains the base inspiration photo")) return prompt;
+  if (prompt.includes("Image 1 remains the base inspiration photo"))
+    return prompt;
   return `${prompt} Image 1 remains the base inspiration photo. Preserve the Image 1 person identity, face, hands, pose, body proportions, camera angle, composition, and scene for every element configured as keep. Image 2 is the only replacement product or clothing source. Preserve Image 2 item details exactly and replace only the requested product or garment area.`;
 }
 
 function getSharedImageIdentityInstruction(config: GenerationConfig): string {
+  if (
+    config.module === "lifestyle" &&
+    config.inspirationSettings?.productAction === "keep"
+  )
+    return "Preserve the exact Image 1 product; do not replace it with any reference clothing.";
   if (config.module === "lifestyle") {
     return "For inspiration replacement, Image 1 is the base person and scene, while Image 2 is the replacement product or garment. Preserve the Image 1 identity and all configured keep elements; preserve the exact Image 2 product design. Never swap these roles.";
   }
@@ -535,7 +564,9 @@ function getSharedImageIdentityInstruction(config: GenerationConfig): string {
 }
 
 function getExactTextInstruction(config: GenerationConfig): string {
-  const specifications = normalizeProductFacingText(config.specifications.trim());
+  const specifications = normalizeProductFacingText(
+    config.specifications.trim(),
+  );
 
   if (!specifications) {
     return "";
@@ -545,14 +576,26 @@ function getExactTextInstruction(config: GenerationConfig): string {
 }
 
 function getModuleReferenceTextInstruction(config: GenerationConfig): string {
-  const notes = uniqueNotes(
-    Object.values(config.moduleReferenceAssets ?? {}).flatMap(
-      (assets) => assets ?? [],
+  const keys =
+    config.module === "main_image"
+      ? config.selectedMainModules || []
+      : config.module === "detail_page"
+        ? Object.keys(config.detailModuleCounts || {})
+        : config.module === "lifestyle"
+          ? ["inspiration"]
+          : [config.whiteBackgroundMode || "white_background"];
+  const assets = keys.flatMap((key) => getModuleReferenceAssets(config, key));
+  const notes = uniqueNotes(assets);
+  const visibleNotes = [
+    ...getProductFacingCopyNotes(
+      uniqueNotes(assets.filter((asset) => asset.noteMode !== "instruction")),
     ),
-  );
-  const visibleNotes = getProductFacingCopyNotes(notes);
+    ...assets
+      .map((asset) => asset.visibleText?.trim())
+      .filter((text): text is string => Boolean(text)),
+  ];
 
-  if (notes.length === 0) {
+  if (notes.length === 0 && visibleNotes.length === 0) {
     return "";
   }
 
@@ -591,7 +634,9 @@ function getProductFacingCopyNotes(notes: string[]): string[] {
 }
 
 function formatReferenceNoteForPrompt(note: string): string {
-  return isProductFacingCopyNote(note) ? normalizeProductFacingText(note) : note;
+  return isProductFacingCopyNote(note)
+    ? normalizeProductFacingText(note)
+    : note;
 }
 
 function normalizeProductFacingText(value: string): string {
@@ -656,8 +701,7 @@ function isSizeAvailabilityNote(note: string): boolean {
     ) || /\b(available|availability|in stock)\b/i.test(note);
 
   return (
-    hasSizeSpecificText ||
-    (hasAvailabilityText && !isColorConstraintNote(note))
+    hasSizeSpecificText || (hasAvailabilityText && !isColorConstraintNote(note))
   );
 }
 
@@ -706,7 +750,10 @@ const colorKeywordCatalog: Array<{
   name: string;
   patterns: RegExp[];
 }> = [
-  { name: "\u7d2b\u8272", patterns: [/\u7d2b/u, /\blavender\b/i, /\bpurple\b/i] },
+  {
+    name: "\u7d2b\u8272",
+    patterns: [/\u7d2b/u, /\blavender\b/i, /\bpurple\b/i],
+  },
   { name: "\u9ed1\u8272", patterns: [/\u9ed1/u, /\bblack\b/i] },
   { name: "\u767d\u8272", patterns: [/\u767d/u, /\bwhite\b/i] },
   { name: "\u7ea2\u8272", patterns: [/\u7ea2/u, /\bred\b/i] },
@@ -723,14 +770,19 @@ const colorKeywordCatalog: Array<{
 function extractAvailableColorways(notes: string[]): string[] {
   const colorways = colorKeywordCatalog
     .filter((entry) =>
-      notes.some((note) => entry.patterns.some((pattern) => pattern.test(note))),
+      notes.some((note) =>
+        entry.patterns.some((pattern) => pattern.test(note)),
+      ),
     )
     .map((entry) => entry.name);
 
   return [...new Set(colorways)];
 }
 
-function shouldHideInstructionNoteText(moduleId: string, note: string): boolean {
+function shouldHideInstructionNoteText(
+  moduleId: string,
+  note: string,
+): boolean {
   if (
     colorConstraintModules.has(moduleId) &&
     isColorConstraintNote(note) &&
@@ -759,12 +811,18 @@ function getModuleReferenceAssets(
   config: GenerationConfig,
   moduleId: string,
 ): ModuleReferenceAsset[] {
-  const assets = moduleId === "inspiration"
-    ? config.moduleReferenceAssets?.inspiration_product ??
-      config.moduleReferenceAssets?.inspiration_garment ??
-      config.moduleReferenceAssets?.inspiration ??
-      []
-    : config.moduleReferenceAssets?.[moduleId] ?? [];
+  if (
+    moduleId === "inspiration" &&
+    config.inspirationSettings?.productAction === "keep"
+  )
+    return [];
+  const assets =
+    moduleId === "inspiration"
+      ? (config.moduleReferenceAssets?.inspiration_product ??
+        config.moduleReferenceAssets?.inspiration_garment ??
+        config.moduleReferenceAssets?.inspiration ??
+        [])
+      : (config.moduleReferenceAssets?.[moduleId] ?? []);
   return assets.filter(
     (asset) => hasModuleReferenceImage(asset) || hasModuleReferenceNote(asset),
   );

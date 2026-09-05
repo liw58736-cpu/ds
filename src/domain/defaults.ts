@@ -10,7 +10,7 @@ export const defaultConfig: GenerationConfig = {
   specifications: "",
   outputLanguage: "中文",
   resolution: "1K",
-  generationVersion: "brand",
+  generationVersion: "standard",
   selectedMainModules: [],
   detailModuleCounts: {},
   whiteBackgroundMode: "white_background",

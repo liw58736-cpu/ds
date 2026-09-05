@@ -1,3 +1,10 @@
+import { StudioDashboard } from "./components/StudioDashboard";
+import {
+  OPEN_LIBRARY_EVENT,
+  RETURN_LIBRARY_EVENT,
+  OPEN_LOGIN_EVENT,
+  REUSE_TASK_EVENT,
+} from "./domain/navigationEvents";
 import { useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import type { AppPage } from "./components/AppShell";
@@ -11,8 +18,36 @@ import { Workspace } from "./components/Workspace";
 import { MotionStudioPage } from "./components/MotionStudioPage";
 import { MaterialLibraryPage } from "./components/MaterialLibraryPage";
 import { getCurrentAccountSnapshot } from "./api/accountApi";
-import { ACCOUNT_CHANGED_EVENT, clearAccountSession } from "./storage/accountStore";
+import {
+  ACCOUNT_CHANGED_EVENT,
+  clearAccountSession,
+} from "./storage/accountStore";
+import { getStorageOwner } from "./storage/workspaceDraftStore";
 import type { GenerationModule, ProductInput } from "./domain/types";
+
+const routablePages = new Set<AppPage>([
+  "home",
+  "main_image",
+  "white_background",
+  "detail_page",
+  "inspiration",
+  "motion",
+  "materials",
+  "history",
+  "pricing",
+  "account",
+  "login",
+  "terms",
+  "privacy",
+  "refund",
+  "credits",
+  "support",
+  "about",
+]);
+function routeFromUrl(): AppPage {
+  const route = window.location.hash.replace(/^#\/?/, "") as AppPage;
+  return routablePages.has(route) ? route : "home";
+}
 
 const studioPages = [
   "main_image",
@@ -47,16 +82,33 @@ export default function App() {
       ? initialAccount.session
         ? "account"
         : "login"
-      : "home",
+      : ["account", "history"].includes(routeFromUrl()) &&
+          !initialAccount.session
+        ? "login"
+        : routeFromUrl(),
   );
-  const [isAuthenticated, setIsAuthenticated] = useState(
-    () => Boolean(initialAccount.session),
+  const [isAuthenticated, setIsAuthenticated] = useState(() =>
+    Boolean(initialAccount.session),
   );
-  const [activeStudioModule, setActiveStudioModule] =
-    useState<StudioPage>("main_image");
+  const [activeStudioModule, setActiveStudioModule] = useState<StudioPage>(
+    () =>
+      isStudioPage(routeFromUrl())
+        ? (routeFromUrl() as StudioPage)
+        : "main_image",
+  );
+  const [libraryReturn, setLibraryReturn] = useState<{
+    page: AppPage;
+    pickerId?: string;
+  } | null>(null);
+  const [motionMounted, setMotionMounted] = useState(
+    () => routeFromUrl() === "motion",
+  );
   const [motionSeed, setMotionSeed] = useState<ProductInput | null>(null);
   const isWorkspaceVisible = isStudioPage(page);
-  const shouldMountWorkspace = page !== "home" && page !== "history";
+  const [shouldMountWorkspace, setShouldMountWorkspace] = useState(() =>
+    isStudioPage(routeFromUrl()),
+  );
+  const [storageOwner, setStorageOwner] = useState(getStorageOwner);
 
   const handlePageChange = (nextPage: AppPage) => {
     const hasSavedSession = Boolean(getCurrentAccountSnapshot().session);
@@ -79,12 +131,69 @@ export default function App() {
     }
 
     if (isStudioPage(nextPage)) {
+      setShouldMountWorkspace(true);
       setActiveStudioModule(nextPage);
     }
 
+    if (nextPage === "motion") setMotionMounted(true);
     setPage(nextPage);
   };
 
+  useEffect(() => {
+    const toLibrary = (event: Event) => {
+      setLibraryReturn({
+        page,
+        pickerId: (event as CustomEvent).detail?.pickerId,
+      });
+      setPage("materials");
+    };
+    const toLogin = () => handlePageChange("login");
+    const reuse = (event: Event) => {
+      const task = (event as CustomEvent).detail;
+      const target =
+        task?.config?.module === "lifestyle"
+          ? "inspiration"
+          : task?.config?.module;
+      if (studioPages.includes(target)) handlePageChange(target);
+    };
+    window.addEventListener(OPEN_LIBRARY_EVENT, toLibrary);
+    window.addEventListener(OPEN_LOGIN_EVENT, toLogin);
+    window.addEventListener(REUSE_TASK_EVENT, reuse);
+    return () => {
+      window.removeEventListener(OPEN_LIBRARY_EVENT, toLibrary);
+      window.removeEventListener(OPEN_LOGIN_EVENT, toLogin);
+      window.removeEventListener(REUSE_TASK_EVENT, reuse);
+    };
+  }, [page, isAuthenticated]);
+  const returnFromLibrary = () => {
+    if (!libraryReturn) return;
+    handlePageChange(libraryReturn.page);
+    const detail = libraryReturn;
+    setLibraryReturn(null);
+    setTimeout(
+      () =>
+        window.dispatchEvent(new CustomEvent(RETURN_LIBRARY_EVENT, { detail })),
+      0,
+    );
+  };
+
+  useEffect(() => {
+    const url = `${window.location.pathname}${window.location.search}${page === "home" ? "" : `#/${page}`}`;
+    if (
+      `${window.location.pathname}${window.location.search}${window.location.hash}` !==
+      url
+    )
+      window.history.pushState({}, "", url);
+  }, [page]);
+  useEffect(() => {
+    const navigate = () => handlePageChange(routeFromUrl());
+    window.addEventListener("popstate", navigate);
+    window.addEventListener("hashchange", navigate);
+    return () => {
+      window.removeEventListener("popstate", navigate);
+      window.removeEventListener("hashchange", navigate);
+    };
+  }, []);
   const handleLogout = () => {
     clearAccountSession();
     setIsAuthenticated(false);
@@ -93,26 +202,26 @@ export default function App() {
 
   const secondaryPage =
     page === "home" ? (
-      <HomePage onOpenStudio={handlePageChange} />
+      isAuthenticated ? (
+        <StudioDashboard onNavigate={handlePageChange} />
+      ) : (
+        <HomePage onOpenStudio={handlePageChange} />
+      )
     ) : page === "history" ? (
       <HistoryPage />
     ) : page === "pricing" ? (
       <PricingPage onRequireLogin={() => handlePageChange("login")} />
-    ) : page === "motion" ? (
-      <MotionStudioPage
-        initialProduct={motionSeed}
-        onInitialProductConsumed={() => setMotionSeed(null)}
-        isAuthenticated={isAuthenticated}
-        onRequireLogin={() => handlePageChange("login")}
-        onOpenPricing={() => handlePageChange("pricing")}
-      />
     ) : page === "materials" ? (
       <MaterialLibraryPage
+        onReturn={libraryReturn ? returnFromLibrary : undefined}
         isAuthenticated={isAuthenticated}
         onRequireLogin={() => handlePageChange("login")}
       />
     ) : page === "account" ? (
-      <AccountPage paymentStatus={initialPaymentStatus} onLogout={handleLogout} />
+      <AccountPage
+        paymentStatus={initialPaymentStatus}
+        onLogout={handleLogout}
+      />
     ) : page === "login" ? (
       <LoginPage
         onOpenLegal={handlePageChange}
@@ -140,12 +249,16 @@ export default function App() {
       const hasSavedSession = Boolean(getCurrentAccountSnapshot().session);
 
       setIsAuthenticated(hasSavedSession);
+      setStorageOwner(getStorageOwner());
       setPage((currentPage) => {
         if (hasSavedSession && currentPage === "login") {
           return "account";
         }
 
-        if (!hasSavedSession && (currentPage === "account" || currentPage === "history")) {
+        if (
+          !hasSavedSession &&
+          (currentPage === "account" || currentPage === "history")
+        ) {
           return "login";
         }
 
@@ -188,6 +301,18 @@ export default function App() {
       isAuthenticated={isAuthenticated}
     >
       {secondaryPage}
+      {motionMounted ? (
+        <section hidden={page !== "motion"}>
+          <MotionStudioPage
+            key={storageOwner}
+            initialProduct={motionSeed}
+            onInitialProductConsumed={() => setMotionSeed(null)}
+            isAuthenticated={isAuthenticated}
+            onRequireLogin={() => handlePageChange("login")}
+            onOpenPricing={() => handlePageChange("pricing")}
+          />
+        </section>
+      ) : null}
       <section
         className="workspace-route"
         hidden={!isWorkspaceVisible}
@@ -195,6 +320,7 @@ export default function App() {
       >
         {shouldMountWorkspace ? (
           <Workspace
+            key={storageOwner}
             activeModule={getWorkspaceModule(activeStudioModule)}
             isVisible={isWorkspaceVisible}
             isAuthenticated={isAuthenticated}
@@ -208,6 +334,7 @@ export default function App() {
                 createdAt: new Date().toISOString(),
                 source: "upload",
               });
+              setMotionMounted(true);
               setPage("motion");
             }}
           />

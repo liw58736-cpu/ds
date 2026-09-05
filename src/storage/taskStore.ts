@@ -1,3 +1,4 @@
+import { getStorageOwner } from "./workspaceDraftStore";
 import type {
   AspectRatio,
   DetailPageModuleId,
@@ -28,7 +29,12 @@ import type {
   WhiteBackgroundMode,
 } from "../domain/types";
 
-const TASKS_STORAGE_KEY = "commerce-studio-tasks-v1";
+export function getTaskStorageKey(owner = getStorageOwner()): string {
+  // Unattributed legacy records stay with guest storage, never migrate into a signed-in account.
+  return owner === "guest"
+    ? "commerce-studio-tasks-v1"
+    : `kroma-tasks-v2:${encodeURIComponent(owner)}`;
+}
 const COMPACTED_UPLOAD_IMAGE_URL = "blob:kroma-history-upload-compacted";
 const INTERRUPTED_TASK_ERROR = {
   errorCode: "task_interrupted",
@@ -48,11 +54,7 @@ const modules = new Set<GenerationModule>([
   "shopify_banner",
   "video_preview",
 ]);
-const platforms = new Set<Platform>([
-  "amazon",
-  "shopify",
-  "independent_store",
-]);
+const platforms = new Set<Platform>(["amazon", "shopify", "independent_store"]);
 const aspectRatios = new Set<AspectRatio>([
   "original",
   "1:1",
@@ -174,6 +176,7 @@ const statuses = new Set<TaskStatus>([
   "queued",
   "processing",
   "completed",
+  "partial",
   "failed",
 ]);
 
@@ -221,21 +224,20 @@ function parseDetailModuleCounts(
     return {};
   }
 
-  return Object.entries(value).reduce<Partial<Record<DetailPageModuleId, number>>>(
-    (counts, [moduleId, count]) => {
-      if (
-        detailPageModules.has(moduleId as DetailPageModuleId) &&
-        typeof count === "number" &&
-        Number.isFinite(count) &&
-        count > 0
-      ) {
-        counts[moduleId as DetailPageModuleId] = Math.floor(count);
-      }
+  return Object.entries(value).reduce<
+    Partial<Record<DetailPageModuleId, number>>
+  >((counts, [moduleId, count]) => {
+    if (
+      detailPageModules.has(moduleId as DetailPageModuleId) &&
+      typeof count === "number" &&
+      Number.isFinite(count) &&
+      count > 0
+    ) {
+      counts[moduleId as DetailPageModuleId] = Math.floor(count);
+    }
 
-      return counts;
-    },
-    {},
-  );
+    return counts;
+  }, {});
 }
 
 function parseModuleReferenceAssets(
@@ -245,37 +247,46 @@ function parseModuleReferenceAssets(
     return {};
   }
 
-  return Object.entries(value).reduce<Partial<Record<string, ModuleReferenceAsset[]>>>(
-    (assetsByModule, [moduleId, assets]) => {
-      if (!Array.isArray(assets)) {
-        return assetsByModule;
-      }
-
-      const parsedAssets = assets.filter(
-        (asset): asset is ModuleReferenceAsset =>
-          isRecord(asset) &&
-          isString(asset.id) &&
-          isString(asset.fileName) &&
-          isString(asset.imageUrl) &&
-          (!("note" in asset) || asset.note === undefined || isString(asset.note)),
-      );
-
-      if (parsedAssets.length > 0) {
-        assetsByModule[moduleId] = parsedAssets.map((asset) => ({
-          id: asset.id,
-          fileName: asset.fileName,
-          imageUrl: asset.imageUrl,
-          ...(asset.note ? { note: asset.note } : {}),
-        }));
-      }
-
+  return Object.entries(value).reduce<
+    Partial<Record<string, ModuleReferenceAsset[]>>
+  >((assetsByModule, [moduleId, assets]) => {
+    if (!Array.isArray(assets)) {
       return assetsByModule;
-    },
-    {},
-  );
+    }
+
+    const parsedAssets = assets.filter(
+      (asset): asset is ModuleReferenceAsset =>
+        isRecord(asset) &&
+        isString(asset.id) &&
+        isString(asset.fileName) &&
+        isString(asset.imageUrl) &&
+        (!("note" in asset) ||
+          asset.note === undefined ||
+          isString(asset.note)),
+    );
+
+    if (parsedAssets.length > 0) {
+      assetsByModule[moduleId] = parsedAssets.map((asset) => ({
+        id: asset.id,
+        fileName: asset.fileName,
+        imageUrl: asset.imageUrl,
+        ...(asset.note ? { note: asset.note } : {}),
+        ...(asset.noteMode === "instruction"
+          ? { noteMode: "instruction" }
+          : {}),
+        ...(typeof asset.visibleText === "string"
+          ? { visibleText: asset.visibleText }
+          : {}),
+      }));
+    }
+
+    return assetsByModule;
+  }, {});
 }
 
-function parseInspirationSettings(value: unknown): InspirationSettings | undefined {
+function parseInspirationSettings(
+  value: unknown,
+): InspirationSettings | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -308,7 +319,9 @@ function parseInspirationSettings(value: unknown): InspirationSettings | undefin
     !isString(purpose) ||
     !inspirationPurposes.has(purpose as InspirationPurpose) ||
     !isString(productHandling) ||
-    !inspirationProductHandling.has(productHandling as InspirationProductHandling)
+    !inspirationProductHandling.has(
+      productHandling as InspirationProductHandling,
+    )
   ) {
     return undefined;
   }
@@ -321,31 +334,43 @@ function parseInspirationSettings(value: unknown): InspirationSettings | undefin
     purpose: purpose as InspirationPurpose,
     productHandling: productHandling as InspirationProductHandling,
     backgroundChange:
-      isString(backgroundChange) && inspirationChangeIntensities.has(backgroundChange as InspirationChangeIntensity)
+      isString(backgroundChange) &&
+      inspirationChangeIntensities.has(
+        backgroundChange as InspirationChangeIntensity,
+      )
         ? (backgroundChange as InspirationChangeIntensity)
         : "medium",
     poseChange:
-      isString(poseChange) && inspirationChangeIntensities.has(poseChange as InspirationChangeIntensity)
+      isString(poseChange) &&
+      inspirationChangeIntensities.has(poseChange as InspirationChangeIntensity)
         ? (poseChange as InspirationChangeIntensity)
         : "low",
     garmentProportion:
-      isString(garmentProportion) && inspirationGarmentProportions.has(garmentProportion as InspirationGarmentProportion)
+      isString(garmentProportion) &&
+      inspirationGarmentProportions.has(
+        garmentProportion as InspirationGarmentProportion,
+      )
         ? (garmentProportion as InspirationGarmentProportion)
         : "preserve",
     backgroundAction:
-      isString(backgroundAction) && backgroundAction !== "replace" && inspirationEditActions.has(backgroundAction as InspirationEditAction)
+      isString(backgroundAction) &&
+      backgroundAction !== "replace" &&
+      inspirationEditActions.has(backgroundAction as InspirationEditAction)
         ? (backgroundAction as "keep" | "adjust")
         : "keep",
     poseAction:
-      isString(poseAction) && inspirationEditActions.has(poseAction as InspirationEditAction)
+      isString(poseAction) &&
+      inspirationEditActions.has(poseAction as InspirationEditAction)
         ? (poseAction as InspirationEditAction)
         : "keep",
     modelAction:
-      isString(modelAction) && inspirationEditActions.has(modelAction as InspirationEditAction)
+      isString(modelAction) &&
+      inspirationEditActions.has(modelAction as InspirationEditAction)
         ? (modelAction as InspirationEditAction)
         : "keep",
     productAction:
-      isString(productAction) && (productAction === "keep" || productAction === "replace")
+      isString(productAction) &&
+      (productAction === "keep" || productAction === "replace")
         ? (productAction as "keep" | "replace")
         : "replace",
   };
@@ -378,7 +403,9 @@ function parseProductInput(value: unknown): ProductInput | null {
   };
 }
 
-function parseResultAssets(value: unknown): GenerationResultAsset[] | undefined {
+function parseResultAssets(
+  value: unknown,
+): GenerationResultAsset[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
@@ -442,9 +469,11 @@ function parseConfig(value: unknown): GenerationConfig | null {
     return null;
   }
 
-  const parsedModuleReferenceAssets =
-    parseModuleReferenceAssets(moduleReferenceAssets);
-  const parsedInspirationSettings = parseInspirationSettings(inspirationSettings);
+  const parsedModuleReferenceAssets = parseModuleReferenceAssets(
+    moduleReferenceAssets,
+  );
+  const parsedInspirationSettings =
+    parseInspirationSettings(inspirationSettings);
 
   return {
     module: module as GenerationModule,
@@ -455,12 +484,26 @@ function parseConfig(value: unknown): GenerationConfig | null {
     sellingPoints,
     specifications,
     outputLanguage: isString(outputLanguage) ? outputLanguage : "中文",
+    ...(["standard", "brand"].includes(String(value.generationVersion))
+      ? {
+          generationVersion:
+            value.generationVersion as GenerationConfig["generationVersion"],
+        }
+      : {}),
     resolution:
-      isString(resolution) && resolutions.has(resolution as GenerationResolution)
+      isString(resolution) &&
+      resolutions.has(resolution as GenerationResolution)
         ? (resolution as GenerationResolution)
         : "1K",
     selectedMainModules: parseSelectedMainModules(selectedMainModules),
     detailModuleCounts: parseDetailModuleCounts(detailModuleCounts),
+    ...(Array.isArray(value.detailModuleOrder)
+      ? {
+          detailModuleOrder: value.detailModuleOrder.filter((key) =>
+            detailPageModules.has(key),
+          ),
+        }
+      : {}),
     ...(Object.keys(parsedModuleReferenceAssets).length > 0
       ? { moduleReferenceAssets: parsedModuleReferenceAssets }
       : {}),
@@ -518,6 +561,14 @@ function parseTask(value: unknown): GenerationTask | null {
     productInput,
     config,
     status: status as TaskStatus,
+    ...(Array.isArray(value.failedItems) && value.failedItems.length
+      ? {
+          failedItems: value.failedItems.filter(
+            (item) => isRecord(item) && parseConfig(item.config),
+          ) as unknown as GenerationTask["failedItems"],
+        }
+      : {}),
+    ...(value.billingManaged === true ? { billingManaged: true } : {}),
     resultUrls,
     creditCost,
     createdAt,
@@ -589,7 +640,8 @@ function normalizeTask(
   if (
     options.keepResumableTasks === true &&
     task.status === "processing" &&
-    (task.backendTaskId || (task.backendTaskIds && task.backendTaskIds.length > 0))
+    (task.backendTaskId ||
+      (task.backendTaskIds && task.backendTaskIds.length > 0))
   ) {
     return task;
   }
@@ -605,7 +657,7 @@ function normalizeTask(
 }
 
 export function loadTasks(options: LoadTasksOptions = {}): GenerationTask[] {
-  const storedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
+  const storedTasks = localStorage.getItem(getTaskStorageKey());
 
   if (storedTasks === null) {
     return [];
@@ -635,7 +687,7 @@ export function loadTasks(options: LoadTasksOptions = {}): GenerationTask[] {
 
 export function saveTasks(tasks: GenerationTask[]): void {
   try {
-    localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks));
+    localStorage.setItem(getTaskStorageKey(), JSON.stringify(tasks));
     return;
   } catch {
     // Uploaded product images are stored as data URLs so recent tasks can survive
@@ -653,7 +705,7 @@ export function saveTasks(tasks: GenerationTask[]): void {
 
   for (const candidate of candidates) {
     try {
-      localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(candidate));
+      localStorage.setItem(getTaskStorageKey(), JSON.stringify(candidate));
       return;
     } catch {
       // Try the next smaller fallback.

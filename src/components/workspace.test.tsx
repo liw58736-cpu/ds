@@ -1,9 +1,23 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+vi.mock("../domain/imageDimensions", () => ({
+  imageDimensions: vi.fn().mockResolvedValue({ width: 1024, height: 1024 }),
+  fitImageToResolution: () => "1024x1024",
+}));
+import { getTaskStorageKey } from "../storage/taskStore";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GenerationTask } from "../domain/types";
 import { listMaterialLibraryAssets } from "../api/materialLibraryApi";
-import { getAccountSnapshot, replaceAccountSnapshot } from "../storage/accountStore";
+import {
+  getAccountSnapshot,
+  replaceAccountSnapshot,
+} from "../storage/accountStore";
 import { AppShell } from "./AppShell";
 import { Workspace } from "./Workspace";
 
@@ -42,7 +56,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function createStoredTask(overrides: Partial<GenerationTask> = {}): GenerationTask {
+function createStoredTask(
+  overrides: Partial<GenerationTask> = {},
+): GenerationTask {
   return {
     id: "task-history-1",
     productInput: {
@@ -78,7 +94,9 @@ async function chooseLibraryAsset(
 ) {
   await user.click(screen.getByRole("button", { name: triggerName }));
   const dialog = await screen.findByRole("dialog", { name: /从图片库/ });
-  await user.click(within(dialog).getByRole("button", { name: new RegExp(assetName) }));
+  await user.click(
+    within(dialog).getByRole("button", { name: new RegExp(assetName) }),
+  );
 }
 
 describe("Workspace", () => {
@@ -100,15 +118,23 @@ describe("Workspace", () => {
 
     await user.click(heroCard);
 
-    expect(screen.getByRole("alertdialog", { name: "请先选择商品图" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("alertdialog", { name: "请先选择商品图" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("已选 0")).toBeInTheDocument();
     expect(heroCard).toHaveAttribute("aria-pressed", "false");
     await user.click(screen.getByRole("button", { name: "我知道了" }));
 
-    await user.click(within(heroCard).getByRole("button", { name: "添加素材" }));
+    await user.click(
+      within(heroCard).getByRole("button", { name: "添加素材" }),
+    );
 
-    expect(screen.queryByRole("dialog", { name: "首屏 KV素材" })).not.toBeInTheDocument();
-    expect(screen.getByRole("alertdialog", { name: "请先选择商品图" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "首屏 KV素材" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("alertdialog", { name: "请先选择商品图" }),
+    ).toBeInTheDocument();
   });
 
   it("asks for a product image before selecting detail page modules", async () => {
@@ -121,9 +147,13 @@ describe("Workspace", () => {
 
     await user.click(brandCard);
     await user.click(screen.getByRole("button", { name: "我知道了" }));
-    await user.click(screen.getByRole("button", { name: "品牌介绍 增加 1 张" }));
+    await user.click(
+      screen.getByRole("button", { name: "品牌介绍 增加 1 张" }),
+    );
 
-    expect(screen.getByRole("alertdialog", { name: "请先选择商品图" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("alertdialog", { name: "请先选择商品图" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("已选 0")).toBeInTheDocument();
     expect(brandCard).toHaveAttribute("aria-pressed", "false");
   });
@@ -134,7 +164,9 @@ describe("Workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "AI背景" }));
 
-    expect(screen.getByRole("alertdialog", { name: "请先选择商品图" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("alertdialog", { name: "请先选择商品图" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "白底图" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -166,11 +198,15 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     expect(screen.getByRole("option", { name: "日语" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "西班牙语" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "西班牙语" }),
+    ).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("输出语言"), "日语");
     await user.click(screen.getByRole("button", { name: "4K" }));
-    await user.click(screen.getByRole("button", { name: "标准版快速出图，适合批量 SKU" }));
+    await user.click(
+      screen.getByRole("button", { name: "标准版干净清晰，突出商品细节" }),
+    );
 
     expect(screen.getByLabelText("输出语言")).toHaveValue("日语");
     expect(screen.getByRole("button", { name: "4K" })).toHaveAttribute(
@@ -178,7 +214,7 @@ describe("Workspace", () => {
       "true",
     );
     expect(
-      screen.getByRole("button", { name: "标准版快速出图，适合批量 SKU" }),
+      screen.getByRole("button", { name: "标准版干净清晰，突出商品细节" }),
     ).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -186,7 +222,7 @@ describe("Workspace", () => {
     const { unmount } = render(<Workspace />);
 
     for (const label of [
-      "原图尺寸",
+      "原图比例",
       "1:1 方图",
       "4:5 竖图",
       "3:4 竖图",
@@ -199,9 +235,15 @@ describe("Workspace", () => {
     unmount();
     render(<Workspace activeModule="detail_page" />);
 
-    expect(screen.getByRole("button", { name: "3:4 竖图" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "9:16 竖图" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "详情长图" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "3:4 竖图" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "9:16 竖图" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "详情长图" }),
+    ).toBeInTheDocument();
   });
 
   it("updates estimated credits from selected modules, resolution, and edition", async () => {
@@ -210,18 +252,20 @@ describe("Workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
 
-    expect(screen.getByText(/预计消耗 3 积分/)).toBeInTheDocument();
+    expect(screen.getByText(/预计消耗 0 积分/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /首屏 KV/ }));
     await user.click(screen.getByRole("button", { name: /整体展示/ }));
 
-    expect(screen.getByText(/预计消耗 4 积分/)).toBeInTheDocument();
+    expect(screen.getByText(/预计消耗 2 积分/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "2K" }));
 
-    expect(screen.getByText(/预计消耗 6 积分/)).toBeInTheDocument();
+    expect(screen.getByText(/预计消耗 4 积分/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "标准版快速出图，适合批量 SKU" }));
+    await user.click(
+      screen.getByRole("button", { name: "标准版干净清晰，突出商品细节" }),
+    );
 
     expect(screen.getByText(/预计消耗 4 积分/)).toBeInTheDocument();
   });
@@ -235,15 +279,19 @@ describe("Workspace", () => {
     await user.click(
       screen.getByRole("button", { name: "品牌介绍 编辑式封面 + 品牌定位" }),
     );
-    await user.click(screen.getByRole("button", { name: "品牌介绍 增加 1 张" }));
+    await user.click(
+      screen.getByRole("button", { name: "品牌介绍 增加 1 张" }),
+    );
 
     expect(screen.getByText("已选 2")).toBeInTheDocument();
-    expect(screen.getByText(/预计消耗 4 积分/)).toBeInTheDocument();
+    expect(screen.getByText(/预计消耗 2 积分/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "品牌介绍 减少 1 张" }));
+    await user.click(
+      screen.getByRole("button", { name: "品牌介绍 减少 1 张" }),
+    );
 
     expect(screen.getByText("已选 1")).toBeInTheDocument();
-    expect(screen.getByText(/预计消耗 3 积分/)).toBeInTheDocument();
+    expect(screen.getByText(/预计消耗 1 积分/)).toBeInTheDocument();
   });
 
   it("lets users add reference images and notes to a module card", async () => {
@@ -256,7 +304,9 @@ describe("Workspace", () => {
       name: "包装展示 礼盒、配件与开箱细节",
     });
 
-    await user.click(within(packagingCard).getByRole("button", { name: "添加素材" }));
+    await user.click(
+      within(packagingCard).getByRole("button", { name: "添加素材" }),
+    );
     await chooseLibraryAsset(user, "从图片库添加模块参考图");
     await user.type(
       screen.getByLabelText("素材备注"),
@@ -278,7 +328,9 @@ describe("Workspace", () => {
       name: "颜色尺码 穿着主体 + 色卡 / 尺码",
     });
 
-    await user.click(within(colorSizeCard).getByRole("button", { name: "添加素材" }));
+    await user.click(
+      within(colorSizeCard).getByRole("button", { name: "添加素材" }),
+    );
     await user.type(screen.getByLabelText("素材备注"), "只有XL码");
     await user.click(screen.getByRole("button", { name: "保存素材" }));
 
@@ -296,7 +348,9 @@ describe("Workspace", () => {
       name: "包装展示 礼盒、配件与开箱细节",
     });
 
-    await user.click(within(packagingCard).getByRole("button", { name: "添加素材" }));
+    await user.click(
+      within(packagingCard).getByRole("button", { name: "添加素材" }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "包装展示素材" });
     const parameterPanel = document.querySelector(".parameter-panel");
@@ -313,11 +367,22 @@ describe("Workspace", () => {
     expect(screen.queryByLabelText("输出语言")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("设计简报")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("促销信息")).not.toBeInTheDocument();
-    for (const label of ["白底图", "幽灵模特", "AI背景", "精修", "换装", "换模特"]) {
+    for (const label of [
+      "白底图",
+      "幽灵模特",
+      "AI背景",
+      "精修",
+      "换装",
+      "换模特",
+    ]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
-    expect(screen.queryByRole("button", { name: "产品展示" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "原图尺寸" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "产品展示" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "原图比例" }),
+    ).toBeInTheDocument();
   });
 
   it("shows a target garment library picker only for outfit change", async () => {
@@ -326,7 +391,9 @@ describe("Workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
 
-    expect(screen.queryByRole("button", { name: "从图片库选择换装服饰图" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "从图片库选择换装服饰图" }),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "换装" }));
     await chooseLibraryAsset(user, "从图片库选择换装服饰图");
@@ -339,10 +406,16 @@ describe("Workspace", () => {
     render(<Workspace activeModule="white_background" />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    expect(screen.queryByRole("button", { name: "从图片库选择目标模特照片" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "从图片库选择目标模特照片" }),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "换模特" }));
-    await chooseLibraryAsset(user, "从图片库选择目标模特照片", "library-product-2.png");
+    await chooseLibraryAsset(
+      user,
+      "从图片库选择目标模特照片",
+      "library-product-2.png",
+    );
 
     expect(screen.getByAltText("目标模特照片")).toBeInTheDocument();
     expect(screen.getByText("library-product-2.png")).toBeInTheDocument();
@@ -353,19 +426,53 @@ describe("Workspace", () => {
     render(<Workspace activeModule="lifestyle" />);
 
     await chooseLibraryAsset(user, "从图片库选择灵感原图");
-    await chooseLibraryAsset(user, "从图片库选择产品服装图", "library-product-2.png");
-    expect(screen.getByRole("heading", { name: "灵感创作" })).toBeInTheDocument();
+    await chooseLibraryAsset(
+      user,
+      "从图片库选择产品服装图",
+      "library-product-2.png",
+    );
+    expect(
+      screen.getByRole("heading", { name: "灵感创作" }),
+    ).toBeInTheDocument();
     expect(screen.getByAltText("灵感原图")).toBeInTheDocument();
     expect(await screen.findByAltText("替换产品服装图")).toBeInTheDocument();
     expect(screen.getByText("library-product-2.png")).toBeInTheDocument();
-    expect(within(screen.getByLabelText("背景")).getByRole("button", { name: "保持" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(screen.getByLabelText("产品 / 服装")).getByRole("button", { name: "替换" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(within(screen.getByLabelText("姿势")).getByRole("button", { name: "调整" }));
-    expect(within(screen.getByLabelText("姿势")).getByRole("button", { name: "调整" })).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(screen.getByLabelText("背景")).getByRole("button", {
+        name: "保持",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(screen.getByLabelText("产品 / 服装")).getByRole("button", {
+        name: "替换",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(
+      within(screen.getByLabelText("姿势")).getByRole("button", {
+        name: "调整",
+      }),
+    );
+    expect(
+      within(screen.getByLabelText("姿势")).getByRole("button", {
+        name: "调整",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("姿势变化幅度")).toBeInTheDocument();
-    await user.click(within(screen.getByLabelText("姿势变化幅度")).getByRole("button", { name: "高" }));
-    expect(within(screen.getByLabelText("姿势变化幅度")).getByRole("button", { name: "高" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(within(screen.getByLabelText("背景")).getByRole("button", { name: "调整" }));
+    await user.click(
+      within(screen.getByLabelText("姿势变化幅度")).getByRole("button", {
+        name: "高",
+      }),
+    );
+    expect(
+      within(screen.getByLabelText("姿势变化幅度")).getByRole("button", {
+        name: "高",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(
+      within(screen.getByLabelText("背景")).getByRole("button", {
+        name: "调整",
+      }),
+    );
     expect(screen.getByLabelText("背景变化幅度")).toBeInTheDocument();
   });
 
@@ -377,7 +484,9 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "换装" }));
     await user.click(screen.getByRole("button", { name: "生成换装" }));
 
-    expect(screen.getByRole("alertdialog", { name: "请上传换装服饰" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("alertdialog", { name: "请上传换装服饰" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("正在生成")).not.toBeInTheDocument();
   });
 
@@ -389,7 +498,9 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "换模特" }));
     await user.click(screen.getByRole("button", { name: "生成换模特" }));
 
-    expect(screen.getByRole("alertdialog", { name: "请上传目标模特" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("alertdialog", { name: "请上传目标模特" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("正在生成")).not.toBeInTheDocument();
   });
 
@@ -414,8 +525,12 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     expect(screen.queryByLabelText("上传商品图")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "从图片库选择商品图" }));
-    expect(await screen.findByRole("dialog", { name: "从图片库选择商品图" })).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "从图片库选择商品图" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "从图片库选择商品图" }),
+    ).toBeInTheDocument();
   });
 
   it("displays the product selected from the image library", async () => {
@@ -435,7 +550,9 @@ describe("Workspace", () => {
   it("does not expose local file inputs outside the image library", () => {
     render(<Workspace />);
 
-    expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
+    expect(
+      document.querySelector('input[type="file"]'),
+    ).not.toBeInTheDocument();
   });
 
   it("allows replacing a product with another image-library selection", async () => {
@@ -443,7 +560,11 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     await chooseLibraryAsset(user, "从图片库选择商品图");
-    await chooseLibraryAsset(user, "从图片库选择商品图", "library-product-2.png");
+    await chooseLibraryAsset(
+      user,
+      "从图片库选择商品图",
+      "library-product-2.png",
+    );
     expect(screen.getByAltText("当前商品图")).toHaveAttribute(
       "src",
       "https://cdn.example.com/library-product-2.png",
@@ -455,14 +576,22 @@ describe("Workspace", () => {
     const { rerender } = render(<Workspace activeModule="main_image" />);
 
     await chooseLibraryAsset(user, "从图片库选择商品图");
-    expect(await screen.findByText("library-product-1.png")).toBeInTheDocument();
+    expect(
+      await screen.findByText("library-product-1.png"),
+    ).toBeInTheDocument();
 
     rerender(<Workspace activeModule="detail_page" />);
     expect(screen.queryByText("library-product-1.png")).not.toBeInTheDocument();
     expect(screen.queryByAltText("当前商品图")).not.toBeInTheDocument();
 
-    await chooseLibraryAsset(user, "从图片库选择商品图", "library-product-2.png");
-    expect(await screen.findByText("library-product-2.png")).toBeInTheDocument();
+    await chooseLibraryAsset(
+      user,
+      "从图片库选择商品图",
+      "library-product-2.png",
+    );
+    expect(
+      await screen.findByText("library-product-2.png"),
+    ).toBeInTheDocument();
 
     rerender(<Workspace activeModule="main_image" />);
     expect(screen.getByText("library-product-1.png")).toBeInTheDocument();
@@ -475,7 +604,9 @@ describe("Workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
     await user.click(screen.getByRole("button", { name: /细节特写/ }));
-    await user.click(screen.getByRole("button", { name: "标准版快速出图，适合批量 SKU" }));
+    await user.click(
+      screen.getByRole("button", { name: "标准版干净清晰，突出商品细节" }),
+    );
     await user.click(screen.getByRole("button", { name: "4K" }));
     await user.click(screen.getByRole("button", { name: "生成商品主图" }));
 
@@ -484,7 +615,7 @@ describe("Workspace", () => {
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
 
       expect(storedTasks[0]).toMatchObject({
@@ -504,14 +635,16 @@ describe("Workspace", () => {
     render(<Workspace activeModule="detail_page" />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
-    await user.click(screen.getByRole("button", { name: "主图展示 首屏 KV：建立第一眼识别" }));
+    await user.click(
+      screen.getByRole("button", { name: "主图展示 首屏 KV：建立第一眼识别" }),
+    );
     await user.click(screen.getByRole("button", { name: "生成详情页" }));
 
     expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
 
       expect(storedTasks[0]).toMatchObject({
@@ -561,6 +694,10 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     fireEvent.click(screen.getByRole("button", { name: "使用示例商品" }));
+    if (screen.queryByRole("button", { name: /首屏 KV 建立/ }))
+      fireEvent.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
+    else if (screen.queryByRole("button", { name: /主图展示 首屏 KV/ }))
+      fireEvent.click(screen.getByRole("button", { name: /主图展示 首屏 KV/ }));
 
     await waitFor(() => {
       expect(screen.getByAltText("当前商品图")).toBeInTheDocument();
@@ -571,7 +708,7 @@ describe("Workspace", () => {
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
 
       expect(storedTasks).toHaveLength(1);
@@ -583,11 +720,13 @@ describe("Workspace", () => {
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
 
       expect(storedTasks).toHaveLength(2);
-      expect(storedTasks.every((task) => task.status === "processing")).toBe(true);
+      expect(storedTasks.every((task) => task.status === "processing")).toBe(
+        true,
+      );
     });
 
     screen
@@ -598,15 +737,18 @@ describe("Workspace", () => {
   it("allows new submissions when three local tasks are already running", async () => {
     vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const createdTasks: Array<{ resolve: (response: Response) => void }> = [];
-    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
-      const requestUrl = String(input);
-      if (requestUrl.endsWith("/image/generate")) {
-        return new Promise<Response>((resolve) => {
-          createdTasks.push({ resolve });
-        });
-      }
-      return new Promise<Response>(() => undefined);
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const requestUrl = String(input);
+        if (requestUrl.endsWith("/image/generate")) {
+          return new Promise<Response>((resolve) => {
+            createdTasks.push({ resolve });
+          });
+        }
+        return new Promise<Response>(() => undefined);
+      }),
+    );
     const runningTasks = Array.from({ length: 3 }, (_, index) =>
       createStoredTask({
         id: `task-running-${index + 1}`,
@@ -618,23 +760,24 @@ describe("Workspace", () => {
         completedAt: undefined,
       }),
     );
-    localStorage.setItem(
-      "commerce-studio-tasks-v1",
-      JSON.stringify(runningTasks),
-    );
+    localStorage.setItem(getTaskStorageKey(), JSON.stringify(runningTasks));
     render(<Workspace />);
 
     fireEvent.click(screen.getByRole("button", { name: "使用示例商品" }));
     fireEvent.click(screen.getByText("首屏 KV"));
 
-    expect(await screen.findByRole("button", { name: "生成商品主图" })).toBeEnabled();
+    expect(
+      await screen.findByRole("button", { name: "生成商品主图" }),
+    ).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "生成商品主图" }));
 
     await waitFor(() => {
       expect(createdTasks).toHaveLength(1);
     });
-    expect(screen.queryByRole("button", { name: "任务已满" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "任务已满" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps in-flight tasks when a delayed history sync finishes", async () => {
@@ -701,15 +844,23 @@ describe("Workspace", () => {
         return Promise.reject(new Error(`Unexpected request: ${requestUrl}`));
       }),
     );
-    const { container, rerender } = render(<Workspace activeModule="detail_page" />);
+    const { container, rerender } = render(
+      <Workspace activeModule="detail_page" />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "使用示例商品" }));
-    fireEvent.click(container.querySelector(".generate-button") as HTMLButtonElement);
+    if (screen.queryByRole("button", { name: /首屏 KV 建立/ }))
+      fireEvent.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
+    else if (screen.queryByRole("button", { name: /主图展示 首屏 KV/ }))
+      fireEvent.click(screen.getByRole("button", { name: /主图展示 首屏 KV/ }));
+    fireEvent.click(
+      container.querySelector(".generate-button") as HTMLButtonElement,
+    );
 
     let firstTaskId = "";
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
 
       expect(storedTasks).toHaveLength(1);
@@ -719,17 +870,26 @@ describe("Workspace", () => {
 
     rerender(<Workspace activeModule="white_background" />);
     fireEvent.click(screen.getByRole("button", { name: "使用示例商品" }));
-    fireEvent.click(container.querySelector(".generate-button") as HTMLButtonElement);
+    if (screen.queryByRole("button", { name: /首屏 KV 建立/ }))
+      fireEvent.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
+    else if (screen.queryByRole("button", { name: /主图展示 首屏 KV/ }))
+      fireEvent.click(screen.getByRole("button", { name: /主图展示 首屏 KV/ }));
+    fireEvent.click(
+      container.querySelector(".generate-button") as HTMLButtonElement,
+    );
 
     let secondTaskId = "";
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
 
       expect(storedTasks).toHaveLength(2);
-      expect(storedTasks.every((task) => task.status === "processing")).toBe(true);
-      secondTaskId = storedTasks.find((task) => task.id !== firstTaskId)?.id ?? "";
+      expect(storedTasks.every((task) => task.status === "processing")).toBe(
+        true,
+      );
+      secondTaskId =
+        storedTasks.find((task) => task.id !== firstTaskId)?.id ?? "";
     });
 
     resolveHistory({
@@ -739,7 +899,7 @@ describe("Workspace", () => {
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
       const storedTaskIds = storedTasks.map((task) => task.id);
 
@@ -758,14 +918,20 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    if (screen.queryByRole("button", { name: /首屏 KV 建立/ }))
+      fireEvent.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
+    else if (screen.queryByRole("button", { name: /主图展示 首屏 KV/ }))
+      fireEvent.click(screen.getByRole("button", { name: /主图展示 首屏 KV/ }));
     await user.click(screen.getByRole("button", { name: "生成商品主图" }));
 
     expect(await screen.findByAltText("生成结果")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "最近任务" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "最近任务" }),
+    ).not.toBeInTheDocument();
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
 
       expect(storedTasks).toHaveLength(1);
@@ -778,15 +944,21 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    if (screen.queryByRole("button", { name: /首屏 KV 建立/ }))
+      fireEvent.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
+    else if (screen.queryByRole("button", { name: /主图展示 首屏 KV/ }))
+      fireEvent.click(screen.getByRole("button", { name: /主图展示 首屏 KV/ }));
     await user.type(screen.getByLabelText("设计简报"), "fail");
     await user.click(screen.getByRole("button", { name: "生成商品主图" }));
 
-    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(1);
+    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(
+      1,
+    );
     expect(screen.queryByText("生成失败")).not.toBeInTheDocument();
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
 
       expect(storedTasks[0]).toMatchObject({
@@ -802,6 +974,10 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    if (screen.queryByRole("button", { name: /首屏 KV 建立/ }))
+      fireEvent.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
+    else if (screen.queryByRole("button", { name: /主图展示 首屏 KV/ }))
+      fireEvent.click(screen.getByRole("button", { name: /主图展示 首屏 KV/ }));
     fireEvent.click(screen.getByRole("button", { name: "生成商品主图" }));
     fireEvent.click(screen.getByRole("button", { name: "取消生成" }));
 
@@ -813,7 +989,7 @@ describe("Workspace", () => {
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
 
       expect(storedTasks[0]).toMatchObject({
@@ -844,10 +1020,7 @@ describe("Workspace", () => {
         source: "upload",
       },
     });
-    localStorage.setItem(
-      "commerce-studio-tasks-v1",
-      JSON.stringify([storedTask]),
-    );
+    localStorage.setItem(getTaskStorageKey(), JSON.stringify([storedTask]));
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: () =>
@@ -875,7 +1048,7 @@ describe("Workspace", () => {
   it("loads stored processing tasks as interrupted preview failures without locking generation", async () => {
     const user = userEvent.setup();
     localStorage.setItem(
-      "commerce-studio-tasks-v1",
+      getTaskStorageKey(),
       JSON.stringify([
         createStoredTask({
           status: "processing",
@@ -890,10 +1063,18 @@ describe("Workspace", () => {
     expect(
       screen.getByText("任务在上次会话中断，请重新生成。"),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "复用参数" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "复用参数" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重试" }),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    if (screen.queryByRole("button", { name: /首屏 KV 建立/ }))
+      fireEvent.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
+    else if (screen.queryByRole("button", { name: /主图展示 首屏 KV/ }))
+      fireEvent.click(screen.getByRole("button", { name: /主图展示 首屏 KV/ }));
 
     expect(screen.getByRole("button", { name: "生成商品主图" })).toBeEnabled();
   });
@@ -916,10 +1097,7 @@ describe("Workspace", () => {
         source: "upload",
       },
     });
-    localStorage.setItem(
-      "commerce-studio-tasks-v1",
-      JSON.stringify([storedTask]),
-    );
+    localStorage.setItem(getTaskStorageKey(), JSON.stringify([storedTask]));
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -947,14 +1125,11 @@ describe("Workspace", () => {
     expect(screen.getByText("Trying Wuyinkeji HD...")).toBeInTheDocument();
     expect(
       await screen.findByAltText("生成结果", {}, { timeout: 6000 }),
-    ).toHaveAttribute(
-      "src",
-      "https://cdn.example.com/resumed-result.png",
-    );
+    ).toHaveAttribute("src", "https://cdn.example.com/resumed-result.png");
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
 
       expect(storedTasks[0]).toMatchObject({
@@ -964,7 +1139,7 @@ describe("Workspace", () => {
         resultUrls: ["https://cdn.example.com/resumed-result.png"],
       });
     });
-  });
+  }, 10000);
 
   it("shows returned images from stored processing tasks without polling expired backend tasks", async () => {
     vi.stubEnv("VITE_KROMA_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
@@ -992,10 +1167,7 @@ describe("Workspace", () => {
         source: "upload",
       },
     });
-    localStorage.setItem(
-      "commerce-studio-tasks-v1",
-      JSON.stringify([storedTask]),
-    );
+    localStorage.setItem(getTaskStorageKey(), JSON.stringify([storedTask]));
     const fetchMock = vi.fn(() =>
       Promise.reject(new Error("Expired backend task should not be polled")),
     );
@@ -1014,7 +1186,7 @@ describe("Workspace", () => {
       );
     });
     const storedTasks = JSON.parse(
-      localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+      localStorage.getItem(getTaskStorageKey()) ?? "[]",
     ) as GenerationTask[];
     expect(storedTasks[0]).toMatchObject({
       id: "task-resume-with-results-ui",
@@ -1031,7 +1203,7 @@ describe("Workspace", () => {
 
   it("treats persisted uploaded blob tasks as result-only after reload", () => {
     localStorage.setItem(
-      "commerce-studio-tasks-v1",
+      getTaskStorageKey(),
       JSON.stringify([
         createStoredTask({
           productInput: {
@@ -1051,13 +1223,17 @@ describe("Workspace", () => {
       "src",
       "/safe-result.png",
     );
-    expect(screen.queryByRole("button", { name: "复用参数" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "复用参数" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重试" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows persisted failed upload blob tasks as non-actionable preview errors", () => {
     localStorage.setItem(
-      "commerce-studio-tasks-v1",
+      getTaskStorageKey(),
       JSON.stringify([
         createStoredTask({
           status: "failed",
@@ -1080,13 +1256,17 @@ describe("Workspace", () => {
     expect(
       screen.getByText("原始上传图已失效，请重新上传后再生成。"),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "复用参数" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "复用参数" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重试" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows persisted processing upload blob tasks as upload-source preview errors", () => {
     localStorage.setItem(
-      "commerce-studio-tasks-v1",
+      getTaskStorageKey(),
       JSON.stringify([
         createStoredTask({
           status: "processing",
@@ -1108,14 +1288,20 @@ describe("Workspace", () => {
     expect(
       screen.getByText("原始上传图已失效，请重新上传后再生成。"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("任务在上次会话中断，请重新生成。")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "复用参数" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("任务在上次会话中断，请重新生成。"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "复用参数" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重试" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows persisted queued upload blob tasks as upload-source preview errors", () => {
     localStorage.setItem(
-      "commerce-studio-tasks-v1",
+      getTaskStorageKey(),
       JSON.stringify([
         createStoredTask({
           status: "queued",
@@ -1137,9 +1323,15 @@ describe("Workspace", () => {
     expect(
       screen.getByText("原始上传图已失效，请重新上传后再生成。"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("任务在上次会话中断，请重新生成。")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "复用参数" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("任务在上次会话中断，请重新生成。"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "复用参数" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重试" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps historical task errors out of urgent alert regions", async () => {
@@ -1147,10 +1339,16 @@ describe("Workspace", () => {
     render(<Workspace />);
 
     await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    if (screen.queryByRole("button", { name: /首屏 KV 建立/ }))
+      fireEvent.click(screen.getByRole("button", { name: /首屏 KV 建立/ }));
+    else if (screen.queryByRole("button", { name: /主图展示 首屏 KV/ }))
+      fireEvent.click(screen.getByRole("button", { name: /主图展示 首屏 KV/ }));
     await user.type(screen.getByLabelText("设计简报"), "fail");
     await user.click(screen.getByRole("button", { name: "生成商品主图" }));
 
-    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(1);
+    expect(await screen.findAllByText("模拟生成失败，请重试。")).toHaveLength(
+      1,
+    );
     expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
 
@@ -1241,14 +1439,13 @@ describe("Workspace", () => {
     await user.click(screen.getByRole("button", { name: "精修" }));
     await user.click(screen.getByRole("button", { name: "生成精修" }));
 
-    expect(await screen.findByAltText("生成结果", {}, { timeout: 3500 })).toHaveAttribute(
-      "src",
-      "https://cdn.example.com/ai-tool-result.png",
-    );
+    expect(
+      await screen.findByAltText("生成结果", {}, { timeout: 3500 }),
+    ).toHaveAttribute("src", "https://cdn.example.com/ai-tool-result.png");
 
     await waitFor(() => {
       const storedTasks = JSON.parse(
-        localStorage.getItem("commerce-studio-tasks-v1") ?? "[]",
+        localStorage.getItem(getTaskStorageKey()) ?? "[]",
       ) as GenerationTask[];
 
       expect(storedTasks[0]).toMatchObject({
@@ -1257,7 +1454,6 @@ describe("Workspace", () => {
       });
     });
   });
-
 });
 
 describe("AppShell", () => {
@@ -1265,11 +1461,7 @@ describe("AppShell", () => {
     const user = userEvent.setup();
     const onPageChange = vi.fn();
     const { container } = render(
-      <AppShell
-        page="main_image"
-        onPageChange={onPageChange}
-        isAuthenticated
-      >
+      <AppShell page="main_image" onPageChange={onPageChange} isAuthenticated>
         <div />
       </AppShell>,
     );
@@ -1280,7 +1472,7 @@ describe("AppShell", () => {
     const navButtons = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".topnav-button"),
     );
-    expect(navButtons).toHaveLength(10);
+    expect(navButtons).toHaveLength(6);
     navButtons.forEach((button) => expect(button).toBeEnabled());
 
     await user.click(screen.getByRole("button", { name: "价格" }));

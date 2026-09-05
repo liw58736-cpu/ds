@@ -1,3 +1,8 @@
+import { fetchWithTimeout } from "./requestTimeout";
+import {
+  fitImageToResolution,
+  imageDimensions,
+} from "../domain/imageDimensions";
 import type { GenerationTaskResponse } from "./mockBackendClient";
 import type { GenerationTaskCreateRequest } from "./apiContracts";
 import type { AspectRatio, GenerationResolution } from "../domain/types";
@@ -5,6 +10,7 @@ import { getAccountAccessToken } from "../storage/accountStore";
 import { refreshKromaSession } from "./accountApi";
 
 export interface KromaGenerateRequest {
+  context?: GenerationTaskCreateRequest["body"]["context"];
   prompt: string;
   task_type: "ecommerce" | "image_edit" | "retouch";
   style: string;
@@ -20,7 +26,9 @@ export interface KromaGenerateRequest {
 
 interface KromaTaskResponse {
   task_id: string;
-  status: "pending" | "processing" | "done" | "error";
+  billing_managed?: boolean;
+  credits_charged?: number;
+  status: "queued" | "pending" | "processing" | "done" | "error";
   image_url?: string | null;
   image_base64?: string | null;
   channel_used?: string | null;
@@ -61,9 +69,10 @@ export function shouldUseKromaGenerationBackend(): boolean {
 
 export function buildKromaGenerateRequest(
   request: GenerationTaskCreateRequest,
-  imageInput: Pick<KromaGenerateRequest, "image_url" | "image_base64"> = getDirectImageInput(
-    request.body.product.imageUrl,
-  ),
+  imageInput: Pick<
+    KromaGenerateRequest,
+    "image_url" | "image_base64"
+  > = getDirectImageInput(request.body.product.imageUrl),
 ): KromaGenerateRequest {
   const { config, prompt, routeMode, route } = request.body;
   const moduleReferenceImageInput = getModuleReferenceImageInput(request);
@@ -72,6 +81,7 @@ export function buildKromaGenerateRequest(
     Boolean(moduleReferenceImageInput.template_image_base64s?.length);
 
   return {
+    context: request.body.context,
     prompt: prompt.finalPrompt,
     task_type: getKromaTaskType(config),
     style: buildKromaStyle(config, routeMode),
@@ -114,7 +124,15 @@ function getKromaTaskType(
 
 function getModuleReferenceImageInput(
   request: GenerationTaskCreateRequest,
-): Pick<KromaGenerateRequest, "template_image_base64" | "template_image_base64s"> {
+): Pick<
+  KromaGenerateRequest,
+  "template_image_base64" | "template_image_base64s"
+> {
+  if (
+    request.body.config.module === "lifestyle" &&
+    request.body.config.inspirationSettings?.productAction === "keep"
+  )
+    return {};
   const moduleIds = request.body.prompt.modules.map((module) => module.id);
   const expandedModuleIds = moduleIds.flatMap((moduleId) =>
     moduleId === "inspiration"
@@ -128,9 +146,10 @@ function getModuleReferenceImageInput(
         .filter(Boolean),
     )
     .filter((imageUrl, index, allUrls) => allUrls.indexOf(imageUrl) === index);
-  const imageUrls = request.body.config.module === "lifestyle"
-    ? allImageUrls.slice(0, 1)
-    : allImageUrls;
+  const imageUrls =
+    request.body.config.module === "lifestyle"
+      ? allImageUrls.slice(0, 1)
+      : allImageUrls;
 
   if (imageUrls.length === 0) {
     return {};
@@ -181,16 +200,26 @@ export async function submitKromaGenerationTask(
     throw new Error("Kroma image backend URL is not configured.");
   }
 
-  const body = JSON.stringify(
-    buildKromaGenerateRequest(
-      request,
-      await resolveKromaImageInput(request.body.product.imageUrl),
-    ),
+  const payload = buildKromaGenerateRequest(
+    request,
+    await resolveKromaImageInput(request.body.product.imageUrl),
   );
-  const response = await fetchKromaWithAuthRefresh(`${baseUrl}/image/generate`, {
-    method: "POST",
-    body,
-  });
+  if (request.body.config.aspectRatio === "original") {
+    const dimensions = await imageDimensions(request.body.product.imageUrl);
+    payload.size = fitImageToResolution(
+      dimensions.width,
+      dimensions.height,
+      request.body.config.resolution,
+    );
+  }
+  const body = JSON.stringify(payload);
+  const response = await fetchKromaWithAuthRefresh(
+    `${baseUrl}/image/generate`,
+    {
+      method: "POST",
+      body,
+    },
+  );
 
   if (!response.ok) {
     const text = await response.text();
@@ -244,7 +273,12 @@ export async function cancelKromaGenerationTask(
       { method: "POST" },
     );
 
-    return response.ok;
+    if (!response.ok) return false;
+    try {
+      return (await response.json()).canceled !== false;
+    } catch {
+      return true;
+    }
   } catch {
     return false;
   }
@@ -319,12 +353,22 @@ async function fetchKromaTask(
   | { status: "ok"; task: KromaTaskResponse }
   | { status: "failed"; task: GenerationTaskResponse }
 > {
-  const pollResponse = await fetchKromaWithAuthRefresh(
-    `${baseUrl}/image/task/${taskId}`,
-    {
-      method: "GET",
-    },
-  );
+  let pollResponse: Response;
+  try {
+    pollResponse = await fetchKromaWithAuthRefresh(
+      `${baseUrl}/image/task/${taskId}`,
+      { method: "GET" },
+    );
+  } catch {
+    return {
+      status: "ok",
+      task: {
+        task_id: taskId,
+        status: "processing",
+        progress: "连接中断，正在重新获取进度",
+      },
+    };
+  }
 
   if (!pollResponse.ok) {
     if (isRetryableTaskPollStatus(pollResponse.status)) {
@@ -386,7 +430,10 @@ function completedKromaTask(
     taskId: task.task_id,
     status: "completed",
     resultUrls: [resultUrl],
-    creditCost: request.body.billing.estimatedCreditCost,
+    billingManaged: task.billing_managed,
+    creditCost: task.billing_managed
+      ? (task.credits_charged ?? 0)
+      : request.body.billing.estimatedCreditCost,
     routeMode: request.body.routeMode,
     ...(task.channel_used ? { channelUsed: task.channel_used } : {}),
   };
@@ -454,7 +501,7 @@ async function resolveKromaImageInput(
   }
 
   try {
-    const response = await fetch(imageUrl);
+    const response = await fetchWithTimeout(imageUrl);
 
     if (!response.ok) {
       return directInput;
@@ -528,7 +575,7 @@ async function fetchKromaWithAuthRefresh(
   url: string,
   init: Omit<RequestInit, "headers">,
 ): Promise<Response> {
-  const response = await fetch(url, buildKromaRequestInit(init));
+  const response = await fetchWithTimeout(url, buildKromaRequestInit(init));
 
   if (!isExpiredAuthResponse(response)) {
     return response;
@@ -547,7 +594,7 @@ async function fetchKromaWithAuthRefresh(
     );
   }
 
-  return fetch(url, buildKromaRequestInit(init, freshToken));
+  return fetchWithTimeout(url, buildKromaRequestInit(init, freshToken));
 }
 
 function buildKromaRequestInit(

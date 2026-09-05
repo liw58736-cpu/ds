@@ -1,3 +1,5 @@
+import { getStorageOwner } from "../storage/workspaceDraftStore";
+import { fetchWithTimeout } from "./requestTimeout";
 import { type GenerateInput } from "../providers/generationProvider";
 import { GenerationProviderError } from "../providers/generationProvider";
 import { estimateGenerationCredits } from "../domain/creditCost";
@@ -12,7 +14,10 @@ import type {
 } from "../domain/types";
 import { getAccountAccessToken } from "../storage/accountStore";
 import { loadTasks, saveTasks } from "../storage/taskStore";
-import { buildGenerationTaskRequest, buildTaskListRequest } from "./apiContracts";
+import {
+  buildGenerationTaskRequest,
+  buildTaskListRequest,
+} from "./apiContracts";
 import { refreshKromaSession } from "./accountApi";
 import {
   cancelKromaGenerationTask,
@@ -22,7 +27,10 @@ import {
 } from "./kromaGenerationAdapter";
 import { submitGenerationTask } from "./mockBackendClient";
 import type { GenerationTaskResponse } from "./mockBackendClient";
-import { requestRemoteJson, shouldUseRemoteBackend } from "./remoteBackendClient";
+import {
+  requestRemoteJson,
+  shouldUseRemoteBackend,
+} from "./remoteBackendClient";
 
 interface GenerationApiOptions {
   onProgress?: (progress: string) => void;
@@ -35,6 +43,8 @@ interface GenerationApiOptions {
 }
 
 interface ListGenerationTasksOptions {
+  offset?: number;
+  strict?: boolean;
   limit?: number;
 }
 
@@ -67,7 +77,8 @@ export async function createGenerationTask(
       creditCost: 0,
       routeMode: request.body.routeMode,
       errorCode: "generation_backend_unconfigured",
-      errorMessage: "\u771f\u5b9e\u751f\u56fe\u540e\u7aef\u672a\u914d\u7f6e\uff0c\u8bf7\u8054\u7cfb\u652f\u6301\u3002",
+      errorMessage:
+        "\u771f\u5b9e\u751f\u56fe\u540e\u7aef\u672a\u914d\u7f6e\uff0c\u8bf7\u8054\u7cfb\u652f\u6301\u3002",
     };
   }
 
@@ -78,6 +89,7 @@ export async function resumeGenerationTask(
   task: GenerationTask,
   options: GenerationApiOptions = {},
 ): Promise<GenerationResult> {
+  if (task.billingManaged) return resumeManagedGeneration(task, options);
   const expandedInputs = expandGenerationInputs({
     product: task.productInput,
     config: task.config,
@@ -98,7 +110,7 @@ export async function resumeGenerationTask(
     );
   }
 
-  const responses = await Promise.all(
+  const responses = await Promise.allSettled(
     expandedInputs.map((generationInput, index) =>
       resumeKromaGenerationTask(
         buildGenerationTaskRequest(generationInput),
@@ -110,36 +122,53 @@ export async function resumeGenerationTask(
       ),
     ),
   );
-  const response = responses.find((item) => item.status === "failed");
+  return combineGenerationResponses(responses, expandedInputs, task.config);
+}
 
-  if (response !== undefined) {
-    throw new GenerationProviderError(
-      response.errorCode ?? "unknown_generation_error",
-      response.errorMessage ?? "\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002",
-    );
+async function resumeManagedGeneration(
+  task: GenerationTask,
+  options: GenerationApiOptions,
+): Promise<GenerationResult> {
+  const owner = getStorageOwner();
+  const deadline = Date.now() + 30 * 60 * 1000;
+  while (Date.now() < deadline) {
+    if (getStorageOwner() !== owner || options.shouldContinue?.() === false)
+      throw new GenerationProviderError("generation_cancelled", "任务查询已停止。");
+    let rows: GenerationTask[] = [];
+    try {
+      rows = await requestWebGenerationJson<GenerationTask[]>(
+        `/generations?group_id=${encodeURIComponent(task.id)}`, { method: "GET" },
+      );
+    } catch {
+      options.onProgress?.("正在恢复任务连接");
+    }
+    const current = rows.find((row) => row.id === task.id);
+    if (current?.status === "completed" || current?.status === "partial") {
+      return {
+        resultUrls: current.resultUrls,
+        resultAssets: current.resultAssets,
+        failedItems: current.failedItems,
+        creditCost: current.creditCost,
+        billingManaged: true,
+      };
+    }
+    if (current?.status === "failed")
+      throw new GenerationProviderError("generation_failed", current.errorMessage || current.failedItems?.[0]?.error || "生成失败，请重试。");
+    if (current) options.onProgress?.(current.progress || "正在生成图片");
+    await new Promise((resolve) => setTimeout(resolve, 5000));
   }
-
-  const resultAssets = responses.flatMap((item, index) =>
-    buildResultAssets(expandedInputs[index].config, item.resultUrls, item.channelUsed),
-  );
-  const channelUsedByAsset = responses
-    .flatMap((item) => item.resultUrls.map(() => item.channelUsed ?? ""))
-    .filter((channel) => channel.length > 0);
-
-  return {
-    resultUrls: responses.flatMap((item) => item.resultUrls),
-    resultAssets,
-    ...buildChannelMetadata(channelUsedByAsset),
-    creditCost: estimateGenerationCredits(task.config),
-  };
+  throw new GenerationProviderError("generation_timeout", "任务仍在后台处理中，请稍后在任务中心查看。");
 }
 
 export async function generateAsset(
   input: GenerateInput,
   options: GenerationApiOptions = {},
 ): Promise<GenerationResult> {
-  const expandedInputs = expandGenerationInputs(input);
-  const responses = await Promise.all(
+  const expandedInputs = expandGenerationInputs({
+    ...input,
+    groupId: input.groupId || crypto.randomUUID(),
+  });
+  const responses = await Promise.allSettled(
     expandedInputs.map((generationInput, index) =>
       createGenerationTask(generationInput, {
         ...options,
@@ -149,27 +178,67 @@ export async function generateAsset(
       }),
     ),
   );
-  const response = responses.find((item) => item.status === "failed");
+  return combineGenerationResponses(responses, expandedInputs, input.config);
+}
 
-  if (response !== undefined) {
+function combineGenerationResponses(
+  responses: PromiseSettledResult<GenerationTaskResponse>[],
+  inputs: GenerateInput[],
+  config: GenerationConfig,
+): GenerationResult {
+  const failedItems: NonNullable<GenerationResult["failedItems"]> = [];
+  const resultAssets: GenerationResultAsset[] = [];
+  let cost = 0;
+  let managed = true;
+  responses.forEach((settled, index) => {
+    const item = settled.status === "fulfilled" ? settled.value : null;
+    const label =
+      buildGenerationPrompt(inputs[index].config).modules[0]?.title ||
+      "生成图片";
+    if (!item || item.status === "failed") {
+      failedItems.push({
+        index,
+        label,
+        config: inputs[index].config,
+        error:
+          item?.errorMessage ||
+          (settled.status === "rejected"
+            ? String(settled.reason?.message || "请求失败")
+            : "生成失败"),
+      });
+      return;
+    }
+    resultAssets.push(
+      ...buildResultAssets(
+        inputs[index].config,
+        item.resultUrls,
+        item.channelUsed,
+      ),
+    );
+    managed = managed && Boolean(item.billingManaged);
+    cost += item.creditCost;
+  });
+  if (!resultAssets.length) {
+    const first = responses.find((r) => r.status === "fulfilled");
     throw new GenerationProviderError(
-      response.errorCode ?? "unknown_generation_error",
-      response.errorMessage ?? "\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002",
+      first?.status === "fulfilled"
+        ? first.value.errorCode || "generation_failed"
+        : "generation_failed",
+      failedItems[0]?.error || "生成失败",
     );
   }
-
-  const resultAssets = responses.flatMap((item, index) =>
-    buildResultAssets(expandedInputs[index].config, item.resultUrls, item.channelUsed),
-  );
-  const channelUsedByAsset = responses
-    .flatMap((item) => item.resultUrls.map(() => item.channelUsed ?? ""))
-    .filter((channel) => channel.length > 0);
-
+  const legacyCost =
+    resultAssets.length *
+    { "1K": 1, "2K": 2, "4K": 4 }[config.resolution || "1K"];
   return {
-    resultUrls: responses.flatMap((item) => item.resultUrls),
+    resultUrls: resultAssets.map((asset) => asset.url),
     resultAssets,
-    ...buildChannelMetadata(channelUsedByAsset),
-    creditCost: estimateGenerationCredits(input.config),
+    failedItems,
+    billingManaged: managed,
+    ...buildChannelMetadata(
+      resultAssets.map((asset) => asset.channelUsed || "").filter(Boolean),
+    ),
+    creditCost: managed ? cost : legacyCost,
   };
 }
 
@@ -197,7 +266,9 @@ function buildResultAssets(
   resultUrls: string[],
   channelUsed?: string,
 ): GenerationResultAsset[] {
-  const labels = buildGenerationPrompt(config).modules.map((module) => module.title);
+  const labels = buildGenerationPrompt(config).modules.map(
+    (module) => module.title,
+  );
   const fallbackLabel = labels[0] ?? "\u751f\u6210\u7ed3\u679c";
 
   return resultUrls.map((url, index) => ({
@@ -221,8 +292,11 @@ function buildChannelMetadata(
 }
 
 function expandGenerationInputs(input: GenerateInput): GenerateInput[] {
-  return expandGenerationConfigs(input.config).map((config) => ({
+  return expandGenerationConfigs(input.config).map((config, index, all) => ({
     ...input,
+    requestIndex: index,
+    requestTotal: all.length,
+    groupConfig: input.config,
     config,
   }));
 }
@@ -242,7 +316,13 @@ function expandGenerationConfigs(config: GenerationConfig): GenerationConfig[] {
 
   if (config.module === "detail_page") {
     const counts = config.detailModuleCounts ?? {};
+    const order = config.detailModuleOrder || Object.keys(counts);
     const modules = Object.entries(counts)
+      .sort(
+        ([a], [b]) =>
+          order.indexOf(a as DetailPageModuleId) -
+          order.indexOf(b as DetailPageModuleId),
+      )
       .filter((entry): entry is [DetailPageModuleId, number] => entry[1] > 0)
       .flatMap(([moduleId, count]) =>
         Array.from({ length: Math.floor(count) }, () => moduleId),
@@ -287,6 +367,7 @@ export async function listGenerationTasks(
   options: ListGenerationTasksOptions = {},
 ): Promise<GenerationTask[]> {
   const request = buildTaskListRequest();
+  const requestOwner = getStorageOwner();
   const localTasks = loadTasks({
     keepResumableTasks: shouldUseKromaGenerationBackend(),
   });
@@ -295,12 +376,16 @@ export async function listGenerationTasks(
   if (shouldUseWebGenerationHistoryBackend()) {
     try {
       const cloudTasks = await requestWebGenerationJson<GenerationTask[]>(
-        `/generations?limit=${limit}`,
+        `/generations?limit=${limit}${options.offset ? `&offset=${options.offset}` : ""}`,
         { method: "GET" },
       );
 
-      return mergeGenerationTasks(cloudTasks, localTasks);
-    } catch {
+      if (getStorageOwner() !== requestOwner) return [];
+      return options.offset
+        ? cloudTasks
+        : mergeGenerationTasks(cloudTasks, localTasks);
+    } catch (error) {
+      if (options.strict) throw error;
       return localTasks;
     }
   }
@@ -374,7 +459,9 @@ function getConfiguredWebGenerationApiBaseUrl(): string | null {
 }
 
 function shouldUseWebGenerationHistoryBackend(): boolean {
-  return Boolean(getConfiguredWebGenerationApiBaseUrl() && getAccountAccessToken());
+  return Boolean(
+    getConfiguredWebGenerationApiBaseUrl() && getAccountAccessToken(),
+  );
 }
 
 async function requestWebGenerationJson<Payload>(
@@ -388,7 +475,7 @@ async function requestWebGenerationJson<Payload>(
     throw new Error("Web generation history backend is not configured.");
   }
 
-  let response = await fetch(
+  let response = await fetchWithTimeout(
     `${baseUrl}${path}`,
     buildWebGenerationRequestInit(init, accessToken),
   );
@@ -398,7 +485,7 @@ async function requestWebGenerationJson<Payload>(
     const refreshedToken = await refreshKromaSession();
 
     if (refreshedToken) {
-      response = await fetch(
+      response = await fetchWithTimeout(
         `${baseUrl}${path}`,
         buildWebGenerationRequestInit(init, refreshedToken),
       );

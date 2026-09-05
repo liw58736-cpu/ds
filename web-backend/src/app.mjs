@@ -1,3 +1,4 @@
+import { createDurableJobs } from "./durable-jobs.mjs";
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -17,8 +18,12 @@ export function createWebBackend({
   const imageRouter = createImageRouter({ env, fetch: fetchImpl });
   const state = {
     databaseHealthCache: { value: null, expiresAt: 0 },
+    recoveryAttempts: new Map(),
+    jobs: createDurableJobs({ env, fetch: fetchImpl, router: imageRouter }),
   };
   return {
+    recoverJobs: () =>
+      state.jobs.enabled ? state.jobs.recover() : Promise.resolve(),
     handle: (request) =>
       handleRequest(request, env, fetchImpl, imageRouter, state, resolveHost),
   };
@@ -73,47 +78,121 @@ async function handleRequest(
       return await handleOtp(request, env, fetchImpl);
     }
 
-    if (url.pathname === "/api/v1/auth/verify-code" && request.method === "POST") {
+    if (
+      url.pathname === "/api/v1/auth/verify-code" &&
+      request.method === "POST"
+    ) {
       return await handleVerify(request, env, fetchImpl, "magiclink");
     }
 
-    if (url.pathname === "/api/v1/auth/verify-signup" && request.method === "POST") {
+    if (
+      url.pathname === "/api/v1/auth/verify-signup" &&
+      request.method === "POST"
+    ) {
       return await handleVerify(request, env, fetchImpl, "signup");
     }
 
+    if (url.pathname === "/api/v1/auth/recovery" && request.method === "POST")
+      return await handleRecovery(request, env, fetchImpl);
+    if (
+      url.pathname === "/api/v1/auth/recovery/complete" &&
+      request.method === "POST"
+    )
+      return await handleRecoveryComplete(request, env, fetchImpl, state);
     if (url.pathname === "/api/v1/auth/refresh" && request.method === "POST") {
       return await handleRefresh(request, env, fetchImpl);
     }
 
+    if (
+      url.pathname === "/api/v1/user/transactions" &&
+      request.method === "GET"
+    ) {
+      const user = await requireAuthUser(request, env, fetchImpl);
+      const rows = await restFetch(
+        fetchImpl,
+        env,
+        `/web_credit_transactions?user_id=eq.${encodeURIComponent(user.id)}&select=id,amount,type,description,reference_id,created_at&order=created_at.desc&limit=100`,
+      );
+      return jsonResponse(rows);
+    }
     if (url.pathname === "/api/v1/user/credits" && request.method === "GET") {
       return await handleGetCredits(request, env, fetchImpl);
     }
 
-    if (url.pathname === "/api/v1/user/credits/deduct" && request.method === "POST") {
+    if (
+      url.pathname === "/api/v1/user/credits/deduct" &&
+      request.method === "POST"
+    ) {
+      if (state.jobs.enabled)
+        throw new HttpError(409, {
+          detail: "积分由任务服务自动结算，请刷新网页。",
+        });
       return await handleDeductCredits(request, url, env, fetchImpl);
     }
 
-    if (url.pathname === "/api/v1/user/credits/add" && request.method === "POST") {
+    if (
+      url.pathname === "/api/v1/user/credits/add" &&
+      request.method === "POST"
+    ) {
       return await handleAddCredits(request, url, env, fetchImpl);
     }
 
     if (url.pathname === "/api/v1/generations" && request.method === "GET") {
+      if (state.jobs.enabled) {
+        const user = await requireAuthUser(request, env, fetchImpl);
+        const groupId = url.searchParams.get("group_id");
+        if (groupId) return jsonResponse(await state.jobs.list(user.id, 1, 0, groupId));
+        const limit = clampHistoryLimit(url.searchParams.get("limit"));
+        const offset = Math.max(
+          0,
+          parseInt(url.searchParams.get("offset") || "0", 10) || 0,
+        );
+        const [current, legacyRows] = await Promise.all([
+          state.jobs.list(user.id, limit + offset, 0),
+          listGenerationHistoryRows(fetchImpl, env, user.id, limit + offset, 0),
+        ]);
+        const byId = new Map(
+          (Array.isArray(legacyRows) ? legacyRows : []).map((row) => {
+            const task = normalizeGenerationHistoryRow(row);
+            return [task.id, task];
+          }),
+        );
+        current.forEach((task) => byId.set(task.id, task));
+        return jsonResponse(
+          [...byId.values()]
+            .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+            .slice(offset, offset + limit),
+        );
+      }
       return await handleListGenerations(request, url, env, fetchImpl);
     }
 
     if (url.pathname === "/api/v1/generations" && request.method === "POST") {
+      if (state.jobs.enabled) {
+        await requireAuthUser(request, env, fetchImpl);
+        return jsonResponse({ saved: true, managed_by_server: true });
+      }
       return await handleSaveGeneration(request, env, fetchImpl);
     }
 
-    if (url.pathname === "/api/v1/materials/import" && request.method === "POST") {
+    if (
+      url.pathname === "/api/v1/materials/import" &&
+      request.method === "POST"
+    ) {
       return await handleMaterialImport(request, env, fetchImpl, resolveHost);
     }
 
-    if (url.pathname === "/api/v1/materials/store" && request.method === "POST") {
+    if (
+      url.pathname === "/api/v1/materials/store" &&
+      request.method === "POST"
+    ) {
       return await handleMaterialStore(request, env, fetchImpl, resolveHost);
     }
 
-    if (url.pathname === "/api/v1/materials/upload" && request.method === "POST") {
+    if (
+      url.pathname === "/api/v1/materials/upload" &&
+      request.method === "POST"
+    ) {
       return await handleMaterialUpload(request, env, fetchImpl);
     }
 
@@ -121,15 +200,70 @@ async function handleRequest(
       return await handleListMaterials(request, url, env, fetchImpl);
     }
 
-    if (url.pathname === "/api/v1/billing/paddle/webhook" && request.method === "POST") {
+    if (
+      url.pathname === "/api/v1/billing/catalog" &&
+      request.method === "GET"
+    ) {
+      let catalog = [];
+      try {
+        catalog = JSON.parse(env.WEB_CHECKOUT_CATALOG_JSON || "[]");
+      } catch {}
+      const creditMap = parsePaddlePriceCreditMap(env);
+      const plans = Array.isArray(catalog)
+        ? catalog
+            .filter(
+              (plan) =>
+                plan &&
+                typeof plan.id === "string" &&
+                plan.currency === "CNY" &&
+                Number.isInteger(plan.amount_minor) &&
+                plan.amount_minor > 0 &&
+                Number.isInteger(plan.credits) &&
+                plan.credits > 0 &&
+                creditMap[plan.price_id]?.credits === plan.credits,
+            )
+            .map((plan) => ({
+              id: plan.id,
+              currency: plan.currency,
+              amount_minor: plan.amount_minor,
+              credits: plan.credits,
+              price_id: plan.price_id,
+              recurring: Boolean(plan.recurring),
+            }))
+        : [];
+      return jsonResponse({
+        approved: env.WEB_CHECKOUT_REVIEWED === "true",
+        plans,
+      });
+    }
+    if (
+      url.pathname === "/api/v1/billing/paddle/webhook" &&
+      request.method === "POST"
+    ) {
       return await handlePaddleWebhook(request, env, fetchImpl);
     }
 
-    if (url.pathname === "/api/v1/image/generate" && request.method === "POST") {
+    if (
+      url.pathname === "/api/v1/image/generate" &&
+      request.method === "POST"
+    ) {
+      if (state.jobs.enabled) {
+        const user = await requireAuthUser(request, env, fetchImpl);
+        await getOrCreateWebUser(fetchImpl, env, user);
+        return jsonResponse(
+          await state.jobs.submit(user.id, await readJsonBody(request)),
+        );
+      }
       if (imageRouter.hasProviders()) {
         return await handleImageGenerate(request, env, fetchImpl, imageRouter);
       }
-      return await handleImageProxy(request, env, fetchImpl, "/image/generate", "POST");
+      return await handleImageProxy(
+        request,
+        env,
+        fetchImpl,
+        "/image/generate",
+        "POST",
+      );
     }
 
     if (
@@ -140,8 +274,15 @@ async function handleRequest(
       const taskId = url.pathname
         .replace("/api/v1/image/task/", "")
         .replace(/\/cancel$/, "");
+      const authUser = await requireAuthUser(request, env, fetchImpl);
+      if (state.jobs.enabled) {
+        const result = await state.jobs.cancel(authUser.id, taskId);
+        if (!result) throw new HttpError(404, { detail: "Task not found" });
+        return jsonResponse(result);
+      }
       if (imageRouter.get(taskId)) {
-        await requireAuthUser(request, env, fetchImpl);
+        if (imageRouter.get(taskId).user_id !== authUser.id)
+          throw new HttpError(404, { detail: "Task not found" });
         return jsonResponse({ canceled: imageRouter.cancel(taskId) });
       }
       return await handleImageProxy(
@@ -153,11 +294,21 @@ async function handleRequest(
       );
     }
 
-    if (url.pathname.startsWith("/api/v1/image/task/") && request.method === "GET") {
+    if (
+      url.pathname.startsWith("/api/v1/image/task/") &&
+      request.method === "GET"
+    ) {
       const taskId = url.pathname.replace("/api/v1/image/task/", "");
+      const authUser = await requireAuthUser(request, env, fetchImpl);
+      if (state.jobs.enabled) {
+        const result = await state.jobs.get(authUser.id, taskId);
+        if (!result) throw new HttpError(404, { detail: "Task not found" });
+        return jsonResponse(result);
+      }
       const task = imageRouter.get(taskId);
       if (task) {
-        await requireAuthUser(request, env, fetchImpl);
+        if (task.user_id !== authUser.id)
+          throw new HttpError(404, { detail: "Task not found" });
         return jsonResponse(imageRouter.response(task));
       }
       return await handleImageProxy(
@@ -174,7 +325,10 @@ async function handleRequest(
     if (error instanceof HttpError) {
       return jsonResponse(error.body, error.status);
     }
-    return jsonResponse({ detail: error?.message ?? "Internal Server Error" }, 500);
+    return jsonResponse(
+      { detail: error?.message ?? "Internal Server Error" },
+      error?.status || 500,
+    );
   }
 }
 
@@ -210,13 +364,24 @@ async function handleMaterialImport(request, env, fetchImpl, resolveHost) {
     });
   }
 
-  if (contentType && !contentType.includes("html") && !contentType.includes("text")) {
-    throw new HttpError(415, { detail: "The supplied URL is not an image or public webpage." });
+  if (
+    contentType &&
+    !contentType.includes("html") &&
+    !contentType.includes("text")
+  ) {
+    throw new HttpError(415, {
+      detail: "The supplied URL is not an image or public webpage.",
+    });
   }
 
-  const contentLength = Number.parseInt(response.headers.get("content-length") ?? "0", 10);
+  const contentLength = Number.parseInt(
+    response.headers.get("content-length") ?? "0",
+    10,
+  );
   if (Number.isFinite(contentLength) && contentLength > 2 * 1024 * 1024) {
-    throw new HttpError(413, { detail: "The public page is too large to import." });
+    throw new HttpError(413, {
+      detail: "The public page is too large to import.",
+    });
   }
 
   const html = (await response.text()).slice(0, 2 * 1024 * 1024);
@@ -231,7 +396,8 @@ async function handleMaterialImport(request, env, fetchImpl, resolveHost) {
 
   if (images.length === 0) {
     throw new HttpError(422, {
-      detail: "No public images were found. The platform may require login; upload the image manually instead.",
+      detail:
+        "No public images were found. The platform may require login; upload the image manually instead.",
     });
   }
 
@@ -290,11 +456,15 @@ async function handleMaterialStore(request, env, fetchImpl, resolveHost) {
     });
   }
 
-  const bucket = env.WEB_MATERIAL_STORAGE_BUCKET?.trim() || "web-imported-materials";
+  const bucket =
+    env.WEB_MATERIAL_STORAGE_BUCKET?.trim() || "web-imported-materials";
   await ensureGenerationStorageBucket(fetchImpl, env, bucket);
   const extension = imageExtension(contentType, requestedUrl.href);
   const materialTitle = sanitizeMaterialTitle(
-    String(body.title ?? fileNameFromUrl(requestedUrl)).replace(/\.[a-z0-9]{2,5}$/i, ""),
+    String(body.title ?? fileNameFromUrl(requestedUrl)).replace(
+      /\.[a-z0-9]{2,5}$/i,
+      "",
+    ),
   ).slice(0, 48);
   const objectName = `${Date.now()}-${randomInt(100000, 999999)}-${materialTitle}.${extension}`;
   const objectPath = [
@@ -338,26 +508,40 @@ async function handleMaterialUpload(request, env, fetchImpl) {
   }
 
   const image = formData.get("image");
-  if (!image || typeof image === "string" || typeof image.arrayBuffer !== "function") {
+  if (
+    !image ||
+    typeof image === "string" ||
+    typeof image.arrayBuffer !== "function"
+  ) {
     throw new HttpError(422, { detail: "Choose an image to upload." });
   }
 
   const contentType = String(image.type ?? "").toLowerCase();
   if (!["image/png", "image/jpeg", "image/webp"].includes(contentType)) {
-    throw new HttpError(415, { detail: "Only PNG, JPEG, and WebP images can be uploaded." });
+    throw new HttpError(415, {
+      detail: "Only PNG, JPEG, and WebP images can be uploaded.",
+    });
   }
 
   const maxBytes = 20 * 1024 * 1024;
   if (image.size <= 0 || image.size > maxBytes) {
     throw new HttpError(image.size <= 0 ? 422 : 413, {
-      detail: image.size <= 0 ? "The uploaded image is empty." : "The uploaded image exceeds 20 MB.",
+      detail:
+        image.size <= 0
+          ? "The uploaded image is empty."
+          : "The uploaded image exceeds 20 MB.",
     });
   }
 
   const buffer = Buffer.from(await image.arrayBuffer());
-  const originalName = String(image.name ?? formData.get("file_name") ?? "local-image");
+  const originalName = String(
+    image.name ?? formData.get("file_name") ?? "local-image",
+  );
   const materialTitle = sanitizeMaterialTitle(
-    String(formData.get("title") ?? originalName).replace(/\.[a-z0-9]{2,5}$/i, ""),
+    String(formData.get("title") ?? originalName).replace(
+      /\.[a-z0-9]{2,5}$/i,
+      "",
+    ),
   ).slice(0, 48);
   const extension = imageExtension(contentType, originalName);
   const objectName = `${Date.now()}-${randomInt(100000, 999999)}-${materialTitle}.${extension}`;
@@ -366,7 +550,8 @@ async function handleMaterialUpload(request, env, fetchImpl) {
     "materials",
     objectName,
   ].join("/");
-  const bucket = env.WEB_MATERIAL_STORAGE_BUCKET?.trim() || "web-imported-materials";
+  const bucket =
+    env.WEB_MATERIAL_STORAGE_BUCKET?.trim() || "web-imported-materials";
   await ensureGenerationStorageBucket(fetchImpl, env, bucket);
   const upload = await fetchImpl(
     `${supabaseUrl(env)}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath}`,
@@ -395,10 +580,14 @@ async function handleMaterialUpload(request, env, fetchImpl) {
 
 async function handleListMaterials(request, url, env, fetchImpl) {
   const authUser = await requireAuthUser(request, env, fetchImpl);
-  const bucket = env.WEB_MATERIAL_STORAGE_BUCKET?.trim() || "web-imported-materials";
+  const bucket =
+    env.WEB_MATERIAL_STORAGE_BUCKET?.trim() || "web-imported-materials";
   const limit = Math.min(
     100,
-    Math.max(1, Number.parseInt(url.searchParams.get("limit") ?? "60", 10) || 60),
+    Math.max(
+      1,
+      Number.parseInt(url.searchParams.get("limit") ?? "60", 10) || 60,
+    ),
   );
   await ensureGenerationStorageBucket(fetchImpl, env, bucket);
   const prefix = `${sanitizeStoragePathSegment(authUser.id)}/materials`;
@@ -414,14 +603,22 @@ async function handleListMaterials(request, url, env, fetchImpl) {
       body: JSON.stringify({
         prefix,
         limit,
-        offset: 0,
+        offset: Math.max(
+          0,
+          parseInt(url.searchParams.get("offset") || "0", 10) || 0,
+        ),
         sortBy: { column: "created_at", order: "desc" },
       }),
     },
   );
   const rows = await parseSupabaseResponse(response);
   const materials = (Array.isArray(rows) ? rows : [])
-    .filter((row) => row && typeof row.name === "string" && /\.(png|jpe?g|webp)$/i.test(row.name))
+    .filter(
+      (row) =>
+        row &&
+        typeof row.name === "string" &&
+        /\.(png|jpe?g|webp)$/i.test(row.name),
+    )
     .map((row) => {
       const objectPath = row.name.startsWith(`${prefix}/`)
         ? row.name
@@ -431,8 +628,10 @@ async function handleListMaterials(request, url, env, fetchImpl) {
         id: objectPath,
         stored_url: `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath}`,
         file_name: materialDisplayName(objectName),
-        created_at: row.created_at ?? row.updated_at ?? new Date().toISOString(),
-        content_type: row.metadata?.mimetype ?? imageMimeTypeFromName(objectName),
+        created_at:
+          row.created_at ?? row.updated_at ?? new Date().toISOString(),
+        content_type:
+          row.metadata?.mimetype ?? imageMimeTypeFromName(objectName),
         size: Number(row.metadata?.size ?? 0),
       };
     });
@@ -441,15 +640,23 @@ async function handleListMaterials(request, url, env, fetchImpl) {
 }
 
 function materialDisplayName(objectName) {
-  const withoutExtension = String(objectName).replace(/\.(png|jpe?g|webp)$/i, "");
-  return withoutExtension.replace(/^\d{10,}-\d{6}-/, "").replaceAll("-", " ") || "已保存素材";
+  const withoutExtension = String(objectName).replace(
+    /\.(png|jpe?g|webp)$/i,
+    "",
+  );
+  return (
+    withoutExtension.replace(/^\d{10,}-\d{6}-/, "").replaceAll("-", " ") ||
+    "已保存素材"
+  );
 }
 
 function sanitizeMaterialTitle(value) {
-  return String(value ?? "saved-material")
-    .trim()
-    .replace(/[^\p{L}\p{N}_-]+/gu, "-")
-    .replace(/^-+|-+$/g, "") || "saved-material";
+  return (
+    String(value ?? "saved-material")
+      .trim()
+      .replace(/[^\p{L}\p{N}_-]+/gu, "-")
+      .replace(/^-+|-+$/g, "") || "saved-material"
+  );
 }
 
 function imageMimeTypeFromName(name) {
@@ -475,7 +682,9 @@ async function fetchPublicMaterialPage(initialUrl, fetchImpl, resolveHost) {
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get("location");
       if (!location || redirect === 5) {
-        throw new HttpError(422, { detail: "The public material link has too many redirects." });
+        throw new HttpError(422, {
+          detail: "The public material link has too many redirects.",
+        });
       }
       currentUrl = parsePublicHttpUrl(new URL(location, currentUrl).href);
       continue;
@@ -490,7 +699,9 @@ async function fetchPublicMaterialPage(initialUrl, fetchImpl, resolveHost) {
     return response;
   }
 
-  throw new HttpError(422, { detail: "The public material link could not be resolved." });
+  throw new HttpError(422, {
+    detail: "The public material link could not be resolved.",
+  });
 }
 
 function parsePublicHttpUrl(value) {
@@ -500,24 +711,41 @@ function parsePublicHttpUrl(value) {
       parsed = value;
     } else {
       const rawValue = String(value ?? "").trim();
-      const publicUrl = rawValue.match(/https?:\/\/[^\s<>"']+/i)?.[0] ?? rawValue;
+      const publicUrl =
+        rawValue.match(/https?:\/\/[^\s<>"']+/i)?.[0] ?? rawValue;
       parsed = new URL(publicUrl.replace(/[，。！？；、）】》\]}>]+$/u, ""));
     }
   } catch {
-    throw new HttpError(422, { detail: "Enter a valid public HTTP or HTTPS URL." });
+    throw new HttpError(422, {
+      detail: "Enter a valid public HTTP or HTTPS URL.",
+    });
   }
 
-  if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) {
-    throw new HttpError(422, { detail: "Only public HTTP or HTTPS URLs are supported." });
+  if (
+    !["http:", "https:"].includes(parsed.protocol) ||
+    parsed.username ||
+    parsed.password
+  ) {
+    throw new HttpError(422, {
+      detail: "Only public HTTP or HTTPS URLs are supported.",
+    });
   }
 
   return parsed;
 }
 
 async function assertPublicHostname(hostname, resolveHost) {
-  const normalized = String(hostname ?? "").toLowerCase().replace(/^\[|\]$/g, "");
-  if (!normalized || normalized === "localhost" || normalized.endsWith(".local")) {
-    throw new HttpError(422, { detail: "Private network URLs are not supported." });
+  const normalized = String(hostname ?? "")
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "");
+  if (
+    !normalized ||
+    normalized === "localhost" ||
+    normalized.endsWith(".local")
+  ) {
+    throw new HttpError(422, {
+      detail: "Private network URLs are not supported.",
+    });
   }
 
   const literalType = isIP(normalized);
@@ -526,11 +754,15 @@ async function assertPublicHostname(hostname, resolveHost) {
     : await resolveHost(normalized);
 
   if (!Array.isArray(addresses) || addresses.length === 0) {
-    throw new HttpError(422, { detail: "The material host could not be resolved." });
+    throw new HttpError(422, {
+      detail: "The material host could not be resolved.",
+    });
   }
 
   if (addresses.some((entry) => isPrivateAddress(entry.address))) {
-    throw new HttpError(422, { detail: "Private network URLs are not supported." });
+    throw new HttpError(422, {
+      detail: "Private network URLs are not supported.",
+    });
   }
 }
 
@@ -577,9 +809,24 @@ function extractHtmlTitle(html) {
 
 function extractPublicImageUrls(html, baseUrl) {
   const candidates = [
-    ...extractMetaContent(html, ["og:image", "og:image:url", "twitter:image", "twitter:image:src"]),
-    ...Array.from(html.matchAll(/<(?:img|source)\b[^>]*(?:src|data-src|data-original)\s*=\s*["']([^"']+)["'][^>]*>/gi), (match) => match[1]),
-    ...Array.from(html.matchAll(/["'](?:image|image_url|imageUrl|cover|cover_url)["']\s*:\s*["']([^"']+)["']/gi), (match) => match[1]),
+    ...extractMetaContent(html, [
+      "og:image",
+      "og:image:url",
+      "twitter:image",
+      "twitter:image:src",
+    ]),
+    ...Array.from(
+      html.matchAll(
+        /<(?:img|source)\b[^>]*(?:src|data-src|data-original)\s*=\s*["']([^"']+)["'][^>]*>/gi,
+      ),
+      (match) => match[1],
+    ),
+    ...Array.from(
+      html.matchAll(
+        /["'](?:image|image_url|imageUrl|cover|cover_url)["']\s*:\s*["']([^"']+)["']/gi,
+      ),
+      (match) => match[1],
+    ),
   ];
 
   const urls = [];
@@ -646,7 +893,8 @@ function normalizeExtractedImageUrl(candidate, baseUrl) {
     if (!["http:", "https:"].includes(url.protocol)) return "";
     if (
       url.protocol === "http:" &&
-      (url.hostname.endsWith(".xhscdn.com") || url.hostname.endsWith(".xhscdn.net"))
+      (url.hostname.endsWith(".xhscdn.com") ||
+        url.hostname.endsWith(".xhscdn.net"))
     ) {
       url.protocol = "https:";
     }
@@ -672,7 +920,9 @@ function isXiaohongshuContentImage(value) {
 function extractMetaContent(html, keys) {
   const values = [];
   for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
-    const key = tag.match(/(?:property|name|itemprop)\s*=\s*["']([^"']+)["']/i)?.[1]?.toLowerCase();
+    const key = tag
+      .match(/(?:property|name|itemprop)\s*=\s*["']([^"']+)["']/i)?.[1]
+      ?.toLowerCase();
     const content = tag.match(/content\s*=\s*["']([^"']+)["']/i)?.[1];
     if (key && content && keys.includes(key)) values.push(content);
   }
@@ -689,7 +939,9 @@ function decodeHtmlText(value) {
 }
 
 function fileNameFromUrl(url) {
-  const name = decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() ?? "imported-image");
+  const name = decodeURIComponent(
+    url.pathname.split("/").filter(Boolean).pop() ?? "imported-image",
+  );
   return name.slice(0, 180) || "imported-image";
 }
 
@@ -697,6 +949,95 @@ async function handleImageGenerate(request, env, fetchImpl, imageRouter) {
   const authUser = await requireAuthUser(request, env, fetchImpl);
   const body = await readJsonBody(request);
   return jsonResponse(await imageRouter.submit(body, authUser));
+}
+
+async function handleRecovery(request, env, fetchImpl) {
+  const body = await readJsonBody(request);
+  const email = normalizeEmail(body.email);
+  if (!email.includes("@"))
+    throw new HttpError(422, { detail: "请输入有效邮箱。" });
+  const recent = await restFetch(
+    fetchImpl,
+    env,
+    `/web_auth_codes?email=eq.${encodeURIComponent(email)}&type=eq.recovery&created_at=gt.${encodeURIComponent(new Date(Date.now() - 60000).toISOString())}&select=id&limit=1`,
+  );
+  if (recent.length)
+    throw new HttpError(429, { detail: "请在 60 秒后重新发送。" });
+  let data;
+  try {
+    data = await supabaseAdmin(fetchImpl, env, "generate_link", {
+      type: "recovery",
+      email,
+    });
+  } catch (error) {
+    if (error.status >= 400 && error.status < 500)
+      return jsonResponse({ sent: true });
+    throw error;
+  }
+  const providerToken = data?.email_otp ?? data?.properties?.email_otp;
+  if (!providerToken)
+    throw new HttpError(503, { detail: "验证码服务暂时不可用。" });
+  const code = createSixDigitCode();
+  await storeAuthCode(fetchImpl, env, {
+    email,
+    type: "recovery",
+    code,
+    providerToken,
+  });
+  await sendAuthCodeEmail(fetchImpl, env, {
+    email,
+    code,
+    subject: "kroma 找回密码验证码",
+    title: "找回密码",
+    intro: "你正在找回 kroma 网页账户密码。",
+    action: "请在网页输入以下 6 位验证码：",
+  });
+  return jsonResponse({ sent: true });
+}
+async function handleRecoveryComplete(request, env, fetchImpl, state) {
+  const body = await readJsonBody(request);
+  const email = normalizeEmail(body.email);
+  if (
+    String(body.password || "").length < 8 ||
+    !/^\d{6}$/.test(String(body.code || ""))
+  )
+    throw new HttpError(422, {
+      detail: "请填写 6 位验证码与至少 8 位新密码。",
+    });
+  const now = Date.now();
+  for (const [key, value] of state.recoveryAttempts) {
+    if (value.expiresAt <= now) state.recoveryAttempts.delete(key);
+  }
+  const attempts = state.recoveryAttempts.get(email) || { count: 0, expiresAt: now + 10 * 60 * 1000 };
+  if (attempts.count >= 10 || state.recoveryAttempts.size >= 10000) {
+    throw new HttpError(429, { detail: "验证尝试过多，请在 10 分钟后重试。" });
+  }
+  attempts.count++;
+  state.recoveryAttempts.set(email, attempts);
+  const token = await resolveAuthToken(fetchImpl, env, {
+    email,
+    type: "recovery",
+    code: String(body.code),
+  });
+  const session = await supabaseAuth(fetchImpl, env, "verify", {
+    email,
+    token,
+    type: "recovery",
+  });
+  if (!session.access_token)
+    throw new HttpError(422, { detail: "验证码无效或已过期。" });
+  const response = await fetchImpl(`${supabaseUrl(env)}/auth/v1/user`, {
+    method: "PUT",
+    headers: {
+      apikey: env.WEB_SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password: body.password }),
+  });
+  await parseSupabaseResponse(response);
+  state.recoveryAttempts.delete(email);
+  return jsonResponse({ reset: true });
 }
 
 async function handleSignup(request, env, fetchImpl) {
@@ -727,7 +1068,11 @@ async function handleSignup(request, env, fetchImpl) {
     });
   } catch (error) {
     if (isRegisteredEmailError(error)) {
-      const pendingSignupUserId = await findPendingSignupUserId(fetchImpl, env, email);
+      const pendingSignupUserId = await findPendingSignupUserId(
+        fetchImpl,
+        env,
+        email,
+      );
       if (pendingSignupUserId) {
         return await sendSignupVerificationCode(fetchImpl, env, {
           email,
@@ -884,13 +1229,20 @@ async function resolveAuthToken(fetchImpl, env, input) {
   }
 
   if (!Array.isArray(rows) || rows.length === 0) {
-    throw new HttpError(422, { detail: "Invalid or expired verification code" });
+    throw new HttpError(422, {
+      detail: "Invalid or expired verification code",
+    });
   }
 
   const row = rows[0];
-  await restFetch(fetchImpl, env, `/web_auth_codes?id=eq.${encodeURIComponent(row.id)}`, {
-    method: "DELETE",
-  });
+  await restFetch(
+    fetchImpl,
+    env,
+    `/web_auth_codes?id=eq.${encodeURIComponent(row.id)}`,
+    {
+      method: "DELETE",
+    },
+  );
   return String(row.provider_token);
 }
 
@@ -942,7 +1294,9 @@ function isRegisteredEmailError(error) {
     return false;
   }
 
-  const detail = String(error.body?.detail ?? error.message ?? "").toLowerCase();
+  const detail = String(
+    error.body?.detail ?? error.message ?? "",
+  ).toLowerCase();
   return (
     error.status === 422 &&
     (detail.includes("already") ||
@@ -953,9 +1307,14 @@ function isRegisteredEmailError(error) {
 
 async function handleRefresh(request, env, fetchImpl) {
   const body = await readJsonBody(request);
-  const data = await supabaseAuth(fetchImpl, env, "token?grant_type=refresh_token", {
-    refresh_token: String(body.refresh_token ?? ""),
-  });
+  const data = await supabaseAuth(
+    fetchImpl,
+    env,
+    "token?grant_type=refresh_token",
+    {
+      refresh_token: String(body.refresh_token ?? ""),
+    },
+  );
 
   return tokenResponse(data);
 }
@@ -965,7 +1324,8 @@ async function handleGetCredits(request, env, fetchImpl) {
   const user = await getOrCreateWebUser(fetchImpl, env, authUser);
 
   return jsonResponse({
-    credits: user.credits,
+    credits: user.credits - (user.reserved_credits || 0),
+    reserved_credits: user.reserved_credits || 0,
     is_paid: user.plan !== "free",
     plan: user.plan,
   });
@@ -974,9 +1334,16 @@ async function handleGetCredits(request, env, fetchImpl) {
 async function handleDeductCredits(request, url, env, fetchImpl) {
   const authUser = await requireAuthUser(request, env, fetchImpl);
   const user = await getOrCreateWebUser(fetchImpl, env, authUser);
-  const amount = Math.max(0, Number.parseInt(url.searchParams.get("amount") ?? "1", 10));
-  const taskStatus = (url.searchParams.get("task_status") ?? "completed").toLowerCase();
-  const chargePolicy = (url.searchParams.get("charge_policy") ?? "success_only").toLowerCase();
+  const amount = Math.max(
+    0,
+    Number.parseInt(url.searchParams.get("amount") ?? "1", 10),
+  );
+  const taskStatus = (
+    url.searchParams.get("task_status") ?? "completed"
+  ).toLowerCase();
+  const chargePolicy = (
+    url.searchParams.get("charge_policy") ?? "success_only"
+  ).toLowerCase();
   const successStatuses = new Set(["completed", "success", "done"]);
 
   if (chargePolicy === "success_only" && !successStatuses.has(taskStatus)) {
@@ -1013,7 +1380,34 @@ async function handleAddCredits(request, url, env, fetchImpl) {
   requireInternalBillingAccess(request, env);
   const authUser = await requireAuthUser(request, env, fetchImpl);
   const user = await getOrCreateWebUser(fetchImpl, env, authUser);
-  const amount = Math.max(0, Number.parseInt(url.searchParams.get("amount") ?? "0", 10));
+  const amount = Math.max(
+    0,
+    Number.parseInt(url.searchParams.get("amount") ?? "0", 10),
+  );
+  if (env.WEB_DURABLE_JOBS === "true") {
+    const referenceId = url.searchParams.get("reference_id");
+    if (!referenceId || !Number.isSafeInteger(amount) || amount <= 0) {
+      throw new HttpError(422, {
+        detail:
+          "Manual top-up requires a reference_id and a positive integer amount",
+      });
+    }
+    const result = await restFetch(fetchImpl, env, "/rpc/web_credit_apply", {
+      method: "POST",
+      body: {
+        p_user_id: user.id,
+        p_reference_id: `manual:${referenceId}`,
+        p_amount: amount,
+        p_type: "purchase",
+        p_description: "Manual credit top-up",
+      },
+    });
+    return jsonResponse({
+      success: true,
+      credits_remaining: result.credits,
+      duplicate: result.duplicate,
+    });
+  }
   const credits = user.credits + amount;
   await updateWebUserCredits(fetchImpl, env, user.id, credits);
   await createCreditTransaction(fetchImpl, env, {
@@ -1053,7 +1447,9 @@ async function handleSaveGeneration(request, env, fetchImpl) {
   return jsonResponse({
     saved: true,
     task: normalizeGenerationHistoryRow(
-      Array.isArray(savedRows) && savedRows[0] ? savedRows[0] : { task: durableTask },
+      Array.isArray(savedRows) && savedRows[0]
+        ? savedRows[0]
+        : { task: durableTask },
     ),
   });
 }
@@ -1062,7 +1458,13 @@ async function handleListGenerations(request, url, env, fetchImpl) {
   const authUser = await requireAuthUser(request, env, fetchImpl);
   const user = await getOrCreateWebUser(fetchImpl, env, authUser);
   const limit = clampHistoryLimit(url.searchParams.get("limit"));
-  const rows = await listGenerationHistoryRows(fetchImpl, env, user.id, limit);
+  const rows = await listGenerationHistoryRows(
+    fetchImpl,
+    env,
+    user.id,
+    limit,
+    Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10) || 0),
+  );
 
   return jsonResponse(
     Array.isArray(rows) ? rows.map(normalizeGenerationHistoryRow) : [],
@@ -1077,7 +1479,9 @@ async function saveGenerationHistoryRow(fetchImpl, env, row, task, userId) {
       "/web_generations?on_conflict=user_id,task_id",
       {
         method: "POST",
-        headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+        headers: {
+          Prefer: "resolution=merge-duplicates,return=representation",
+        },
         body: row,
       },
     );
@@ -1094,12 +1498,18 @@ async function saveGenerationHistoryRow(fetchImpl, env, row, task, userId) {
   });
 }
 
-async function listGenerationHistoryRows(fetchImpl, env, userId, limit) {
+async function listGenerationHistoryRows(
+  fetchImpl,
+  env,
+  userId,
+  limit,
+  offset = 0,
+) {
   try {
     return await restFetch(
       fetchImpl,
       env,
-      `/web_generations?user_id=eq.${encodeURIComponent(userId)}&select=task,task_id,status,product,config,result_urls,result_assets,credits_cost,error_message,created_at,completed_at,attempt,backend_task_id,backend_task_ids,input_image_url,result_image_url,module&order=created_at.desc&limit=${limit}`,
+      `/web_generations?user_id=eq.${encodeURIComponent(userId)}&select=task,task_id,status,product,config,result_urls,result_assets,credits_cost,error_message,created_at,completed_at,attempt,backend_task_id,backend_task_ids,input_image_url,result_image_url,module&order=created_at.desc&limit=${limit}${offset ? `&offset=${offset}` : ""}`,
     );
   } catch (error) {
     if (!isSupabaseSchemaDrift(error)) {
@@ -1110,7 +1520,7 @@ async function listGenerationHistoryRows(fetchImpl, env, userId, limit) {
   return restFetch(
     fetchImpl,
     env,
-    `/web_generations?user_id=eq.${encodeURIComponent(userId)}&select=id,status,module,prompt,input_image_url,result_image_url,credits_cost,error_message,created_at,updated_at&order=created_at.desc&limit=${limit}`,
+    `/web_generations?user_id=eq.${encodeURIComponent(userId)}&select=id,status,module,prompt,input_image_url,result_image_url,credits_cost,error_message,created_at,updated_at&order=created_at.desc&limit=${limit}${offset ? `&offset=${offset}` : ""}`,
   );
 }
 
@@ -1124,7 +1534,9 @@ function normalizeGenerationTaskInput(value) {
   }
 
   if (!value.productInput || typeof value.productInput !== "object") {
-    throw new HttpError(422, { detail: "Generation task productInput is required" });
+    throw new HttpError(422, {
+      detail: "Generation task productInput is required",
+    });
   }
 
   if (!value.config || typeof value.config !== "object") {
@@ -1136,8 +1548,12 @@ function normalizeGenerationTaskInput(value) {
 
 function buildGenerationHistoryRow(task, userId) {
   const resultUrls = Array.isArray(task.resultUrls) ? task.resultUrls : [];
-  const resultAssets = Array.isArray(task.resultAssets) ? task.resultAssets : [];
-  const backendTaskIds = Array.isArray(task.backendTaskIds) ? task.backendTaskIds : [];
+  const resultAssets = Array.isArray(task.resultAssets)
+    ? task.resultAssets
+    : [];
+  const backendTaskIds = Array.isArray(task.backendTaskIds)
+    ? task.backendTaskIds
+    : [];
 
   return {
     task_id: task.id,
@@ -1203,7 +1619,9 @@ function normalizeGenerationHistoryRow(row) {
       )
     : undefined;
   const productInput =
-    row?.product && typeof row.product === "object" && !Array.isArray(row.product)
+    row?.product &&
+    typeof row.product === "object" &&
+    !Array.isArray(row.product)
       ? row.product
       : {
           id: `product-${row?.task_id ?? row?.id ?? "history"}`,
@@ -1233,9 +1651,15 @@ function normalizeGenerationHistoryRow(row) {
     status: String(row?.status ?? "completed"),
     resultUrls,
     ...(resultAssets && resultAssets.length > 0 ? { resultAssets } : {}),
-    ...(row?.backend_task_id ? { backendTaskId: String(row.backend_task_id) } : {}),
+    ...(row?.backend_task_id
+      ? { backendTaskId: String(row.backend_task_id) }
+      : {}),
     ...(Array.isArray(row?.backend_task_ids) && row.backend_task_ids.length > 0
-      ? { backendTaskIds: row.backend_task_ids.filter((taskId) => typeof taskId === "string") }
+      ? {
+          backendTaskIds: row.backend_task_ids.filter(
+            (taskId) => typeof taskId === "string",
+          ),
+        }
       : {}),
     ...(row?.error_message ? { errorMessage: String(row.error_message) } : {}),
     creditCost: numberOrZero(row?.credits_cost),
@@ -1281,9 +1705,14 @@ function clampHistoryLimit(value) {
 }
 
 async function persistGenerationResultImages(fetchImpl, env, task, userId) {
-  const bucket = env.WEB_GENERATION_STORAGE_BUCKET?.trim() || "web-generation-results";
+  const bucket =
+    env.WEB_GENERATION_STORAGE_BUCKET?.trim() || "web-generation-results";
 
-  if (!bucket || !Array.isArray(task.resultUrls) || task.resultUrls.length === 0) {
+  if (
+    !bucket ||
+    !Array.isArray(task.resultUrls) ||
+    task.resultUrls.length === 0
+  ) {
     return task;
   }
 
@@ -1401,7 +1830,9 @@ async function readImageForStorage(fetchImpl, url) {
     throw new Error("Image result could not be fetched");
   }
 
-  const contentType = normalizeImageContentType(response.headers.get("Content-Type"));
+  const contentType = normalizeImageContentType(
+    response.headers.get("Content-Type"),
+  );
   const buffer = Buffer.from(await response.arrayBuffer());
 
   return {
@@ -1431,7 +1862,10 @@ function parseDataUrlImage(url) {
 }
 
 function normalizeImageContentType(value) {
-  const contentType = String(value ?? "image/png").split(";")[0].trim().toLowerCase();
+  const contentType = String(value ?? "image/png")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
 
   return ["image/png", "image/jpeg", "image/webp"].includes(contentType)
     ? contentType
@@ -1453,11 +1887,13 @@ function imageExtension(contentType, url) {
 }
 
 function sanitizeStoragePathSegment(value) {
-  return String(value ?? "item")
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 96) || "item";
+  return (
+    String(value ?? "item")
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 96) || "item"
+  );
 }
 
 function isSupabasePublicStorageUrl(env, bucket, url) {
@@ -1471,7 +1907,9 @@ function isSupabaseSchemaDrift(error) {
     return false;
   }
 
-  const detail = String(error.body?.detail ?? error.message ?? "").toLowerCase();
+  const detail = String(
+    error.body?.detail ?? error.message ?? "",
+  ).toLowerCase();
 
   return (
     (error.status === 400 || error.status === 404) &&
@@ -1491,7 +1929,8 @@ async function handleImageProxy(request, env, fetchImpl, upstreamPath, method) {
     });
   }
 
-  const proxyBody = method === "GET" ? undefined : await readOptionalJsonBody(request);
+  const proxyBody =
+    method === "GET" ? undefined : await readOptionalJsonBody(request);
   const body = proxyBody === undefined ? undefined : JSON.stringify(proxyBody);
   const headers = {
     "Content-Type": "application/json",
@@ -1515,7 +1954,11 @@ async function handleImageProxy(request, env, fetchImpl, upstreamPath, method) {
   try {
     payload = await response.json();
   } catch {
-    payload = { detail: response.ok ? "Empty image backend response" : "Image backend request failed" };
+    payload = {
+      detail: response.ok
+        ? "Empty image backend response"
+        : "Image backend request failed",
+    };
   }
 
   return jsonResponse(payload, response.status);
@@ -1523,7 +1966,11 @@ async function handleImageProxy(request, env, fetchImpl, upstreamPath, method) {
 
 async function handlePaddleWebhook(request, env, fetchImpl) {
   const rawBody = await request.text();
-  verifyPaddleWebhookSignature(rawBody, request.headers.get("paddle-signature"), env);
+  verifyPaddleWebhookSignature(
+    rawBody,
+    request.headers.get("paddle-signature"),
+    env,
+  );
 
   let payload;
   try {
@@ -1550,8 +1997,13 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
   if (!reserved) {
     const existingEvent = await getBillingEvent(fetchImpl, env, eventId);
 
-    if (existingEvent?.status === "failed_retryable" || existingEvent?.status === "received") {
-      await updateBillingEvent(fetchImpl, env, eventId, { status: "processing" });
+    if (
+      existingEvent?.status === "failed_retryable" ||
+      existingEvent?.status === "received"
+    ) {
+      await updateBillingEvent(fetchImpl, env, eventId, {
+        status: "processing",
+      });
     } else {
       return jsonResponse({
         received: true,
@@ -1588,7 +2040,9 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
         user_id: userId || null,
         credits,
       });
-      throw new HttpError(422, { detail: "Paddle webhook is missing user_id or credits" });
+      throw new HttpError(422, {
+        detail: "Paddle webhook is missing user_id or credits",
+      });
     }
 
     const user = await getWebUserById(fetchImpl, env, userId);
@@ -1602,6 +2056,30 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
       throw new HttpError(422, { detail: "Paddle webhook user was not found" });
     }
 
+    if (env.WEB_DURABLE_JOBS === "true") {
+      const settled = await restFetch(fetchImpl, env, "/rpc/web_credit_apply", {
+        method: "POST",
+        body: {
+          p_user_id: user.id,
+          p_reference_id: `paddle:${transactionId}`,
+          p_amount: credits,
+          p_type: "purchase",
+          p_description: `Paddle purchase: ${planName}`,
+        },
+      });
+      await updateBillingEvent(fetchImpl, env, eventId, {
+        status: "processed",
+        reference_id: transactionId,
+        user_id: user.id,
+        credits,
+      });
+      return jsonResponse({
+        received: true,
+        credited: settled.duplicate ? 0 : credits,
+        credits_remaining: settled.credits,
+        duplicate: settled.duplicate,
+      });
+    }
     const nextCredits = user.credits + credits;
     creditMutationStarted = true;
     await updateWebUserCredits(fetchImpl, env, user.id, nextCredits);
@@ -1609,7 +2087,9 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
       user_id: user.id,
       amount: credits,
       type: "purchase",
-      description: planName ? `Paddle purchase: ${planName}` : "Paddle purchase",
+      description: planName
+        ? `Paddle purchase: ${planName}`
+        : "Paddle purchase",
       reference_id: transactionId,
     });
     await updateBillingEvent(fetchImpl, env, eventId, {
@@ -1625,7 +2105,11 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
       credits_remaining: nextCredits,
     });
   } catch (error) {
-    if (!(error instanceof HttpError && error.status >= 400 && error.status < 500)) {
+    if (!(
+      error instanceof HttpError &&
+      error.status >= 400 &&
+      error.status < 500
+    )) {
       await updateBillingEvent(fetchImpl, env, eventId, {
         status: creditMutationStarted ? "needs_review" : "failed_retryable",
         reference_id: transactionId,
@@ -1643,7 +2127,9 @@ function requireInternalBillingAccess(request, env) {
   const providedKey = request.headers.get("x-kroma-billing-key")?.trim();
 
   if (!configuredKey || providedKey !== configuredKey) {
-    throw new HttpError(403, { detail: "Credit top-up requires internal billing access" });
+    throw new HttpError(403, {
+      detail: "Credit top-up requires internal billing access",
+    });
   }
 }
 
@@ -1655,7 +2141,9 @@ function resolvePaddleFulfillment(data, customData, env) {
     Number.parseInt(String(customData.credits ?? "0"), 10),
   );
   const customPlanId = String(customData.plan_id ?? customData.planId ?? "");
-  const customPlanName = String(customData.plan_name ?? customData.planName ?? customPlanId);
+  const customPlanName = String(
+    customData.plan_name ?? customData.planName ?? customPlanId,
+  );
 
   if (priceId) {
     if (!mapped) {
@@ -1669,7 +2157,13 @@ function resolvePaddleFulfillment(data, customData, env) {
     return {
       credits: Math.max(0, Number.parseInt(String(mapped.credits ?? "0"), 10)),
       planId: String(mapped.plan_id ?? mapped.planId ?? customPlanId),
-      planName: String(mapped.plan_name ?? mapped.planName ?? mapped.plan_id ?? mapped.planId ?? customPlanName),
+      planName: String(
+        mapped.plan_name ??
+          mapped.planName ??
+          mapped.plan_id ??
+          mapped.planId ??
+          customPlanName,
+      ),
     };
   }
 
@@ -1730,7 +2224,9 @@ function hasValidPaddlePriceCreditMap(env) {
 function verifyPaddleWebhookSignature(rawBody, signatureHeader, env) {
   const secret = env.WEB_PADDLE_WEBHOOK_SECRET?.trim();
   if (!secret) {
-    throw new HttpError(500, { detail: "WEB_PADDLE_WEBHOOK_SECRET is not configured" });
+    throw new HttpError(500, {
+      detail: "WEB_PADDLE_WEBHOOK_SECRET is not configured",
+    });
   }
 
   const signature = parsePaddleSignature(signatureHeader);
@@ -1873,7 +2369,11 @@ async function getOrCreateWebUser(fetchImpl, env, authUser) {
 }
 
 async function getWebUserById(fetchImpl, env, userId) {
-  const rows = await restFetch(fetchImpl, env, `/web_users?id=eq.${encodeURIComponent(userId)}&select=*`);
+  const rows = await restFetch(
+    fetchImpl,
+    env,
+    `/web_users?id=eq.${encodeURIComponent(userId)}&select=*`,
+  );
   if (Array.isArray(rows) && rows.length > 0) {
     return normalizeWebUser(rows[0]);
   }
@@ -1882,11 +2382,16 @@ async function getWebUserById(fetchImpl, env, userId) {
 }
 
 async function updateWebUserCredits(fetchImpl, env, userId, credits) {
-  await restFetch(fetchImpl, env, `/web_users?id=eq.${encodeURIComponent(userId)}`, {
-    method: "PATCH",
-    headers: { Prefer: "return=representation" },
-    body: { credits },
-  });
+  await restFetch(
+    fetchImpl,
+    env,
+    `/web_users?id=eq.${encodeURIComponent(userId)}`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: { credits },
+    },
+  );
 }
 
 async function createCreditTransaction(fetchImpl, env, body) {
@@ -1911,15 +2416,18 @@ async function supabaseAuth(fetchImpl, env, endpoint, body) {
 }
 
 async function supabaseAdmin(fetchImpl, env, endpoint, body, options = {}) {
-  const response = await fetchImpl(`${supabaseUrl(env)}/auth/v1/admin/${endpoint}`, {
-    method: options.method ?? "POST",
-    headers: {
-      apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
-      "Content-Type": "application/json",
+  const response = await fetchImpl(
+    `${supabaseUrl(env)}/auth/v1/admin/${endpoint}`,
+    {
+      method: options.method ?? "POST",
+      headers: {
+        apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  });
+  );
 
   return parseSupabaseResponse(response);
 }
@@ -1936,7 +2444,9 @@ async function confirmSignupUser(fetchImpl, env, userId) {
 
 async function sendAuthCodeEmail(fetchImpl, env, input) {
   if (!env.WEB_RESEND_API_KEY) {
-    throw new HttpError(500, { detail: "WEB_RESEND_API_KEY is not configured" });
+    throw new HttpError(500, {
+      detail: "WEB_RESEND_API_KEY is not configured",
+    });
   }
 
   const response = await fetchImpl("https://api.resend.com/emails", {
@@ -2004,7 +2514,8 @@ async function parseSupabaseResponse(response) {
 
   if (!response.ok) {
     throw new HttpError(response.status, {
-      detail: data?.msg ?? data?.message ?? data?.error ?? "Supabase request failed",
+      detail:
+        data?.msg ?? data?.message ?? data?.error ?? "Supabase request failed",
     });
   }
 
@@ -2023,7 +2534,10 @@ function normalizeWebUser(row) {
   return {
     id: String(row.id),
     email: normalizeEmail(row.email),
-    credits: Number.isFinite(Number(row.credits)) ? Number(row.credits) : defaultFreeCredits,
+    reserved_credits: Number(row.reserved_credits || 0),
+    credits: Number.isFinite(Number(row.credits))
+      ? Number(row.credits)
+      : defaultFreeCredits,
     plan: row.plan ? String(row.plan) : "free",
   };
 }
@@ -2051,7 +2565,9 @@ async function readOptionalJsonBody(request) {
 }
 
 function normalizeEmail(value) {
-  return String(value ?? "").trim().toLowerCase();
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 function supabaseUrl(env) {
@@ -2063,7 +2579,8 @@ function supabaseUrl(env) {
 }
 
 function parseAllowedRedirects(env) {
-  const configured = env.WEB_ALLOWED_AUTH_REDIRECTS || env.WEB_AUTH_REDIRECT_URL || "";
+  const configured =
+    env.WEB_ALLOWED_AUTH_REDIRECTS || env.WEB_AUTH_REDIRECT_URL || "";
   return new Set(
     configured
       .split(",")
@@ -2081,7 +2598,12 @@ function parseAllowedRedirects(env) {
 }
 
 async function buildHealthResponse(env, fetchImpl, state) {
-  const optionalConfigKeys = new Set(["internalBillingKey", "authCodeSecret"]);
+  const optionalConfigKeys = new Set([
+    "internalBillingKey",
+    "authCodeSecret",
+    "durableJobs",
+    "checkoutReviewed",
+  ]);
   const usesMobileAppImageRouter = isMobileAppImageRouter(
     env.WEB_IMAGE_API_BASE_URL,
   );
@@ -2098,8 +2620,13 @@ async function buildHealthResponse(env, fetchImpl, state) {
     internalBillingKey: Boolean(env.WEB_INTERNAL_BILLING_KEY),
     paddleWebhookSecret: Boolean(env.WEB_PADDLE_WEBHOOK_SECRET),
     paddlePriceCredits: hasValidPaddlePriceCreditMap(env),
+    durableJobs: env.WEB_DURABLE_JOBS === "true",
+    checkoutReviewed: env.WEB_CHECKOUT_REVIEWED === "true",
     imageApiBaseUrl: Boolean(env.WEB_IMAGE_API_BASE_URL) || hasImageProviders,
-    imageApiKey: Boolean(env.WEB_IMAGE_API_KEY) || usesMobileAppImageRouter || hasImageProviders,
+    imageApiKey:
+      Boolean(env.WEB_IMAGE_API_KEY) ||
+      usesMobileAppImageRouter ||
+      hasImageProviders,
   };
   const missing = Object.entries(config)
     .filter(([key, configured]) => !configured && !optionalConfigKeys.has(key))
@@ -2168,6 +2695,13 @@ function isMobileAppImageRouter(value) {
 
 async function checkDatabaseHealth(fetchImpl, env, config) {
   const tables = {
+    ...(env.WEB_DURABLE_JOBS === "true"
+      ? {
+          webImageJobs: "/web_image_jobs?select=id&limit=1",
+          webCreditOperations:
+            "/web_credit_operations?select=reference_id&limit=1",
+        }
+      : {}),
     webUsers: "/web_users?select=id&limit=1",
     webCreditTransactions: "/web_credit_transactions?select=id&limit=1",
     webGenerations: "/web_generations?select=id&limit=1",
@@ -2210,7 +2744,8 @@ function emptyResponse(status = 204) {
 function corsHeaders(extra = {}) {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Kroma-Client, X-Kroma-Billing-Key, Paddle-Signature",
+    "Access-Control-Allow-Headers":
+      "Content-Type, Authorization, X-Kroma-Client, X-Kroma-Billing-Key, Paddle-Signature",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
     ...extra,
   };

@@ -12,6 +12,7 @@ const statusLabels = {
   queued: "排队中",
   processing: "处理中",
   completed: "已完成",
+  partial: "部分完成",
   failed: "失败",
 } as const satisfies Record<TaskStatus, string>;
 
@@ -35,7 +36,10 @@ export function TaskHistory({
   isRetryDisabled,
 }: TaskHistoryProps) {
   return (
-    <section className="panel task-history" aria-labelledby="task-history-title">
+    <section
+      className="panel task-history"
+      aria-labelledby="task-history-title"
+    >
       <div className="panel-heading">
         <p className="eyebrow">History</p>
         <h2 id="task-history-title">最近任务</h2>
@@ -76,7 +80,9 @@ export function TaskHistory({
                   <button
                     type="button"
                     onClick={() => onRetryTask(task)}
-                    disabled={isRetryDisabled || hasUnavailableUploadSource(task)}
+                    disabled={
+                      isRetryDisabled || hasUnavailableUploadSource(task)
+                    }
                   >
                     重试
                   </button>

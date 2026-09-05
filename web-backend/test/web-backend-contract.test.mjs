@@ -3,10 +3,7 @@ import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import {
-  createWebBackend,
-  isAllowedAuthRedirect,
-} from "../src/app.mjs";
+import { createWebBackend, isAllowedAuthRedirect } from "../src/app.mjs";
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -19,8 +16,14 @@ async function readJson(response) {
   return response.json();
 }
 
-function paddleSignature(rawBody, secret, timestamp = Math.floor(Date.now() / 1000)) {
-  const h1 = createHmac("sha256", secret).update(`${timestamp}:${rawBody}`).digest("hex");
+function paddleSignature(
+  rawBody,
+  secret,
+  timestamp = Math.floor(Date.now() / 1000),
+) {
+  const h1 = createHmac("sha256", secret)
+    .update(`${timestamp}:${rawBody}`)
+    .digest("hex");
   return `ts=${timestamp};h1=${h1}`;
 }
 
@@ -93,6 +96,8 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       internalBillingKey: true,
       paddleWebhookSecret: true,
       paddlePriceCredits: true,
+      durableJobs: false,
+      checkoutReviewed: false,
       imageApiBaseUrl: true,
       imageApiKey: true,
     },
@@ -104,7 +109,7 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       webBillingEvents: true,
     },
     missing: [],
-    optionalMissing: [],
+    optionalMissing: ["durableJobs", "checkoutReviewed"],
   });
 });
 
@@ -123,7 +128,10 @@ test("material import extracts public Open Graph and page images for an authenti
       if (url === "https://public.example.com/post/1") {
         return new Response(
           '<html><head><meta property="og:title" content="Summer product inspiration"><meta property="og:image" content="/images/cover.jpg"></head><body><img data-src="https://cdn.example.com/detail.png"></body></html>',
-          { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
+          {
+            status: 200,
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+          },
         );
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -133,8 +141,14 @@ test("material import extracts public Open Graph and page images for an authenti
   const response = await app.handle(
     new Request("http://local.test/api/v1/materials/import", {
       method: "POST",
-      headers: { Authorization: "Bearer access-token", "Content-Type": "application/json" },
-      body: JSON.stringify({ url: "https://public.example.com/post/1", authorized: true }),
+      headers: {
+        Authorization: "Bearer access-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: "https://public.example.com/post/1",
+        authorized: true,
+      }),
     }),
   );
 
@@ -152,9 +166,12 @@ test("material import extracts public Open Graph and page images for an authenti
 });
 
 test("material import extracts every Xiaohongshu note image from pasted share text", async () => {
-  const shareUrl = "https://www.xiaohongshu.com/explore/note-1?xsec_token=public";
-  const firstImage = "https:\\u002F\\u002Fsns-webpic-qc.xhscdn.com\\u002F20260902\\u002Ffirst!nd_dft_wlteh_jpg_3";
-  const secondImage = "http:\\u002F\\u002Fsns-webpic-bd.xhscdn.com\\u002F20260902\\u002Fsecond!nd_dft_wlteh_jpg_3";
+  const shareUrl =
+    "https://www.xiaohongshu.com/explore/note-1?xsec_token=public";
+  const firstImage =
+    "https:\\u002F\\u002Fsns-webpic-qc.xhscdn.com\\u002F20260902\\u002Ffirst!nd_dft_wlteh_jpg_3";
+  const secondImage =
+    "http:\\u002F\\u002Fsns-webpic-bd.xhscdn.com\\u002F20260902\\u002Fsecond!nd_dft_wlteh_jpg_3";
   const app = createWebBackend({
     env: {
       WEB_SUPABASE_URL: "https://web-project.supabase.co",
@@ -169,7 +186,10 @@ test("material import extracts every Xiaohongshu note image from pasted share te
       if (url === shareUrl) {
         return new Response(
           `<html><head><title>商品搭配 - 小红书</title><meta property="og:image" content="https://picasso-static.xiaohongshu.com/logo.png"></head><body><img src="https://fe-static.xhscdn.com/icon.png"><script>window.__INITIAL_STATE__={"note":{"imageList":[{"urlDefault":"${firstImage}"},{"urlDefault":"${secondImage}"}]}}</script></body></html>`,
-          { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } },
+          {
+            status: 200,
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+          },
         );
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -179,7 +199,10 @@ test("material import extracts every Xiaohongshu note image from pasted share te
   const response = await app.handle(
     new Request("http://local.test/api/v1/materials/import", {
       method: "POST",
-      headers: { Authorization: "Bearer access-token", "Content-Type": "application/json" },
+      headers: {
+        Authorization: "Bearer access-token",
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         url: `复制这段小红书分享文案 ${shareUrl} 打开查看`,
         authorized: true,
@@ -218,8 +241,14 @@ test("material import rejects private network URLs and missing authorization con
   const privateResponse = await app.handle(
     new Request("http://local.test/api/v1/materials/import", {
       method: "POST",
-      headers: { Authorization: "Bearer access-token", "Content-Type": "application/json" },
-      body: JSON.stringify({ url: "http://127.0.0.1/private", authorized: true }),
+      headers: {
+        Authorization: "Bearer access-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: "http://127.0.0.1/private",
+        authorized: true,
+      }),
     }),
   );
   assert.equal(privateResponse.status, 422);
@@ -227,8 +256,14 @@ test("material import rejects private network URLs and missing authorization con
   const permissionResponse = await app.handle(
     new Request("http://local.test/api/v1/materials/import", {
       method: "POST",
-      headers: { Authorization: "Bearer access-token", "Content-Type": "application/json" },
-      body: JSON.stringify({ url: "https://public.example.com/post/1", authorized: false }),
+      headers: {
+        Authorization: "Bearer access-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: "https://public.example.com/post/1",
+        authorized: false,
+      }),
     }),
   );
   assert.equal(permissionResponse.status, 422);
@@ -258,7 +293,11 @@ test("material store copies an authorized public image into isolated web storage
       if (url === "https://web-project.supabase.co/storage/v1/bucket") {
         return jsonResponse({ id: "web-materials" }, 200);
       }
-      if (url.startsWith("https://web-project.supabase.co/storage/v1/object/web-materials/")) {
+      if (
+        url.startsWith(
+          "https://web-project.supabase.co/storage/v1/object/web-materials/",
+        )
+      ) {
         assert.equal(init.method, "PUT");
         assert.equal(init.headers["Content-Type"], "image/webp");
         assert.equal(await init.body.text(), "stable-material");
@@ -271,7 +310,10 @@ test("material store copies an authorized public image into isolated web storage
   const response = await app.handle(
     new Request("http://local.test/api/v1/materials/store", {
       method: "POST",
-      headers: { Authorization: "Bearer access-token", "Content-Type": "application/json" },
+      headers: {
+        Authorization: "Bearer access-token",
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         url: "https://cdn.example.com/material.webp",
         authorized: true,
@@ -290,7 +332,10 @@ test("material store copies an authorized public image into isolated web storage
   assert.equal(body.size, Buffer.byteLength("stable-material"));
   assert.equal(body.file_name, "Summer-Look");
   assert.match(body.id, /Summer-Look\.webp$/);
-  assert.equal(calls.some((call) => call.url === "https://cdn.example.com/material.webp"), true);
+  assert.equal(
+    calls.some((call) => call.url === "https://cdn.example.com/material.webp"),
+    true,
+  );
 });
 
 test("material upload stores a local image in the authenticated user's library", async () => {
@@ -310,7 +355,11 @@ test("material upload stores a local image in the authenticated user's library",
       if (url === "https://web-project.supabase.co/storage/v1/bucket") {
         return jsonResponse({ id: "web-materials" }, 200);
       }
-      if (url.startsWith("https://web-project.supabase.co/storage/v1/object/web-materials/")) {
+      if (
+        url.startsWith(
+          "https://web-project.supabase.co/storage/v1/object/web-materials/",
+        )
+      ) {
         assert.equal(init.method, "PUT");
         assert.equal(init.headers["Content-Type"], "image/png");
         assert.equal(await init.body.text(), "local-image");
@@ -320,7 +369,11 @@ test("material upload stores a local image in the authenticated user's library",
     },
   });
   const form = new FormData();
-  form.append("image", new Blob(["local-image"], { type: "image/png" }), "summer-look.png");
+  form.append(
+    "image",
+    new Blob(["local-image"], { type: "image/png" }),
+    "summer-look.png",
+  );
 
   const response = await app.handle(
     new Request("http://local.test/api/v1/materials/upload", {
@@ -355,7 +408,10 @@ test("material library lists only the authenticated user's saved images", async 
       if (url === "https://web-project.supabase.co/storage/v1/bucket") {
         return jsonResponse({ id: "web-materials" }, 200);
       }
-      if (url === "https://web-project.supabase.co/storage/v1/object/list/web-materials") {
+      if (
+        url ===
+        "https://web-project.supabase.co/storage/v1/object/list/web-materials"
+      ) {
         const body = JSON.parse(init.body);
         assert.equal(body.prefix, "web-user-1/materials");
         return jsonResponse([
@@ -382,7 +438,8 @@ test("material library lists only the authenticated user's saved images", async 
     materials: [
       {
         id: "web-user-1/materials/1788300000000-123456-Summer-Look.webp",
-        stored_url: "https://web-project.supabase.co/storage/v1/object/public/web-materials/web-user-1/materials/1788300000000-123456-Summer-Look.webp",
+        stored_url:
+          "https://web-project.supabase.co/storage/v1/object/public/web-materials/web-user-1/materials/1788300000000-123456-Summer-Look.webp",
         file_name: "Summer Look",
         created_at: "2026-09-02T00:00:00.000Z",
         content_type: "image/webp",
@@ -390,7 +447,10 @@ test("material library lists only the authenticated user's saved images", async 
       },
     ],
   });
-  assert.equal(calls.some((call) => String(call.url).includes("web-user-2")), false);
+  assert.equal(
+    calls.some((call) => String(call.url).includes("web-user-2")),
+    false,
+  );
 });
 
 test("health endpoint reuses a short database check cache", async () => {
@@ -426,8 +486,12 @@ test("health endpoint reuses a short database check cache", async () => {
     },
   });
 
-  const first = await app.handle(new Request("http://local.test/api/v1/health"));
-  const second = await app.handle(new Request("http://local.test/api/v1/health"));
+  const first = await app.handle(
+    new Request("http://local.test/api/v1/health"),
+  );
+  const second = await app.handle(
+    new Request("http://local.test/api/v1/health"),
+  );
 
   assert.equal(first.status, 200);
   assert.equal(second.status, 200);
@@ -538,7 +602,12 @@ test("health endpoint treats non-blocking production helpers as optional configu
   assert.equal(body.ok, true);
   assert.equal(body.config.authCodeSecret, false);
   assert.equal(body.config.internalBillingKey, false);
-  assert.deepEqual(body.optionalMissing, ["authCodeSecret", "internalBillingKey"]);
+  assert.deepEqual(body.optionalMissing, [
+    "authCodeSecret",
+    "internalBillingKey",
+    "durableJobs",
+    "checkoutReviewed",
+  ]);
   assert.ok(!body.missing.includes("authCodeSecret"));
   assert.ok(!body.missing.includes("internalBillingKey"));
 });
@@ -747,7 +816,13 @@ test("auth signup maps existing Supabase auth users to the registered email resp
         return jsonResponse([]);
       }
       if (url.endsWith("/auth/v1/admin/users")) {
-        return jsonResponse({ message: "A user with this email address has already been registered" }, 422);
+        return jsonResponse(
+          {
+            message:
+              "A user with this email address has already been registered",
+          },
+          422,
+        );
       }
       if (
         url.includes("/rest/v1/web_auth_codes?email=eq.seller%40example.com") &&
@@ -795,7 +870,13 @@ test("auth signup resends a custom code for a pending unconfirmed signup", async
         return jsonResponse([]);
       }
       if (url.endsWith("/auth/v1/admin/users")) {
-        return jsonResponse({ message: "A user with this email address has already been registered" }, 422);
+        return jsonResponse(
+          {
+            message:
+              "A user with this email address has already been registered",
+          },
+          422,
+        );
       }
       if (
         url.includes("/rest/v1/web_auth_codes?email=eq.seller%40example.com") &&
@@ -1083,6 +1164,7 @@ test("credits endpoint creates an isolated web user with five free credits", asy
   assert.equal(response.status, 200);
   assert.deepEqual(await readJson(response), {
     credits: 5,
+    reserved_credits: 0,
     is_paid: false,
     plan: "free",
   });
@@ -1091,7 +1173,9 @@ test("credits endpoint creates an isolated web user with five free credits", asy
 });
 
 test("deduct endpoint charges only completed success-only tasks", async () => {
-  const rows = [{ id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" }];
+  const rows = [
+    { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+  ];
   const transactions = [];
   const app = createWebBackend({
     env: {
@@ -1225,7 +1309,10 @@ test("image generation proxy forwards to the dedicated web image upstream", asyn
     status: "processing",
   });
   assert.equal(calls[0].url, "https://web-project.supabase.co/auth/v1/user");
-  assert.equal(calls[1].url, "https://image-web.example.com/api/v1/image/generate");
+  assert.equal(
+    calls[1].url,
+    "https://image-web.example.com/api/v1/image/generate",
+  );
 });
 
 test("image generation proxy can use the mobile app image router without mixing auth", async () => {
@@ -1271,7 +1358,10 @@ test("image generation proxy can use the mobile app image router without mixing 
     status: "processing",
   });
   assert.equal(calls[0].url, "https://web-project.supabase.co/auth/v1/user");
-  assert.equal(calls[1].url, "https://kroma-api.onrender.com/api/v1/image/generate");
+  assert.equal(
+    calls[1].url,
+    "https://kroma-api.onrender.com/api/v1/image/generate",
+  );
 });
 
 test("image generation uses the web backend provider router instead of forwarding to the app backend", async () => {
@@ -1328,7 +1418,13 @@ test("image generation uses the web backend provider router instead of forwardin
   const body = await readJson(response);
   assert.match(body.task_id, /^web-img-/);
   assert.equal(body.status, "processing");
-  assert.equal(calls.some((call) => call.url === "https://kroma-api.onrender.com/api/v1/image/generate"), false);
+  assert.equal(
+    calls.some(
+      (call) =>
+        call.url === "https://kroma-api.onrender.com/api/v1/image/generate",
+    ),
+    false,
+  );
 
   await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -1431,7 +1527,10 @@ test("image generation stores inline provider results before returning them", as
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
   );
   assert.equal(
-    calls.some((call) => call.url === "https://kroma-api.onrender.com/api/v1/image/generate"),
+    calls.some(
+      (call) =>
+        call.url === "https://kroma-api.onrender.com/api/v1/image/generate",
+    ),
     false,
   );
 });
@@ -1443,9 +1542,12 @@ test("image generation progress does not expose provider channel details", async
   });
   let finishProvider;
   const providerResponsePromise = new Promise((resolve) => {
-    finishProvider = () => resolve(jsonResponse({
-      data: [{ url: "https://cdn.example.com/result.png" }],
-    }));
+    finishProvider = () =>
+      resolve(
+        jsonResponse({
+          data: [{ url: "https://cdn.example.com/result.png" }],
+        }),
+      );
   });
 
   const app = createWebBackend({
@@ -1496,7 +1598,10 @@ test("image generation progress does not expose provider channel details", async
   const taskBody = await readJson(task);
   assert.equal(taskBody.status, "processing");
   assert.equal(taskBody.progress, "正在生成图片");
-  assert.doesNotMatch(taskBody.progress, /通道|主通道|备用|尝试|channel|provider/i);
+  assert.doesNotMatch(
+    taskBody.progress,
+    /通道|主通道|备用|尝试|channel|provider/i,
+  );
 
   finishProvider();
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1565,9 +1670,18 @@ test("PackyAPI source-image jobs use the edit endpoint and omit unsupported resp
   );
 
   assert.equal(task.status, 200);
-  assert.equal((await readJson(task)).image_url, "https://cdn.example.com/packy.png");
-  assert.equal(calls.some((call) => call.url.includes("/images/generations")), false);
-  assert.equal(calls.some((call) => call.url.includes("/images/edits")), true);
+  assert.equal(
+    (await readJson(task)).image_url,
+    "https://cdn.example.com/packy.png",
+  );
+  assert.equal(
+    calls.some((call) => call.url.includes("/images/generations")),
+    false,
+  );
+  assert.equal(
+    calls.some((call) => call.url.includes("/images/edits")),
+    true,
+  );
 });
 
 test("PackyAPI masked cleanup sends the painted mask as a multipart file", async () => {
@@ -1623,7 +1737,10 @@ test("PackyAPI masked cleanup sends the painted mask as a multipart file", async
       headers: { Authorization: "Bearer web-access-token" },
     }),
   );
-  assert.equal((await readJson(task)).image_url, "https://cdn.example.com/cleaned.png");
+  assert.equal(
+    (await readJson(task)).image_url,
+    "https://cdn.example.com/cleaned.png",
+  );
 });
 
 test("AI outfit change uses edit routing with the uploaded target garment image", async () => {
@@ -1647,7 +1764,10 @@ test("AI outfit change uses edit routing with the uploaded target garment image"
       if (url === "https://packyapi.example.com/v1/images/edits") {
         assert.equal(init.method, "POST");
         assert.equal(init.body instanceof FormData, true);
-        assert.equal(init.body.get("prompt"), "Use Image 2 as the target clothing.");
+        assert.equal(
+          init.body.get("prompt"),
+          "Use Image 2 as the target clothing.",
+        );
         assert.equal(init.body.getAll("image").length, 2);
         return jsonResponse({
           data: [{ url: "https://cdn.example.com/outfit-change.png" }],
@@ -1687,8 +1807,14 @@ test("AI outfit change uses edit routing with the uploaded target garment image"
 
   assert.equal(taskBody.status, "done");
   assert.equal(taskBody.image_url, "https://cdn.example.com/outfit-change.png");
-  assert.equal(calls.some((call) => call.url.includes("/images/generations")), false);
-  assert.equal(calls.some((call) => call.url.includes("/images/edits")), true);
+  assert.equal(
+    calls.some((call) => call.url.includes("/images/generations")),
+    false,
+  );
+  assert.equal(
+    calls.some((call) => call.url.includes("/images/edits")),
+    true,
+  );
 });
 
 test("AI model change uses edit routing with the uploaded target model image", async () => {
@@ -1712,7 +1838,10 @@ test("AI model change uses edit routing with the uploaded target model image", a
       if (url === "https://packyapi.example.com/v1/images/edits") {
         assert.equal(init.method, "POST");
         assert.equal(init.body instanceof FormData, true);
-        assert.match(String(init.body.get("prompt")), /target model reference/i);
+        assert.match(
+          String(init.body.get("prompt")),
+          /target model reference/i,
+        );
         assert.equal(init.body.getAll("image").length, 2);
         return jsonResponse({
           data: [{ url: "https://cdn.example.com/model-change.png" }],
@@ -1727,7 +1856,8 @@ test("AI model change uses edit routing with the uploaded target model image", a
       method: "POST",
       headers: { Authorization: "Bearer web-access-token" },
       body: JSON.stringify({
-        prompt: "Image 2 is the target model reference. Preserve the exact Image 1 product.",
+        prompt:
+          "Image 2 is the target model reference. Preserve the exact Image 1 product.",
         image_base64: productImage,
         template_image_base64: targetModelImage,
         template_image_base64s: [targetModelImage],
@@ -1751,8 +1881,14 @@ test("AI model change uses edit routing with the uploaded target model image", a
 
   assert.equal(taskBody.status, "done");
   assert.equal(taskBody.image_url, "https://cdn.example.com/model-change.png");
-  assert.equal(calls.some((call) => call.url.includes("/images/generations")), false);
-  assert.equal(calls.some((call) => call.url.includes("/images/edits")), true);
+  assert.equal(
+    calls.some((call) => call.url.includes("/images/generations")),
+    false,
+  );
+  assert.equal(
+    calls.some((call) => call.url.includes("/images/edits")),
+    true,
+  );
 });
 
 test("AI edit tools fall back to standard providers when PackyAPI edit fails", async () => {
@@ -1778,7 +1914,10 @@ test("AI edit tools fall back to standard providers when PackyAPI edit fails", a
         });
       }
       if (url === "https://packyapi.example.com/v1/images/edits") {
-        return jsonResponse({ error: { message: "temporary edit outage" } }, 503);
+        return jsonResponse(
+          { error: { message: "temporary edit outage" } },
+          503,
+        );
       }
       if (url === "https://rightcode.example.com/v1/images/generations") {
         assert.equal(init.method, "POST");
@@ -1824,14 +1963,22 @@ test("AI edit tools fall back to standard providers when PackyAPI edit fails", a
   const taskBody = await readJson(task);
 
   assert.equal(taskBody.status, "done");
-  assert.equal(taskBody.image_url, "https://cdn.example.com/rightcode-retouch.png");
+  assert.equal(
+    taskBody.image_url,
+    "https://cdn.example.com/rightcode-retouch.png",
+  );
   assert.equal(taskBody.channel_used, "rightcode");
   assert.equal(
-    calls.some((call) => call.url === "https://packyapi.example.com/v1/images/edits"),
+    calls.some(
+      (call) => call.url === "https://packyapi.example.com/v1/images/edits",
+    ),
     true,
   );
   assert.equal(
-    calls.some((call) => call.url === "https://rightcode.example.com/v1/images/generations"),
+    calls.some(
+      (call) =>
+        call.url === "https://rightcode.example.com/v1/images/generations",
+    ),
     true,
   );
 });
@@ -1866,7 +2013,10 @@ test("detail-page template modules use PackyAPI edit fallback with product and m
         assert.equal(init.headers["Content-Type"], undefined);
         assert.equal(init.body instanceof FormData, true);
         assert.equal(init.body.get("model"), "gpt-image-2");
-        assert.equal(init.body.get("prompt"), "Preserve Image 1 product; use Image 2 packaging material.");
+        assert.equal(
+          init.body.get("prompt"),
+          "Preserve Image 1 product; use Image 2 packaging material.",
+        );
         assert.equal(init.body.get("n"), "1");
         assert.equal(init.body.get("size"), "1024x1792");
         assert.equal(init.body.get("quality"), "medium");
@@ -1912,13 +2062,21 @@ test("detail-page template modules use PackyAPI edit fallback with product and m
 
   assert.equal(taskBody.status, "done");
   assert.equal(taskBody.channel_used, "packyapi");
-  assert.equal(taskBody.image_url, "https://cdn.example.com/packy-template-edit.png");
   assert.equal(
-    calls.some((call) => call.url === "https://packyapi.example.com/v1/images/generations"),
+    taskBody.image_url,
+    "https://cdn.example.com/packy-template-edit.png",
+  );
+  assert.equal(
+    calls.some(
+      (call) =>
+        call.url === "https://packyapi.example.com/v1/images/generations",
+    ),
     false,
   );
   assert.equal(
-    calls.some((call) => call.url === "https://packyapi.example.com/v1/images/edits"),
+    calls.some(
+      (call) => call.url === "https://packyapi.example.com/v1/images/edits",
+    ),
     true,
   );
 });
@@ -1945,7 +2103,9 @@ test("buyer-show template references prefer PackyAPI edit before standard provid
       }
       if (url === "https://rightcode.example.com/v1/images/generations") {
         return jsonResponse({
-          data: [{ url: "https://cdn.example.com/rightcode-ignored-reference.png" }],
+          data: [
+            { url: "https://cdn.example.com/rightcode-ignored-reference.png" },
+          ],
         });
       }
       if (url === "https://packyapi.example.com/v1/images/edits") {
@@ -1965,7 +2125,8 @@ test("buyer-show template references prefer PackyAPI edit before standard provid
       method: "POST",
       headers: { Authorization: "Bearer web-access-token" },
       body: JSON.stringify({
-        prompt: "Preserve Image 1 product; use Image 2 as buyer-show reference.",
+        prompt:
+          "Preserve Image 1 product; use Image 2 as buyer-show reference.",
         image_base64: productImage,
         template_image_base64: buyerImage,
         template_image_base64s: [buyerImage],
@@ -1990,13 +2151,21 @@ test("buyer-show template references prefer PackyAPI edit before standard provid
 
   assert.equal(task.status, 200);
   const taskBody = await readJson(task);
-  assert.equal(taskBody.image_url, "https://cdn.example.com/packy-buyer-show.png");
   assert.equal(
-    calls.some((call) => call.url === "https://rightcode.example.com/v1/images/generations"),
+    taskBody.image_url,
+    "https://cdn.example.com/packy-buyer-show.png",
+  );
+  assert.equal(
+    calls.some(
+      (call) =>
+        call.url === "https://rightcode.example.com/v1/images/generations",
+    ),
     false,
   );
   assert.equal(
-    calls.some((call) => call.url === "https://packyapi.example.com/v1/images/edits"),
+    calls.some(
+      (call) => call.url === "https://packyapi.example.com/v1/images/edits",
+    ),
     true,
   );
 });
@@ -2004,9 +2173,8 @@ test("buyer-show template references prefer PackyAPI edit before standard provid
 test("provider router rejects truncated base64 images and falls back", async () => {
   const calls = [];
   const truncatedPngBase64 = Buffer.from([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-    0x00, 0x00, 0x00, 0x01,
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01,
   ]).toString("base64");
   const app = createWebBackend({
     env: {
@@ -2034,7 +2202,10 @@ test("provider router rejects truncated base64 images and falls back", async () 
           data: [{ b64_json: truncatedPngBase64 }],
         });
       }
-      if (url === "https://api.gptsapi.net/api/v3/openai/gpt-image-2/text-to-image") {
+      if (
+        url ===
+        "https://api.gptsapi.net/api/v3/openai/gpt-image-2/text-to-image"
+      ) {
         return jsonResponse({
           data: { urls: { get: "https://api.gptsapi.net/poll/task-fallback" } },
         });
@@ -2080,7 +2251,9 @@ test("provider router rejects truncated base64 images and falls back", async () 
   assert.equal(taskBody.channel_used, "gptsapi");
   assert.equal(taskBody.image_url, "https://cdn.example.com/fallback.png");
   assert.equal(
-    calls.some((call) => call.url === "https://packyapi.example.com/v1/images/edits"),
+    calls.some(
+      (call) => call.url === "https://packyapi.example.com/v1/images/edits",
+    ),
     true,
   );
 });
@@ -2100,7 +2273,10 @@ test("GPTsAPI uses the app-compatible v3 async image endpoint", async () => {
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
       }
-      if (url === "https://api.gptsapi.net/api/v3/openai/gpt-image-2/text-to-image") {
+      if (
+        url ===
+        "https://api.gptsapi.net/api/v3/openai/gpt-image-2/text-to-image"
+      ) {
         assert.equal(init.headers.Authorization, "Bearer gpts-key");
         assert.deepEqual(JSON.parse(init.body), {
           prompt: "product hero",
@@ -2152,7 +2328,10 @@ test("GPTsAPI uses the app-compatible v3 async image endpoint", async () => {
   assert.equal(taskBody.status, "done");
   assert.equal(taskBody.channel_used, "gptsapi");
   assert.equal(taskBody.image_url, "https://cdn.example.com/gpts.png");
-  assert.equal(calls.some((call) => call.url.endsWith("/images/generations")), false);
+  assert.equal(
+    calls.some((call) => call.url.endsWith("/images/generations")),
+    false,
+  );
 });
 
 test("Wuyinkeji accepts a full image_gpt create URL without double-appending the path", async () => {
@@ -2179,7 +2358,9 @@ test("Wuyinkeji accepts a full image_gpt create URL without double-appending the
         });
         return jsonResponse({ code: 200, data: { id: "wuyin-task-1" } });
       }
-      if (url === "https://api.wuyinkeji.com/api/async/detail?id=wuyin-task-1") {
+      if (
+        url === "https://api.wuyinkeji.com/api/async/detail?id=wuyin-task-1"
+      ) {
         return jsonResponse({
           code: 200,
           data: { status: 2, result: ["https://cdn.example.com/wuyin.png"] },
@@ -2217,7 +2398,10 @@ test("Wuyinkeji accepts a full image_gpt create URL without double-appending the
   assert.equal(taskBody.status, "done");
   assert.equal(taskBody.channel_used, "wuyinkeji");
   assert.equal(taskBody.image_url, "https://cdn.example.com/wuyin.png");
-  assert.equal(calls.some((call) => call.url.includes("image_gpt/api/async")), false);
+  assert.equal(
+    calls.some((call) => call.url.includes("image_gpt/api/async")),
+    false,
+  );
 });
 
 test("image generation proxy forwards cancel requests without requiring a JSON body", async () => {
@@ -2233,7 +2417,9 @@ test("image generation proxy forwards cancel requests without requiring a JSON b
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
       }
-      if (url === "https://image-web.example.com/api/v1/image/task/task-1/cancel") {
+      if (
+        url === "https://image-web.example.com/api/v1/image/task/task-1/cancel"
+      ) {
         assert.equal(init.method, "POST");
         assert.equal(init.body, undefined);
         return jsonResponse({ canceled: true });
@@ -2262,7 +2448,9 @@ test("credit top-up endpoint requires an internal billing key", async () => {
       WEB_INTERNAL_BILLING_KEY: "billing-secret",
     },
     fetch: async () => {
-      throw new Error("Auth should not be checked before billing key validation");
+      throw new Error(
+        "Auth should not be checked before billing key validation",
+      );
     },
   });
 
@@ -2280,7 +2468,9 @@ test("credit top-up endpoint requires an internal billing key", async () => {
 });
 
 test("paddle webhook credits a web user once after signature verification", async () => {
-  const users = [{ id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" }];
+  const users = [
+    { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+  ];
   const transactions = [];
   const billingEvents = [];
   const app = createWebBackend({
@@ -2294,14 +2484,23 @@ test("paddle webhook credits a web user once after signature verification", asyn
       if (url.endsWith("/rest/v1/web_billing_events")) {
         const body = JSON.parse(init.body);
         if (billingEvents.some((event) => event.event_id === body.event_id)) {
-          return jsonResponse({ message: "duplicate key value violates unique constraint" }, 409);
+          return jsonResponse(
+            { message: "duplicate key value violates unique constraint" },
+            409,
+          );
         }
         billingEvents.push(body);
         return jsonResponse([body]);
       }
-      if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_1")) {
+      if (
+        url.includes(
+          "/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_1",
+        )
+      ) {
         if (init.method !== "PATCH") {
-          return jsonResponse(billingEvents.map((event) => ({ status: event.status })));
+          return jsonResponse(
+            billingEvents.map((event) => ({ status: event.status })),
+          );
         }
         const body = JSON.parse(init.body);
         Object.assign(billingEvents[0], body);
@@ -2339,7 +2538,9 @@ test("paddle webhook credits a web user once after signature verification", asyn
   const response = await app.handle(
     new Request("http://local.test/api/v1/billing/paddle/webhook", {
       method: "POST",
-      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      headers: {
+        "Paddle-Signature": paddleSignature(rawBody, "paddle-secret"),
+      },
       body: rawBody,
     }),
   );
@@ -2364,7 +2565,9 @@ test("paddle webhook credits a web user once after signature verification", asyn
   const duplicate = await app.handle(
     new Request("http://local.test/api/v1/billing/paddle/webhook", {
       method: "POST",
-      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      headers: {
+        "Paddle-Signature": paddleSignature(rawBody, "paddle-secret"),
+      },
       body: rawBody,
     }),
   );
@@ -2379,7 +2582,9 @@ test("paddle webhook credits a web user once after signature verification", asyn
 });
 
 test("paddle webhook derives credits from server-side price mapping", async () => {
-  const users = [{ id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" }];
+  const users = [
+    { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+  ];
   const transactions = [];
   const billingEvents = [];
   const app = createWebBackend({
@@ -2402,9 +2607,15 @@ test("paddle webhook derives credits from server-side price mapping", async () =
         billingEvents.push(body);
         return jsonResponse([body]);
       }
-      if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_price_map")) {
+      if (
+        url.includes(
+          "/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_price_map",
+        )
+      ) {
         if (init.method !== "PATCH") {
-          return jsonResponse(billingEvents.map((event) => ({ status: event.status })));
+          return jsonResponse(
+            billingEvents.map((event) => ({ status: event.status })),
+          );
         }
         Object.assign(billingEvents[0], JSON.parse(init.body));
         return jsonResponse([billingEvents[0]]);
@@ -2445,7 +2656,9 @@ test("paddle webhook derives credits from server-side price mapping", async () =
   const response = await app.handle(
     new Request("http://local.test/api/v1/billing/paddle/webhook", {
       method: "POST",
-      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      headers: {
+        "Paddle-Signature": paddleSignature(rawBody, "paddle-secret"),
+      },
       body: rawBody,
     }),
   );
@@ -2467,7 +2680,9 @@ test("paddle webhook derives credits from server-side price mapping", async () =
 });
 
 test("paddle webhook ignores client supplied credits when price mapping exists", async () => {
-  const users = [{ id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" }];
+  const users = [
+    { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+  ];
   const transactions = [];
   const billingEvents = [];
   const app = createWebBackend({
@@ -2490,9 +2705,15 @@ test("paddle webhook ignores client supplied credits when price mapping exists",
         billingEvents.push(body);
         return jsonResponse([body]);
       }
-      if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_tampered_credits")) {
+      if (
+        url.includes(
+          "/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_tampered_credits",
+        )
+      ) {
         if (init.method !== "PATCH") {
-          return jsonResponse(billingEvents.map((event) => ({ status: event.status })));
+          return jsonResponse(
+            billingEvents.map((event) => ({ status: event.status })),
+          );
         }
         Object.assign(billingEvents[0], JSON.parse(init.body));
         return jsonResponse([billingEvents[0]]);
@@ -2534,7 +2755,9 @@ test("paddle webhook ignores client supplied credits when price mapping exists",
   const response = await app.handle(
     new Request("http://local.test/api/v1/billing/paddle/webhook", {
       method: "POST",
-      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      headers: {
+        "Paddle-Signature": paddleSignature(rawBody, "paddle-secret"),
+      },
       body: rawBody,
     }),
   );
@@ -2558,7 +2781,9 @@ test("paddle webhook rejects invalid signatures before crediting", async () => {
       WEB_PADDLE_WEBHOOK_SECRET: "paddle-secret",
     },
     fetch: async () => {
-      throw new Error("Database should not be touched for invalid Paddle signatures");
+      throw new Error(
+        "Database should not be touched for invalid Paddle signatures",
+      );
     },
   });
   const rawBody = JSON.stringify({
@@ -2592,13 +2817,22 @@ test("paddle webhook duplicate reservation skips crediting", async () => {
     },
     fetch: async (url, init = {}) => {
       if (url.endsWith("/rest/v1/web_billing_events")) {
-        return jsonResponse({ message: "duplicate key value violates unique constraint" }, 409);
+        return jsonResponse(
+          { message: "duplicate key value violates unique constraint" },
+          409,
+        );
       }
-      if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_duplicate")) {
+      if (
+        url.includes(
+          "/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_duplicate",
+        )
+      ) {
         return jsonResponse([{ status: "processed" }]);
       }
 
-      throw new Error(`Duplicate webhook should not touch another table: ${url}`);
+      throw new Error(
+        `Duplicate webhook should not touch another table: ${url}`,
+      );
     },
   });
   const payload = {
@@ -2617,7 +2851,9 @@ test("paddle webhook duplicate reservation skips crediting", async () => {
   const response = await app.handle(
     new Request("http://local.test/api/v1/billing/paddle/webhook", {
       method: "POST",
-      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      headers: {
+        "Paddle-Signature": paddleSignature(rawBody, "paddle-secret"),
+      },
       body: rawBody,
     }),
   );
@@ -2631,7 +2867,9 @@ test("paddle webhook duplicate reservation skips crediting", async () => {
 });
 
 test("paddle webhook retries events that failed before credit mutation", async () => {
-  const users = [{ id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" }];
+  const users = [
+    { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+  ];
   const billingEvents = [];
   const transactions = [];
   let failFirstUserLookup = true;
@@ -2646,14 +2884,23 @@ test("paddle webhook retries events that failed before credit mutation", async (
       if (url.endsWith("/rest/v1/web_billing_events")) {
         const body = JSON.parse(init.body);
         if (billingEvents.some((event) => event.event_id === body.event_id)) {
-          return jsonResponse({ message: "duplicate key value violates unique constraint" }, 409);
+          return jsonResponse(
+            { message: "duplicate key value violates unique constraint" },
+            409,
+          );
         }
         billingEvents.push(body);
         return jsonResponse([body]);
       }
-      if (url.includes("/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_retry")) {
+      if (
+        url.includes(
+          "/rest/v1/web_billing_events?provider=eq.paddle&event_id=eq.evt_retry",
+        )
+      ) {
         if (init.method !== "PATCH") {
-          return jsonResponse(billingEvents.map((event) => ({ status: event.status })));
+          return jsonResponse(
+            billingEvents.map((event) => ({ status: event.status })),
+          );
         }
         Object.assign(billingEvents[0], JSON.parse(init.body));
         return jsonResponse([billingEvents[0]]);
@@ -2692,7 +2939,9 @@ test("paddle webhook retries events that failed before credit mutation", async (
   const first = await app.handle(
     new Request("http://local.test/api/v1/billing/paddle/webhook", {
       method: "POST",
-      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      headers: {
+        "Paddle-Signature": paddleSignature(rawBody, "paddle-secret"),
+      },
       body: rawBody,
     }),
   );
@@ -2704,7 +2953,9 @@ test("paddle webhook retries events that failed before credit mutation", async (
   const second = await app.handle(
     new Request("http://local.test/api/v1/billing/paddle/webhook", {
       method: "POST",
-      headers: { "Paddle-Signature": paddleSignature(rawBody, "paddle-secret") },
+      headers: {
+        "Paddle-Signature": paddleSignature(rawBody, "paddle-secret"),
+      },
       body: rawBody,
     }),
   );
@@ -2737,11 +2988,18 @@ test("generation history stores a completed task for the authenticated web user"
 
       if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
         return jsonResponse([
-          { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+          {
+            id: "web-user-1",
+            email: "seller@example.com",
+            credits: 5,
+            plan: "free",
+          },
         ]);
       }
 
-      if (url.endsWith("/rest/v1/web_generations?on_conflict=user_id,task_id")) {
+      if (
+        url.endsWith("/rest/v1/web_generations?on_conflict=user_id,task_id")
+      ) {
         const body = JSON.parse(init.body);
         return jsonResponse([body]);
       }
@@ -2777,7 +3035,10 @@ test("generation history stores a completed task for the authenticated web user"
     ],
     resultAssets: [
       { url: "https://cdn.example.com/result-hero.png", label: "Hero KV" },
-      { url: "https://cdn.example.com/result-overall.png", label: "Overall show" },
+      {
+        url: "https://cdn.example.com/result-overall.png",
+        label: "Overall show",
+      },
     ],
     backendTaskIds: ["image-task-1", "image-task-2"],
     creditCost: 2,
@@ -2844,7 +3105,12 @@ test("generation history can copy result images into web storage before saving",
 
       if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
         return jsonResponse([
-          { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+          {
+            id: "web-user-1",
+            email: "seller@example.com",
+            credits: 5,
+            plan: "free",
+          },
         ]);
       }
 
@@ -2868,10 +3134,14 @@ test("generation history can copy result images into web storage before saving",
           headers: init.headers,
           body: Buffer.from(await init.body.arrayBuffer()),
         });
-        return jsonResponse({ Key: "web-generation-results/web-user-1/task-cloud-durable/1.png" });
+        return jsonResponse({
+          Key: "web-generation-results/web-user-1/task-cloud-durable/1.png",
+        });
       }
 
-      if (url.endsWith("/rest/v1/web_generations?on_conflict=user_id,task_id")) {
+      if (
+        url.endsWith("/rest/v1/web_generations?on_conflict=user_id,task_id")
+      ) {
         const body = JSON.parse(init.body);
         storedRows.push(body);
         return jsonResponse([body]);
@@ -2903,7 +3173,9 @@ test("generation history can copy result images into web storage before saving",
     },
     status: "completed",
     resultUrls: ["https://cdn.example.com/provider-result.png"],
-    resultAssets: [{ url: "https://cdn.example.com/provider-result.png", label: "Hero KV" }],
+    resultAssets: [
+      { url: "https://cdn.example.com/provider-result.png", label: "Hero KV" },
+    ],
     creditCost: 1,
     createdAt: "2026-06-17T00:01:00.000Z",
     completedAt: "2026-06-17T00:02:00.000Z",
@@ -2939,7 +3211,9 @@ test("generation history can copy result images into web storage before saving",
   assert.equal(storageUploads[0].headers["Content-Type"], "image/png");
   assert.deepEqual([...storageUploads[0].body], [137, 80, 78, 71]);
   assert.deepEqual(storedRows[0].result_urls, [durableUrl]);
-  assert.deepEqual(storedRows[0].result_assets, [{ url: durableUrl, label: "Hero KV" }]);
+  assert.deepEqual(storedRows[0].result_assets, [
+    { url: durableUrl, label: "Hero KV" },
+  ]);
   assert.deepEqual((await readJson(response)).task.resultUrls, [durableUrl]);
 });
 
@@ -2992,12 +3266,22 @@ test("generation history falls back to the legacy schema when rich columns are n
 
       if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
         return jsonResponse([
-          { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+          {
+            id: "web-user-1",
+            email: "seller@example.com",
+            credits: 5,
+            plan: "free",
+          },
         ]);
       }
 
-      if (url.endsWith("/rest/v1/web_generations?on_conflict=user_id,task_id")) {
-        return jsonResponse({ message: "Could not find the 'task_id' column" }, 400);
+      if (
+        url.endsWith("/rest/v1/web_generations?on_conflict=user_id,task_id")
+      ) {
+        return jsonResponse(
+          { message: "Could not find the 'task_id' column" },
+          400,
+        );
       }
 
       if (url.endsWith("/rest/v1/web_generations")) {
@@ -3025,7 +3309,10 @@ test("generation history falls back to the legacy schema when rich columns are n
   assert.deepEqual(await readJson(response), { saved: true, task });
   assert.equal(legacyRows.length, 1);
   assert.equal(legacyRows[0].prompt, JSON.stringify(task));
-  assert.equal(legacyRows[0].result_image_url, "https://cdn.example.com/legacy-hero.png");
+  assert.equal(
+    legacyRows[0].result_image_url,
+    "https://cdn.example.com/legacy-hero.png",
+  );
   assert.equal(legacyRows[0].credits_cost, 2);
 });
 
@@ -3052,7 +3339,9 @@ test("generation history reads task JSON from legacy rows when rich columns are 
     },
     status: "completed",
     resultUrls: ["https://cdn.example.com/legacy-detail.png"],
-    resultAssets: [{ url: "https://cdn.example.com/legacy-detail.png", label: "Main" }],
+    resultAssets: [
+      { url: "https://cdn.example.com/legacy-detail.png", label: "Main" },
+    ],
     creditCost: 1,
     createdAt: "2026-06-17T00:01:00.000Z",
     completedAt: "2026-06-17T00:02:00.000Z",
@@ -3071,7 +3360,12 @@ test("generation history reads task JSON from legacy rows when rich columns are 
 
       if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
         return jsonResponse([
-          { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+          {
+            id: "web-user-1",
+            email: "seller@example.com",
+            credits: 5,
+            plan: "free",
+          },
         ]);
       }
 
@@ -3079,7 +3373,10 @@ test("generation history reads task JSON from legacy rows when rich columns are 
         url.includes("/rest/v1/web_generations?user_id=eq.web-user-1") &&
         url.includes("select=task,")
       ) {
-        return jsonResponse({ message: "Could not find the 'task' column" }, 400);
+        return jsonResponse(
+          { message: "Could not find the 'task' column" },
+          400,
+        );
       }
 
       if (
@@ -3140,7 +3437,9 @@ test("generation history lists only rows for the authenticated web user", async 
     },
     status: "completed",
     resultUrls: ["https://cdn.example.com/detail.png"],
-    resultAssets: [{ url: "https://cdn.example.com/detail.png", label: "Fabric" }],
+    resultAssets: [
+      { url: "https://cdn.example.com/detail.png", label: "Fabric" },
+    ],
     creditCost: 1,
     createdAt: "2026-06-18T00:01:00.000Z",
     completedAt: "2026-06-18T00:02:00.000Z",
@@ -3161,7 +3460,12 @@ test("generation history lists only rows for the authenticated web user", async 
 
       if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
         return jsonResponse([
-          { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+          {
+            id: "web-user-1",
+            email: "seller@example.com",
+            credits: 5,
+            plan: "free",
+          },
         ]);
       }
 
@@ -3183,5 +3487,8 @@ test("generation history lists only rows for the authenticated web user", async 
 
   assert.equal(response.status, 200);
   assert.deepEqual(await readJson(response), [task]);
-  assert.equal(calls.some((call) => call.url.includes("user_id=eq.web-user-1")), true);
+  assert.equal(
+    calls.some((call) => call.url.includes("user_id=eq.web-user-1")),
+    true,
+  );
 });

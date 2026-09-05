@@ -10,7 +10,7 @@ export const resolutionCreditCosts: Record<GenerationResolution, number> = {
   "4K": 4,
 };
 
-export const brandVersionExtraCredits = 2;
+export const brandVersionExtraCredits = 0;
 
 export function getResolutionCreditCost(
   resolution: GenerationResolution = "1K",
@@ -20,15 +20,16 @@ export function getResolutionCreditCost(
 
 export function getGenerationImageCount(config: GenerationConfig): number {
   if (config.module === "main_image") {
-    return Math.max(1, config.selectedMainModules?.length ?? 0);
+    return Math.max(0, config.selectedMainModules?.length ?? 0);
   }
 
   if (config.module === "detail_page") {
     const selectedCount = Object.values(
-      config.detailModuleCounts ?? ({} as Partial<Record<DetailPageModuleId, number>>),
+      config.detailModuleCounts ??
+        ({} as Partial<Record<DetailPageModuleId, number>>),
     ).reduce((sum, count) => sum + normalizeModuleCount(count), 0);
 
-    return Math.max(1, selectedCount);
+    return Math.max(0, selectedCount);
   }
 
   return 1;

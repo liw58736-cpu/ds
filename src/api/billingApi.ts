@@ -2,12 +2,16 @@ import { addCredits } from "../storage/accountStore";
 import type { AccountSnapshot } from "../storage/accountStore";
 import { getAccountSnapshot } from "../storage/accountStore";
 import { buildPurchasePlanRequest } from "./apiContracts";
-import { requestRemoteJson, shouldUseRemoteBackend } from "./remoteBackendClient";
+import {
+  requestRemoteJson,
+  shouldUseRemoteBackend,
+} from "./remoteBackendClient";
 
 export type PaymentChannel = "mock" | "paddle";
 
 export interface PurchasePlanInput {
   planId: string;
+  verifiedPriceId?: string;
   planName: string;
   credits: number;
   paymentChannel: PaymentChannel;
@@ -112,7 +116,7 @@ export async function purchasePlan(
 
 async function openPaddleCheckout(input: PurchasePlanInput): Promise<void> {
   const token = import.meta.env.VITE_PADDLE_CLIENT_TOKEN?.trim();
-  const priceId = getPaddlePriceId(input.planId);
+  const priceId = input.verifiedPriceId || getPaddlePriceId(input.planId);
 
   if (!token) {
     throw new Error("Paddle client token is not configured.");
@@ -147,9 +151,12 @@ function getPaddlePriceId(planId: string): string | undefined {
     "basic-top-up": import.meta.env.VITE_PADDLE_PRICE_BASIC_TOP_UP,
     "standard-top-up": import.meta.env.VITE_PADDLE_PRICE_STANDARD_TOP_UP,
     "pro-top-up": import.meta.env.VITE_PADDLE_PRICE_PRO_TOP_UP,
-    "monthly-subscription": import.meta.env.VITE_PADDLE_PRICE_MONTHLY_SUBSCRIPTION,
-    "quarterly-subscription": import.meta.env.VITE_PADDLE_PRICE_QUARTERLY_SUBSCRIPTION,
-    "yearly-subscription": import.meta.env.VITE_PADDLE_PRICE_YEARLY_SUBSCRIPTION,
+    "monthly-subscription": import.meta.env
+      .VITE_PADDLE_PRICE_MONTHLY_SUBSCRIPTION,
+    "quarterly-subscription": import.meta.env
+      .VITE_PADDLE_PRICE_QUARTERLY_SUBSCRIPTION,
+    "yearly-subscription": import.meta.env
+      .VITE_PADDLE_PRICE_YEARLY_SUBSCRIPTION,
   };
 
   return paddlePriceEnvByPlanId[planId]?.trim();
@@ -210,4 +217,28 @@ function initializePaddle(paddle: PaddleApi, token: string): void {
 
   paddle.Initialize({ token });
   initializedPaddleToken = token;
+}
+
+export interface VerifiedPricePlan {
+  id: string;
+  currency: string;
+  amount_minor: number;
+  credits: number;
+  price_id: string;
+  recurring: boolean;
+}
+export async function getVerifiedPriceCatalog(): Promise<{
+  approved: boolean;
+  plans: VerifiedPricePlan[];
+}> {
+  const base = import.meta.env.VITE_WEB_API_BASE_URL?.trim().replace(
+    /\/+$/,
+    "",
+  );
+  if (!base) return { approved: false, plans: [] };
+  const response = await fetch(`${base}/billing/catalog`, {
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw new Error("套餐暂未核对完成");
+  return response.json();
 }

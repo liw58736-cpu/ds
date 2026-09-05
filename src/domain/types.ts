@@ -11,13 +11,7 @@ export type GenerationModule =
 export type Platform = "amazon" | "shopify" | "independent_store";
 
 export type AspectRatio =
-  | "original"
-  | "1:1"
-  | "4:5"
-  | "3:4"
-  | "16:9"
-  | "9:16"
-  | "long_page";
+  "original" | "1:1" | "4:5" | "3:4" | "16:9" | "9:16" | "long_page";
 
 export type VisualStyle = "studio" | "lifestyle" | "premium" | "minimal";
 
@@ -30,30 +24,17 @@ export type GenerationVersion = "standard" | "brand";
 export type GenerationQuality = "standard" | "2k" | "4k";
 
 export type InspirationBackground =
-  | "original"
-  | "studio"
-  | "lifestyle"
-  | "minimal"
-  | "seasonal";
+  "original" | "studio" | "lifestyle" | "minimal" | "seasonal";
 export type InspirationPose = "natural" | "static" | "dynamic" | "closeup";
 export type InspirationModel = "none" | "female" | "male" | "diverse";
 export type InspirationComposition = "hero" | "editorial" | "split" | "ugc";
 export type InspirationPurpose =
-  | "product_listing"
-  | "social_post"
-  | "ad_creative"
-  | "brand_story";
+  "product_listing" | "social_post" | "ad_creative" | "brand_story";
 export type InspirationProductHandling =
-  | "preserve"
-  | "feature"
-  | "wear"
-  | "in_use";
+  "preserve" | "feature" | "wear" | "in_use";
 export type InspirationChangeIntensity = "keep" | "low" | "medium" | "high";
 export type InspirationGarmentProportion =
-  | "preserve"
-  | "fitted"
-  | "balanced"
-  | "oversized";
+  "preserve" | "fitted" | "balanced" | "oversized";
 export type InspirationEditAction = "keep" | "adjust" | "replace";
 
 export interface InspirationSettings {
@@ -119,7 +100,8 @@ export type WhiteBackgroundMode =
 
 export type ShadowMode = "natural" | "none" | "contact_shadow";
 
-export type TaskStatus = "queued" | "processing" | "completed" | "failed";
+export type TaskStatus =
+  "queued" | "processing" | "completed" | "partial" | "failed";
 
 export interface ProductInput {
   id: string;
@@ -141,6 +123,7 @@ export interface GenerationConfig {
   resolution?: GenerationResolution;
   generationVersion?: GenerationVersion;
   selectedMainModules?: MainImageModuleId[];
+  detailModuleOrder?: DetailPageModuleId[];
   detailModuleCounts?: Partial<Record<DetailPageModuleId, number>>;
   moduleReferenceAssets?: Partial<Record<string, ModuleReferenceAsset[]>>;
   inspirationSettings?: InspirationSettings;
@@ -153,6 +136,15 @@ export interface ModuleReferenceAsset {
   fileName: string;
   imageUrl: string;
   note?: string;
+  noteMode?: "instruction";
+  visibleText?: string;
+}
+
+export interface FailedGenerationItem {
+  index: number;
+  label: string;
+  config: GenerationConfig;
+  error: string;
 }
 
 export interface GenerationTask {
@@ -161,6 +153,8 @@ export interface GenerationTask {
   config: GenerationConfig;
   status: TaskStatus;
   resultUrls: string[];
+  failedItems?: FailedGenerationItem[];
+  billingManaged?: boolean;
   resultAssets?: GenerationResultAsset[];
   channelUsed?: string;
   channelUsedByAsset?: string[];
@@ -183,6 +177,8 @@ export interface GenerationResultAsset {
 
 export interface GenerationResult {
   resultUrls: string[];
+  failedItems?: FailedGenerationItem[];
+  billingManaged?: boolean;
   resultAssets?: GenerationResultAsset[];
   channelUsed?: string;
   channelUsedByAsset?: string[];

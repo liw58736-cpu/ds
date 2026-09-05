@@ -35,7 +35,7 @@ describe("creditCost", () => {
     expect(estimateGenerationCredits(config)).toBe(2);
   });
 
-  it("charges main-image jobs by selected module count and brand edition extra", () => {
+  it("charges main-image jobs by selected module count without a brand surcharge", () => {
     const config: GenerationConfig = {
       ...baseConfig,
       resolution: "4K",
@@ -44,7 +44,7 @@ describe("creditCost", () => {
     };
 
     expect(getGenerationImageCount(config)).toBe(3);
-    expect(estimateGenerationCredits(config)).toBe(14);
+    expect(estimateGenerationCredits(config)).toBe(12);
   });
 
   it("charges detail-page jobs by the total quantity across modules", () => {
@@ -60,6 +60,6 @@ describe("creditCost", () => {
     };
 
     expect(getGenerationImageCount(config)).toBe(3);
-    expect(estimateGenerationCredits(config)).toBe(5);
+    expect(estimateGenerationCredits(config)).toBe(3);
   });
 });

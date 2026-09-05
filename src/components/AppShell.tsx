@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import kromaLogo from "../assets/brand/kroma-logo.png";
 
 export type AppPage =
@@ -29,18 +29,21 @@ interface AppShellProps {
 
 const topNavItems = [
   { page: "home", label: "首页" },
-  { page: "main_image", label: "商品主图" },
-  { page: "detail_page", label: "详情页" },
-  { page: "white_background", label: "AI工具" },
-  { page: "inspiration", label: "灵感创作" },
-  { page: "motion", label: "Live图" },
+  { page: "main_image", label: "创作工作台" },
   { page: "materials", label: "图片库" },
-  { page: "history", label: "历史任务" },
+  { page: "history", label: "任务中心" },
   { page: "pricing", label: "价格" },
   { page: "account", label: "账户" },
   { page: "login", label: "登录" },
 ] satisfies Array<{ page: AppPage; label: string }>;
 
+const studioNavigation: Array<{ page: AppPage; label: string }> = [
+  { page: "main_image", label: "商品主图" },
+  { page: "detail_page", label: "详情页" },
+  { page: "white_background", label: "AI工具" },
+  { page: "inspiration", label: "灵感创作" },
+  { page: "motion", label: "Live图" },
+];
 const legalLinks = [
   { page: "terms", label: "服务条款" },
   { page: "privacy", label: "隐私政策" },
@@ -66,6 +69,11 @@ export function AppShell({
   isAuthenticated = false,
   children,
 }: AppShellProps) {
+  const [lastStudio, setLastStudio] = useState<AppPage>("main_image");
+  const inStudio = studioNavigation.some((item) => item.page === page);
+  useEffect(() => {
+    if (inStudio) setLastStudio(page);
+  }, [page, inStudio]);
   const visibleTopNavItems = topNavItems.filter(
     (item) =>
       (isAuthenticated || !privatePages.has(item.page)) &&
@@ -87,8 +95,12 @@ export function AppShell({
             <button
               type="button"
               key={item.page}
-              className={`topnav-button${page === item.page ? " nav-active" : ""}`}
-              onClick={() => onPageChange(item.page)}
+              className={`topnav-button${(item.page === "main_image" ? inStudio : page === item.page) ? " nav-active" : ""}`}
+              onClick={() =>
+                onPageChange(
+                  item.page === "main_image" ? lastStudio : item.page,
+                )
+              }
               aria-current={page === item.page ? "page" : undefined}
             >
               {item.label}
@@ -96,6 +108,21 @@ export function AppShell({
           ))}
         </nav>
       </header>
+      {inStudio ? (
+        <nav className="studio-navigation" aria-label="创作功能">
+          {studioNavigation.map((item) => (
+            <button
+              type="button"
+              key={item.page}
+              className={page === item.page ? "nav-active" : ""}
+              aria-current={page === item.page ? "page" : undefined}
+              onClick={() => onPageChange(item.page)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      ) : null}
       {children}
       <footer className="site-footer" aria-label="页脚">
         <p>© 2026 kroma. All rights reserved.</p>

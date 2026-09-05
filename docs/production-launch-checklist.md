@@ -1,3 +1,5 @@
+> 2026-09-04 更新：以 [新版发布说明](product/2026-09-04-rollout.md) 为准。以下有关 App 生图代理的旧段落仅是历史配置，不应据此把网页重新接回 App 后端。当前网站有独立供应商路由。
+
 # Kroma Web Production Launch Checklist
 
 Use this checklist before treating `https://kromaai.app` as live.

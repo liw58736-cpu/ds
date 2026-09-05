@@ -67,7 +67,7 @@ describe("apiContracts", () => {
       },
     });
     expect(request.body.prompt.finalPrompt).toContain(
-      "premium overseas ecommerce image generation",
+      "Commercial ecommerce product image generation",
     );
   });
 

@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles.css";
+import "./workspace-redesign.css";
 
 document.documentElement.dataset.kromaBuild = "2026-06-22-static-refresh";
 

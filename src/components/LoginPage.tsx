@@ -1,3 +1,4 @@
+import { PasswordResetForm } from "./PasswordResetForm";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { AppPage } from "./AppShell";
@@ -22,6 +23,7 @@ const EMAIL_VERIFICATION_MESSAGE =
 const SIX_DIGIT_CODE_PATTERN = /^\d{6}$/;
 
 export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
+  const [recovering, setRecovering] = useState(false);
   const [authView, setAuthView] = useState<AuthView>("login");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -51,7 +53,7 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
       : "\u6b63\u5728\u767b\u5f55..."
     : isRegisterVerification
       ? "验证并完成注册"
-    : `${title} kroma`;
+      : `${title} kroma`;
 
   const showStatus = (nextMessage: string) => {
     setMessage(nextMessage);
@@ -181,8 +183,8 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
       isRegisterVerification
         ? "正在验证邮箱验证码，请稍候..."
         : isRegister
-        ? "\u6b63\u5728\u521b\u5efa\u8d26\u6237\uff0c\u8bf7\u7a0d\u5019..."
-        : "\u6b63\u5728\u767b\u5f55\uff0c\u8bf7\u7a0d\u5019...",
+          ? "\u6b63\u5728\u521b\u5efa\u8d26\u6237\uff0c\u8bf7\u7a0d\u5019..."
+          : "\u6b63\u5728\u767b\u5f55\uff0c\u8bf7\u7a0d\u5019...",
     );
 
     try {
@@ -226,7 +228,9 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
       onAuthenticated?.();
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : `${title}失败，请检查账户后重试。`;
+        error instanceof Error
+          ? error.message
+          : `${title}失败，请检查账户后重试。`;
 
       if (isRegister && errorMessage.includes("请查看邮箱完成账户验证")) {
         setRegisterStep("verify");
@@ -255,15 +259,32 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
     }
   };
 
+  if (recovering)
+    return (
+      <main className="login-page">
+        <section className="login-card">
+          <PasswordResetForm onBack={() => setRecovering(false)} />
+        </section>
+      </main>
+    );
+
   return (
     <main className="login-page page-surface">
       <section className="login-card panel" aria-labelledby="login-title">
         <div className="login-card-header">
           <div className="login-logo-row">
-            <img className="login-brand-mark" src={kromaLogo} alt="kroma logo" />
+            <img
+              className="login-brand-mark"
+              src={kromaLogo}
+              alt="kroma logo"
+            />
             <h1 id="login-title">{title}</h1>
           </div>
-          <p>{isRegister ? "创建账户后开始管理积分和订单。" : "登录后查看积分、订单和历史任务。"}</p>
+          <p>
+            {isRegister
+              ? "创建账户后开始管理积分和订单。"
+              : "登录后查看积分、订单和历史任务。"}
+          </p>
         </div>
 
         <div className="login-auth-switch" aria-label="账户操作">
@@ -285,7 +306,20 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
           </button>
         </div>
 
-        <form className="login-form" aria-label={`${title}表单`} onSubmit={handleSubmit}>
+        {!isRegister ? (
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setRecovering(true)}
+          >
+            忘记密码？
+          </button>
+        ) : null}
+        <form
+          className="login-form"
+          aria-label={`${title}表单`}
+          onSubmit={handleSubmit}
+        >
           <label className="field login-field">
             <span>邮箱</span>
             <input
@@ -306,7 +340,9 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  autoComplete={isRegister ? "new-password" : "current-password"}
+                  autoComplete={
+                    isRegister ? "new-password" : "current-password"
+                  }
                   placeholder="请输入密码"
                 />
               </label>
