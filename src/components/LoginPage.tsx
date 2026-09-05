@@ -261,8 +261,11 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
 
   if (recovering)
     return (
-      <main className="login-page">
-        <section className="login-card">
+      <main className="login-page page-surface">
+        <section
+          className="login-card panel password-reset-card"
+          aria-labelledby="password-reset-title"
+        >
           <PasswordResetForm onBack={() => setRecovering(false)} />
         </section>
       </main>
@@ -306,15 +309,6 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
           </button>
         </div>
 
-        {!isRegister ? (
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => setRecovering(true)}
-          >
-            忘记密码？
-          </button>
-        ) : null}
         <form
           className="login-form"
           aria-label={`${title}表单`}
@@ -346,6 +340,17 @@ export function LoginPage({ onOpenLegal, onAuthenticated }: LoginPageProps) {
                   placeholder="请输入密码"
                 />
               </label>
+              {!isRegister ? (
+                <div className="login-password-actions">
+                  <button
+                    type="button"
+                    className="login-forgot-button"
+                    onClick={() => setRecovering(true)}
+                  >
+                    忘记密码？
+                  </button>
+                </div>
+              ) : null}
               {isRegister ? (
                 <label className="field login-field">
                   <span>确认密码</span>

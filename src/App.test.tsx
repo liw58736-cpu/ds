@@ -828,6 +828,34 @@ describe("App", () => {
     expect(container.querySelector(".login-form")).toBeNull();
   });
 
+  it("places password recovery inside the centered login layout", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    const topNavButtons =
+      container.querySelectorAll<HTMLButtonElement>(".topnav-button");
+    await user.click(topNavButtons[topNavButtons.length - 1]);
+
+    const loginForm = screen.getByRole("form", { name: "登录表单" });
+    const recoveryButton = within(loginForm).getByRole("button", {
+      name: "忘记密码？",
+    });
+    expect(recoveryButton).toHaveClass("login-forgot-button");
+    await user.click(recoveryButton);
+
+    const recoveryForm = screen.getByRole("form", { name: "找回密码" });
+    expect(recoveryForm).toHaveClass("password-reset-form");
+    expect(recoveryForm.closest("main")).toHaveClass(
+      "login-page",
+      "page-surface",
+    );
+    expect(recoveryForm.closest("section")).toHaveClass(
+      "login-card",
+      "panel",
+      "password-reset-card",
+    );
+  });
+
   it("routes successful Kroma password login to account controls", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const fetchMock = vi

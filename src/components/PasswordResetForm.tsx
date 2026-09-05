@@ -13,6 +13,7 @@ export function PasswordResetForm({ onBack }: { onBack: () => void }) {
   const [message, setMessage] = useState("");
   return (
     <form
+      className="password-reset-form"
       aria-label="找回密码"
       onSubmit={async (event) => {
         event.preventDefault();
@@ -45,7 +46,7 @@ export function PasswordResetForm({ onBack }: { onBack: () => void }) {
         }
       }}
     >
-      <h2>找回密码</h2>
+      <h2 id="password-reset-title">找回密码</h2>
       <label className="field">
         邮箱
         <input

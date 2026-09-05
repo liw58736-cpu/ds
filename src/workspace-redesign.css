@@ -86,6 +86,14 @@
 .dashboard-drafts article { padding:24px;display:grid;gap:12px; }
 .dashboard-drafts article p { color:#657088;overflow-wrap:anywhere; }
 .dashboard-drafts article button { justify-self:start; }
+.login-password-actions { display:flex; justify-content:flex-end; margin-top:-8px; padding:0 16px; }
+.login-forgot-button { min-height:30px; padding:2px 0; border:0; border-bottom:1px solid transparent; border-radius:0; color:#394084; background:transparent; font-weight:700; cursor:pointer; }
+.login-forgot-button:hover,.login-forgot-button:focus-visible { color:#2e3475; border-bottom-color:currentColor; outline:0; }
+.password-reset-card { width:min(480px,100%); padding:28px; }
+.password-reset-form { display:grid; gap:16px; width:100%; }
+.password-reset-form h2 { margin:0; text-align:center; }
+.password-reset-form > p[role=status] { margin:0; padding:10px 12px; border:1px solid #c9cfec; border-radius:12px; color:#394084; background:#f2f3ff; line-height:1.5; }
+.password-reset-form > button { width:100%; }
 @media(max-width:800px) {
   .topbar { padding:12px; }
   .topnav { display:flex; overflow:auto; max-width:100%; padding:3px; flex-wrap:nowrap; }
