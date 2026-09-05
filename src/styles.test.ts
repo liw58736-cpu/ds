@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const stylesheet = readFileSync("src/styles.css", "utf8");
+const workspaceStylesheet = readFileSync(
+  "src/workspace-redesign.css",
+  "utf8",
+);
 
 describe("stylesheet quality guard", () => {
   it("does not use thick one-sided accent borders on cards or hints", () => {
@@ -21,9 +25,9 @@ describe("stylesheet quality guard", () => {
     expect(stylesheet).toMatch(/\.studio-preview\s*{\s*width:\s*100%;/);
   });
 
-  it("shows every mobile navigation destination in a compact grid", () => {
-    expect(stylesheet).toMatch(
-      /\.topnav\s*{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/s,
+  it("keeps every mobile navigation destination in one scrollable row", () => {
+    expect(workspaceStylesheet).toMatch(
+      /@media\s*\(max-width:\s*800px\)[\s\S]*?\.topnav\s*{[^}]*display:\s*flex;[^}]*overflow:\s*auto;[^}]*flex-wrap:\s*nowrap;/s,
     );
   });
 
@@ -46,6 +50,17 @@ describe("stylesheet quality guard", () => {
   });
 
   it("keeps the interface on solid colors", () => {
-    expect(stylesheet).not.toMatch(/(?:linear|radial|conic)-gradient\s*\(/i);
+    expect(`${stylesheet}\n${workspaceStylesheet}`).not.toMatch(
+      /(?:linear|radial|conic)-gradient\s*\(/i,
+    );
+  });
+
+  it("centers wide pages and aligns both navigation rows to one layout edge", () => {
+    expect(workspaceStylesheet).toMatch(
+      /\.app-shell\s*{[^}]*width:\s*100%;[^}]*max-width:\s*none;[^}]*margin:\s*0 auto;/s,
+    );
+    expect(workspaceStylesheet).toMatch(
+      /\.topbar,[\s\S]*?\.studio-navigation,[\s\S]*?\.workspace,[\s\S]*?\.site-footer\s*{[^}]*width:\s*min\(var\(--kroma-wide-layout\),\s*100%\);[^}]*margin-left:\s*auto;[^}]*margin-right:\s*auto;/,
+    );
   });
 });
