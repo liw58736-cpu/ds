@@ -22,6 +22,7 @@ import { AppShell } from "./AppShell";
 import { Workspace } from "./Workspace";
 
 vi.mock("../api/materialLibraryApi", () => ({
+  getCachedMaterialLibraryAssets: vi.fn().mockReturnValue([]),
   listMaterialLibraryAssets: vi.fn(),
 }));
 

@@ -622,7 +622,6 @@ async function handleListMaterials(request, url, env, fetchImpl) {
       Number.parseInt(url.searchParams.get("limit") ?? "60", 10) || 60,
     ),
   );
-  await ensureGenerationStorageBucket(fetchImpl, env, bucket);
   const prefix = `${sanitizeStoragePathSegment(authUser.id)}/materials`;
   const response = await fetchImpl(
     `${supabaseUrl(env)}/storage/v1/object/list/${encodeURIComponent(bucket)}`,

@@ -13,6 +13,7 @@ import {
 } from "../api/materialImportApi";
 import {
   listMaterialLibraryAssets,
+  rememberMaterialLibraryAssets,
   type MaterialLibraryAsset,
 } from "../api/materialLibraryApi";
 import { NoticeDialog } from "./NoticeDialog";
@@ -157,7 +158,17 @@ export function MaterialLibraryPage({
     for (const [index, file] of files.entries()) {
       setUploadStatus(`正在上传 ${index + 1} / ${files.length}：${file.name}`);
       try {
-        await uploadLocalMaterial(file);
+        const material = await uploadLocalMaterial(file);
+        rememberMaterialLibraryAssets([
+          {
+            id: `saved:${material.id}`,
+            imageUrl: material.imageUrl,
+            fileName: material.fileName,
+            createdAt: material.createdAt,
+            source: "saved",
+            sourceLabel: "保存图片",
+          },
+        ]);
         succeeded++;
       } catch (error) {
         failures.push(file);
@@ -218,6 +229,20 @@ export function MaterialLibraryPage({
       (_, index) => results[index].status === "rejected",
     );
     const succeeded = selected.length - failedUrls.length;
+    const savedMaterials = results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    if (savedMaterials.length)
+      rememberMaterialLibraryAssets(
+        savedMaterials.map((material) => ({
+          id: `saved:${material.id}`,
+          imageUrl: material.imageUrl,
+          fileName: material.fileName,
+          createdAt: material.createdAt,
+          source: "saved" as const,
+          sourceLabel: "保存图片",
+        })),
+      );
     try {
       setSelectedImages(new Set(failedUrls));
       setMessage(

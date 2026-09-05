@@ -16,6 +16,7 @@ vi.mock("../api/materialImportApi", () => ({
 }));
 vi.mock("../api/materialLibraryApi", () => ({
   listMaterialLibraryAssets: vi.fn(),
+  rememberMaterialLibraryAssets: vi.fn(),
 }));
 
 afterEach(() => vi.clearAllMocks());

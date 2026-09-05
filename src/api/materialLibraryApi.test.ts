@@ -1,12 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { listGenerationTasks } from "./generationApi";
 import { listSavedMaterials } from "./materialImportApi";
-import { listMaterialLibraryAssets } from "./materialLibraryApi";
+import {
+  getCachedMaterialLibraryAssets,
+  listMaterialLibraryAssets,
+  prefetchMaterialLibraryAssets,
+  rememberMaterialLibraryAssets,
+} from "./materialLibraryApi";
 
 vi.mock("./generationApi", () => ({ listGenerationTasks: vi.fn() }));
 vi.mock("./materialImportApi", () => ({ listSavedMaterials: vi.fn() }));
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  localStorage.clear();
+});
 
 describe("materialLibraryApi", () => {
   it("combines saved photos with completed results from every generation tool", async () => {
@@ -96,5 +104,56 @@ describe("materialLibraryApi", () => {
     await expect(listMaterialLibraryAssets()).rejects.toThrow(
       "图片库暂时无法同步",
     );
+  });
+
+  it("deduplicates simultaneous reads and caches a compact first page", async () => {
+    let releaseSaved!: (value: Awaited<ReturnType<typeof listSavedMaterials>>) => void;
+    vi.mocked(listSavedMaterials).mockReturnValue(
+      new Promise((resolve) => {
+        releaseSaved = resolve;
+      }),
+    );
+    vi.mocked(listGenerationTasks).mockResolvedValue([]);
+
+    const first = listMaterialLibraryAssets(0, 40);
+    const second = listMaterialLibraryAssets(0, 40);
+    expect(listSavedMaterials).toHaveBeenCalledTimes(1);
+    expect(listGenerationTasks).toHaveBeenCalledTimes(1);
+    expect(listSavedMaterials).toHaveBeenCalledWith(40, 0);
+
+    releaseSaved([
+      {
+        id: "cached-1",
+        imageUrl: "https://cdn.example.com/cached.webp",
+        fileName: "最近图片",
+        createdAt: "2026-09-05T00:00:00.000Z",
+        contentType: "image/webp",
+        size: 100,
+      },
+    ]);
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(getCachedMaterialLibraryAssets()).toEqual([
+      expect.objectContaining({ fileName: "最近图片" }),
+    ]);
+
+    await prefetchMaterialLibraryAssets();
+    expect(listSavedMaterials).toHaveBeenCalledTimes(1);
+  });
+
+  it("remembers newly saved images without waiting for another cloud read", () => {
+    rememberMaterialLibraryAssets([
+      {
+        id: "saved:new",
+        imageUrl: "https://cdn.example.com/new.webp",
+        fileName: "刚保存的图片",
+        createdAt: "2026-09-05T01:00:00.000Z",
+        source: "saved",
+        sourceLabel: "保存图片",
+      },
+    ]);
+
+    expect(getCachedMaterialLibraryAssets()).toEqual([
+      expect.objectContaining({ fileName: "刚保存的图片" }),
+    ]);
   });
 });

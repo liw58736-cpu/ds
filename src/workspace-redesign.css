@@ -81,6 +81,7 @@
 .material-library-grid input[type=checkbox] { accent-color:#383d91; }
 .material-picker-dialog { max-height:90dvh; overflow:auto; }
 .material-picker-dialog .library-toolbar { padding:0; }
+.material-picker-more { justify-self:center; }
 .task-partial-status { padding:10px 14px; border:1px solid #ead8a4; background:#fff9e8; border-radius:12px; }
 .account-ledger { padding:20px; }
 .ledger-table { overflow:auto; }

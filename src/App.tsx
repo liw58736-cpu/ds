@@ -17,6 +17,7 @@ import { PricingPage } from "./components/PricingPage";
 import { Workspace } from "./components/Workspace";
 import { MotionStudioPage } from "./components/MotionStudioPage";
 import { MaterialLibraryPage } from "./components/MaterialLibraryPage";
+import { prefetchMaterialLibraryAssets } from "./api/materialLibraryApi";
 import { getCurrentAccountSnapshot } from "./api/accountApi";
 import {
   ACCOUNT_CHANGED_EVENT,
@@ -109,6 +110,20 @@ export default function App() {
     isStudioPage(routeFromUrl()),
   );
   const [storageOwner, setStorageOwner] = useState(getStorageOwner);
+
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      page === "materials" ||
+      import.meta.env.MODE === "test"
+    )
+      return;
+    const timer = window.setTimeout(
+      () => void prefetchMaterialLibraryAssets().catch(() => {}),
+      800,
+    );
+    return () => window.clearTimeout(timer);
+  }, [isAuthenticated, page, storageOwner]);
 
   const handlePageChange = (nextPage: AppPage) => {
     const hasSavedSession = Boolean(getCurrentAccountSnapshot().session);

@@ -528,6 +528,13 @@ test("material library lists only the authenticated user's saved images", async 
     calls.some((call) => String(call.url).includes("web-user-2")),
     false,
   );
+  assert.equal(
+    calls.some(
+      (call) =>
+        call.url === "https://web-project.supabase.co/storage/v1/bucket",
+    ),
+    false,
+  );
 });
 
 test("health endpoint reuses a short database check cache", async () => {

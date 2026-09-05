@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { ImagePlus, RefreshCw, X } from "lucide-react";
 import {
+  getCachedMaterialLibraryAssets,
   listMaterialLibraryAssets,
   type MaterialLibraryAsset,
 } from "../api/materialLibraryApi";
@@ -28,28 +29,47 @@ export function MaterialPickerDialog({
 }: MaterialPickerDialogProps) {
   const pickerId = useId();
   const [search, setSearch] = useState("");
+  const [visibleLimit, setVisibleLimit] = useState(16);
   const [returned, setReturned] = useState(false);
   const [suspended, setSuspended] = useState(false);
-  const [assets, setAssets] = useState<MaterialLibraryAsset[]>([]);
-  const [status, setStatus] = useState("正在读取图片库…");
+  const [assets, setAssets] = useState<MaterialLibraryAsset[]>(() =>
+    getCachedMaterialLibraryAssets(),
+  );
+  const [status, setStatus] = useState(() =>
+    assets.length
+      ? "正在后台同步最新图片…"
+      : "正在读取图片库…",
+  );
 
   const load = async () => {
-    setStatus("正在读取图片库…");
+    const cached = getCachedMaterialLibraryAssets();
+    if (cached.length) {
+      setAssets(cached);
+      setStatus("已显示最近图片，正在后台同步最新内容…");
+    } else {
+      setStatus("正在读取图片库…");
+    }
     try {
-      const nextAssets = await listMaterialLibraryAssets();
+      const nextAssets = await listMaterialLibraryAssets(0, 40);
       setAssets(nextAssets);
       setStatus(
         nextAssets.length > 0 ? "" : "图片库还没有图片，请先保存或生成图片。",
       );
     } catch {
-      setAssets([]);
-      setStatus("图片库暂时无法同步，请稍后重试。");
+      if (!cached.length) setAssets([]);
+      setStatus(
+        cached.length
+          ? "最新内容暂未同步，当前显示最近图片。"
+          : "图片库暂时无法同步，请稍后重试。",
+      );
     }
   };
 
   useEffect(() => {
     if (!suspended && (open || returned)) void load();
   }, [open, returned, suspended]);
+
+  useEffect(() => setVisibleLimit(16), [open, returned, search]);
 
   useEffect(() => {
     const handle = (event: Event) => {
@@ -125,7 +145,7 @@ export function MaterialPickerDialog({
         </div>
         {assets.length > 0 ? (
           <div className="material-library-grid material-picker-grid">
-            {filtered.map((asset) => (
+            {filtered.slice(0, visibleLimit).map((asset) => (
               <button
                 type="button"
                 key={asset.id}
@@ -138,6 +158,9 @@ export function MaterialPickerDialog({
                   src={asset.imageUrl}
                   alt={asset.fileName}
                   referrerPolicy="no-referrer"
+                  loading="lazy"
+                  decoding="async"
+                  fetchPriority="low"
                 />
                 <span>{asset.fileName}</span>
                 <small>{asset.sourceLabel}</small>
@@ -150,6 +173,15 @@ export function MaterialPickerDialog({
             <p>{status}</p>
           </div>
         )}
+        {filtered.length > visibleLimit ? (
+          <button
+            type="button"
+            className="secondary-button material-picker-more"
+            onClick={() => setVisibleLimit((current) => current + 16)}
+          >
+            显示更多图片（剩余 {filtered.length - visibleLimit} 张）
+          </button>
+        ) : null}
         {status && assets.length > 0 ? (
           <p className="material-library-inline-status">{status}</p>
         ) : null}

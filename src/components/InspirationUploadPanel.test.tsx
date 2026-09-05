@@ -3,10 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { InspirationUploadPanel } from "./InspirationUploadPanel";
 
-vi.mock("../api/materialLibraryApi", () => ({ listMaterialLibraryAssets: vi.fn().mockResolvedValue([
+vi.mock("../api/materialLibraryApi", () => ({
+  getCachedMaterialLibraryAssets: vi.fn().mockReturnValue([]),
+  listMaterialLibraryAssets: vi.fn().mockResolvedValue([
   { id: "base", imageUrl: "https://cdn.example.com/base.jpg", fileName: "base.jpg", createdAt: "2026-09-03T00:00:00.000Z", source: "saved", sourceLabel: "保存图片" },
   { id: "shirt", imageUrl: "https://cdn.example.com/shirt.jpg", fileName: "shirt.jpg", createdAt: "2026-09-03T00:01:00.000Z", source: "saved", sourceLabel: "保存图片" },
-]) }));
+  ]),
+}));
 
 describe("InspirationUploadPanel", () => {
   it("uses exactly two explicit image roles", async () => {
