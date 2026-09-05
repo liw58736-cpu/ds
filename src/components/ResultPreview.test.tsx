@@ -171,14 +171,14 @@ describe("ResultPreview", () => {
     expect(screen.getByRole("dialog", { name: "首屏 KV" })).toBeInTheDocument();
   });
 
-  it("scrolls the preview feed to the newest task when a new generation starts", () => {
+  it("places the newest task first without scrolling the feed to the bottom", () => {
     const scrollIntoView = vi.fn();
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
       value: scrollIntoView,
     });
 
-    const { rerender } = render(
+    const { container, rerender } = render(
       <ResultPreview
         product={product}
         latestTask={olderCompletedTask}
@@ -195,10 +195,11 @@ describe("ResultPreview", () => {
       />,
     );
 
-    expect(scrollIntoView).toHaveBeenCalledWith({
-      block: "end",
-      behavior: "smooth",
-    });
+    const cards = container.querySelectorAll(".preview-task-card");
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveTextContent("处理中");
+    expect(cards[1]).toHaveTextContent("细节特写");
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
   it("hides retry for unavailable upload source tasks", () => {

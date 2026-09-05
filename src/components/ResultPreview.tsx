@@ -1,5 +1,5 @@
 import { exportDetailLongImage } from "../domain/imageExports";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Image, Sparkles } from "lucide-react";
 import { LightboxFrame } from "./LightboxFrame";
 import {
@@ -55,7 +55,7 @@ function getDisplayTasks(
     tasks && tasks.length > 0 ? tasks : latestTask ? [latestTask] : [];
 
   return [...sourceTasks].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 }
 
@@ -81,28 +81,11 @@ export function ResultPreview({
 }: ResultPreviewProps) {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [downloadError, setDownloadError] = useState("");
-  const newestTaskRef = useRef<HTMLDivElement | null>(null);
   const displayTasks = useMemo(
     () => getDisplayTasks(tasks, latestTask),
     [latestTask, tasks],
   );
   const hasTasks = displayTasks.length > 0;
-  const newestTaskId = displayTasks[displayTasks.length - 1]?.id;
-
-  useEffect(() => {
-    if (!newestTaskId) {
-      return;
-    }
-
-    if (typeof newestTaskRef.current?.scrollIntoView !== "function") {
-      return;
-    }
-
-    newestTaskRef.current.scrollIntoView({
-      block: "end",
-      behavior: "smooth",
-    });
-  }, [newestTaskId]);
 
   return (
     <section className="panel result-panel" aria-label="生成预览">
@@ -142,7 +125,6 @@ export function ResultPreview({
               onOpenMotion={onOpenMotion}
             />
           ))}
-          <div ref={newestTaskRef} aria-hidden="true" />
         </div>
       ) : (
         <div className="preview-grid preview-grid-single">
