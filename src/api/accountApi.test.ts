@@ -592,6 +592,31 @@ describe("accountApi", () => {
     expect(getCurrentAccountSnapshot().session).toBeNull();
   });
 
+  it("translates invalid login credentials into a clear Chinese message", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: () =>
+        Promise.resolve(JSON.stringify({ detail: "Invalid login credentials" })),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loginOrRegister({
+        identifier: "seller@example.com",
+        authView: "login",
+        mode: "password",
+        storeName: "",
+        inviteCode: "",
+        createdAt: "2026-06-17T00:00:00.000Z",
+        credential: "incorrect-password",
+      }),
+    ).rejects.toThrow("邮箱或密码错误，请重新输入。");
+
+    expect(getCurrentAccountSnapshot().session).toBeNull();
+  });
+
   it("reports unavailable Kroma auth service with a clear message", async () => {
     vi.stubEnv("VITE_WEB_API_BASE_URL", "http://127.0.0.1:8000/api/v1");
     const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));

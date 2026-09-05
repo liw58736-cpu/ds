@@ -531,6 +531,10 @@ async function requestKromaJson<Payload>(
       }
     }
 
+    if (detail.toLowerCase().includes("invalid login credentials")) {
+      throw new Error("邮箱或密码错误，请重新输入。");
+    }
+
     throw new Error(`Kroma API request failed: ${response.status} ${detail}`);
   }
 
