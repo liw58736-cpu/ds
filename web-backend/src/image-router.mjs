@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 const defaultModel = "gpt-image-2";
 const defaultMaxAttempts = 3;
 const defaultTaskTtlMs = 30 * 60 * 1000;
+const executionTimeoutMs = 20 * 60 * 1000;
+const requestTimeoutMs = 180000;
+const resultStorageTimeoutMs = 90000;
+const maxResultBytes = 20 * 1024 * 1024;
 
 const terminalStatuses = new Set(["done", "error"]);
 
@@ -32,6 +36,7 @@ export function createImageRouter({
         created_at: Date.now(),
         user_id: authUser.id ?? "",
         cancel_requested: false,
+        controller: new AbortController(),
       };
       tasks.set(task.task_id, task);
 
@@ -45,17 +50,28 @@ export function createImageRouter({
 
       return toTaskResponse(task);
     },
-    execute: async (requestBody, authUser, taskId) => {
+    execute: async (requestBody, authUser, taskId, options = {}) => {
+      cleanupTasks(tasks);
       const task = {
         task_id: taskId,
         user_id: authUser.id,
         status: "processing",
         created_at: Date.now(),
         cancel_requested: false,
+        controller: new AbortController(),
+        deadline: options.deadline,
       };
       tasks.set(taskId, task);
-      await runTask({ task, requestBody, pool, env, fetchImpl });
-      return toTaskResponse(task);
+      const cancel = () => task.controller.abort(options.signal.reason);
+      options.signal?.addEventListener("abort", cancel, { once: true });
+      if (options.signal?.aborted) cancel();
+      try {
+        await runTask({ task, requestBody, pool, env, fetchImpl });
+        return toTaskResponse(task);
+      } finally {
+        options.signal?.removeEventListener("abort", cancel);
+        tasks.delete(taskId);
+      }
     },
     get: (taskId) => {
       cleanupTasks(tasks);
@@ -70,6 +86,7 @@ export function createImageRouter({
       task.status = "error";
       task.error = "Task canceled";
       task.progress = "已取消";
+      task.controller.abort(new Error("Task canceled"));
       return true;
     },
     response: toTaskResponse,
@@ -77,14 +94,49 @@ export function createImageRouter({
   };
 }
 
-function runTask({ task, requestBody, pool, env, fetchImpl }) {
-  return Promise.resolve()
+function abortable(promise, signal) {
+  return new Promise((resolve, reject) => {
+    const finish = (callback, value) => {
+      signal.removeEventListener("abort", abort);
+      callback(value);
+    };
+    const abort = () => finish(reject, signal.reason || new Error("Task canceled"));
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+    Promise.resolve(promise).then(
+      (value) => finish(resolve, value), (error) => finish(reject, error),
+    );
+  });
+}
+
+function scopedFetch(fetchImpl, signal) {
+  return (url, init = {}) => {
+    signal.throwIfAborted();
+    const combined = AbortSignal.any([
+      signal, AbortSignal.timeout(requestTimeoutMs),
+      ...(init.signal ? [init.signal] : []),
+    ]);
+    return abortable(fetchImpl(url, { ...init, signal: combined }), combined);
+  };
+}
+
+async function runTask({ task, requestBody, pool, env, fetchImpl }) {
+  const signal = task.controller.signal;
+  const deadline = Math.min(task.deadline || Infinity, task.created_at + executionTimeoutMs);
+  const expire = () => task.controller.abort(new Error("generation_timeout"));
+  const timer = setTimeout(expire, Math.max(0, deadline - Date.now()));
+  timer.unref?.();
+  if (Date.now() >= deadline) expire();
+  const fetch = scopedFetch(fetchImpl, signal);
+  const work = Promise.resolve()
     .then(async () => {
+      signal.throwIfAborted();
       const result = await routeGeneration({
         requestBody,
         pool,
         env,
-        fetchImpl,
+        fetchImpl: fetch,
+        signal,
         updateProgress: (progress) => {
           if (!task.cancel_requested) {
             task.progress = progress;
@@ -92,16 +144,17 @@ function runTask({ task, requestBody, pool, env, fetchImpl }) {
         },
       });
 
-      if (task.cancel_requested) {
-        return;
-      }
+      signal.throwIfAborted();
 
-      const storedResult = await storeInlineImageResult({
+      const storedResult = await storeImageResult({
         result,
         task,
         env,
-        fetchImpl,
+        fetchImpl: fetch,
+        signal,
       });
+      if (Date.now() >= deadline) expire();
+      signal.throwIfAborted();
 
       if (storedResult.image_url || storedResult.image_base64) {
         task.status = "done";
@@ -117,15 +170,18 @@ function runTask({ task, requestBody, pool, env, fetchImpl }) {
       task.error =
         storedResult.error ?? result.error ?? "All providers failed.";
       task.progress = "生成失败";
-    })
-    .catch((error) => {
-      if (task.cancel_requested) {
-        return;
-      }
+    });
+  try {
+    await abortable(work, signal);
+  } catch (error) {
+    if (!task.cancel_requested) {
       task.status = "error";
       task.error = error?.message ?? "Generation failed.";
       task.progress = "生成失败";
-    });
+    }
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function routeGeneration({
@@ -134,6 +190,7 @@ async function routeGeneration({
   env,
   fetchImpl,
   updateProgress,
+  signal,
 }) {
   const attempts = [];
   const plan = planForRequest(requestBody);
@@ -157,13 +214,15 @@ async function routeGeneration({
           .reduce((n, k) => n + k.currentConcurrent, 0) < key.maxConcurrent,
     )
   ) {
+    signal.throwIfAborted();
     if (Date.now() - started > 10 * 60 * 1000)
       return { error: "queue_timeout" };
     updateProgress("排队中");
-    await wait(500);
+    await wait(500, signal);
   }
 
   for (const step of plan) {
+    signal.throwIfAborted();
     const key = acquireProviderKey(pool, step.provider, step.tier);
     updateProgress(step.progress);
 
@@ -173,12 +232,13 @@ async function routeGeneration({
     }
 
     try {
-      const result = await tryProvider({
+      const result = await abortable(tryProvider({
         key,
         requestBody,
         env,
         fetchImpl,
-      });
+        signal,
+      }), signal);
       const validatedResult = validateProviderImageResult(result);
       releaseProviderKey(key, hasProviderImage(validatedResult));
 
@@ -195,6 +255,7 @@ async function routeGeneration({
       }
     } catch (error) {
       releaseProviderKey(key, false);
+      signal.throwIfAborted();
       attempts.push({
         ...step,
         reason: error?.message ?? "provider_exception",
@@ -286,13 +347,13 @@ function isEditToolRequest(requestBody) {
   );
 }
 
-async function tryProvider({ key, requestBody, env, fetchImpl }) {
+async function tryProvider({ key, requestBody, env, fetchImpl, signal }) {
   if (key.provider === "gptsapi") {
-    return requestGptsapi({ key, requestBody, fetchImpl });
+    return requestGptsapi({ key, requestBody, fetchImpl, signal });
   }
 
   if (key.provider === "wuyinkeji") {
-    return requestWuyinkeji({ key, requestBody, fetchImpl });
+    return requestWuyinkeji({ key, requestBody, fetchImpl, signal });
   }
 
   return requestOpenAICompatible({ key, requestBody, env, fetchImpl });
@@ -551,7 +612,7 @@ function clampImageSize(size) {
   return `${Math.floor(rawWidth * scale)}x${Math.floor(rawHeight * scale)}`;
 }
 
-async function requestGptsapi({ key, requestBody, fetchImpl }) {
+async function requestGptsapi({ key, requestBody, fetchImpl, signal }) {
   const baseUrl = gptsapiBaseUrl(key.baseUrl);
   const response = await fetchImpl(`${baseUrl}/gpt-image-2/text-to-image`, {
     method: "POST",
@@ -584,7 +645,7 @@ async function requestGptsapi({ key, requestBody, fetchImpl }) {
 
     if (!poll.ok) {
       if (attempt < 59) {
-        await wait(5000);
+        await wait(5000, signal);
         continue;
       }
       return { error: providerError(poll.status, pollData) };
@@ -601,7 +662,7 @@ async function requestGptsapi({ key, requestBody, fetchImpl }) {
       return { error: `gptsapi_status_${status}` };
     }
 
-    await wait(5000);
+    await wait(5000, signal);
   }
 
   return { error: "gptsapi_timeout" };
@@ -638,7 +699,7 @@ function normalizeGptsapiResult(image) {
       };
 }
 
-async function requestWuyinkeji({ key, requestBody, fetchImpl }) {
+async function requestWuyinkeji({ key, requestBody, fetchImpl, signal }) {
   const createUrl = wuyinkejiCreateUrl(key.baseUrl, requestBody);
   const detailUrl = wuyinkejiDetailUrl(key.baseUrl);
   const response = await fetchImpl(createUrl, {
@@ -693,7 +754,7 @@ async function requestWuyinkeji({ key, requestBody, fetchImpl }) {
       return { error: taskData.message || "wuyinkeji_failed" };
     }
 
-    await wait(5000);
+    await wait(5000, signal);
   }
 
   return { error: "wuyinkeji_timeout" };
@@ -1119,13 +1180,12 @@ function toTaskResponse(task) {
   };
 }
 
-async function storeInlineImageResult({ result, task, env, fetchImpl }) {
-  if (
-    !result?.image_base64 &&
-    !(env.WEB_DURABLE_JOBS === "true" && result?.image_url)
-  ) {
-    return result;
-  }
+export async function storeImageResult({
+  result, task, env, fetchImpl,
+  signal = new AbortController().signal,
+  timeoutMs = resultStorageTimeoutMs,
+}) {
+  if (!result?.image_base64 && !result?.image_url) return result;
 
   const bucket =
     env.WEB_GENERATION_STORAGE_BUCKET?.trim() || "web-generation-results";
@@ -1136,33 +1196,37 @@ async function storeInlineImageResult({ result, task, env, fetchImpl }) {
     !env.WEB_SUPABASE_URL ||
     !env.WEB_SUPABASE_SERVICE_ROLE_KEY
   ) {
-    return result;
+    return env.WEB_DURABLE_JOBS === "true"
+      ? { error: "result_image_upload_failed: storage_not_configured" }
+      : result;
   }
 
+  if (!result.image_base64 && result.image_url.startsWith(
+    `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/`,
+  )) return result;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error("result_storage_timeout")), timeoutMs);
+  timer.unref?.();
+  const storageSignal = AbortSignal.any([signal, controller.signal]);
+  const fetch = scopedFetch(fetchImpl, storageSignal);
   try {
-    await ensureImageResultStorageBucket(fetchImpl, env, bucket);
+    return await abortable((async () => {
+    await ensureImageResultStorageBucket(fetch, env, bucket);
+    storageSignal.throwIfAborted();
     let image;
     if (result.image_base64)
       image = parseInlineImageForStorage(result.image_base64);
     else {
-      if (
-        result.image_url.startsWith(
-          `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/`,
-        )
-      )
-        return result;
-      const downloaded = await fetchImpl(result.image_url, {
-        signal: AbortSignal.timeout(60000),
-      });
+      const downloaded = await fetch(result.image_url);
       if (!downloaded.ok) throw new Error("result_image_fetch_failed");
       const contentType = (downloaded.headers.get("content-type") || "").split(
         ";",
       )[0];
-      if (!["image/png", "image/jpeg", "image/webp"].includes(contentType))
+      if (!["image/png", "image/jpeg", "image/webp"].includes(contentType)) {
+        await downloaded.body?.cancel();
         throw new Error("result_image_invalid_format");
-      const buffer = Buffer.from(await downloaded.arrayBuffer());
-      if (!buffer.length || buffer.length > 20 * 1024 * 1024)
-        throw new Error("result_image_invalid_size");
+      }
+      const buffer = await readResultBuffer(downloaded, storageSignal);
       image = {
         buffer,
         contentType,
@@ -1170,12 +1234,15 @@ async function storeInlineImageResult({ result, task, env, fetchImpl }) {
           contentType === "image/jpeg" ? "jpg" : contentType.split("/")[1],
       };
     }
+    if (!image.buffer.length || image.buffer.length > maxResultBytes)
+      throw new Error("result_image_invalid_size");
+    storageSignal.throwIfAborted();
     const objectPath = [
       sanitizeStoragePathSegment(task.user_id),
       sanitizeStoragePathSegment(task.task_id),
       `result.${image.extension}`,
     ].join("/");
-    const response = await fetchImpl(
+    const response = await fetch(
       `${supabaseUrl(env)}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath}`,
       {
         method: "PUT",
@@ -1196,10 +1263,38 @@ async function storeInlineImageResult({ result, task, env, fetchImpl }) {
       image_url: `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath}`,
       image_base64: null,
     };
+    })(), storageSignal);
   } catch (error) {
-    if (env.WEB_DURABLE_JOBS === "true")
-      return { error: "result_image_upload_failed: " + error.message };
-    return result;
+    return { error: "result_image_upload_failed: " + error.message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readResultBuffer(response, signal) {
+  if (Number(response.headers.get("content-length")) > maxResultBytes) {
+    await response.body?.cancel();
+    throw new Error("result_image_invalid_size");
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("result_image_empty_body");
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await abortable(reader.read(), signal);
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxResultBytes) throw new Error("result_image_invalid_size");
+      chunks.push(Buffer.from(value));
+    }
+    if (!size) throw new Error("result_image_invalid_size");
+    return Buffer.concat(chunks, size);
+  } catch (error) {
+    void reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
   }
 }
 
@@ -1294,8 +1389,12 @@ function cleanupTasks(tasks) {
   }
 }
 
-function wait(delayMs) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, delayMs);
+function wait(delayMs, signal) {
+  return new Promise((resolve, reject) => {
+    const complete = () => { signal?.removeEventListener("abort", abort); resolve(); };
+    const timer = setTimeout(complete, delayMs);
+    const abort = () => { clearTimeout(timer); signal.removeEventListener("abort", abort); reject(signal.reason); };
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
   });
 }

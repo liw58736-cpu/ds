@@ -67,6 +67,6 @@ describe("result asset downloads", () => {
     expect(createElement.mock.results[0].value.href).toBe("blob:kroma-result");
     expect(click).toHaveBeenCalledOnce();
     expect(remove).toHaveBeenCalledOnce();
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:kroma-result");
+    expect(revokeObjectURL).not.toHaveBeenCalled();
   });
 });

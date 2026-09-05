@@ -1,5 +1,7 @@
 import { exportDetailLongImage } from "../domain/imageExports";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Image, Sparkles } from "lucide-react";
+import { LightboxFrame } from "./LightboxFrame";
 import {
   downloadTaskAsset,
   downloadTaskAssets,
@@ -78,6 +80,7 @@ export function ResultPreview({
   onOpenMotion,
 }: ResultPreviewProps) {
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
+  const [downloadError, setDownloadError] = useState("");
   const newestTaskRef = useRef<HTMLDivElement | null>(null);
   const displayTasks = useMemo(
     () => getDisplayTasks(tasks, latestTask),
@@ -102,11 +105,19 @@ export function ResultPreview({
   }, [newestTaskId]);
 
   return (
-    <section className="panel result-panel" aria-labelledby="result-title">
+    <section className="panel result-panel" aria-label="生成预览">
       {!product && !hasTasks ? (
         <div className="preview-empty-state">
+          <div className="preview-empty-art" aria-hidden="true"><Image /><Sparkles /></div>
           <h3>先从图片库选择{inputLabel}</h3>
           <p>完成左侧设置并提交后，图片会显示在这里。</p>
+        </div>
+      ) : null}
+      {product && !hasTasks ? (
+        <div className="preview-ready-state">
+          <div className="preview-empty-art" aria-hidden="true"><Image /><Sparkles /></div>
+          <h3>素材已就位，开始创作吧</h3>
+          <p>选择模块与画面要求，生成结果会保存在这里。</p>
         </div>
       ) : null}
 
@@ -126,7 +137,7 @@ export function ResultPreview({
               onCancelTask={onCancelTask}
               onRetryTask={onRetryTask}
               onOpenImage={(asset, index) =>
-                setLightbox({ asset, task, index })
+                { setDownloadError(""); setLightbox({ asset, task, index }); }
               }
               onOpenMotion={onOpenMotion}
             />
@@ -144,13 +155,7 @@ export function ResultPreview({
       )}
 
       {lightbox ? (
-        <div
-          className="preview-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label={lightbox.asset.label}
-          onClick={() => setLightbox(null)}
-        >
+        <LightboxFrame label={lightbox.asset.label} onClose={() => setLightbox(null)}>
           <div
             className="preview-lightbox-content"
             onClick={(event) => event.stopPropagation()}
@@ -170,13 +175,14 @@ export function ResultPreview({
               type="button"
               className="ghost-action-button"
               onClick={() =>
-                downloadTaskAsset(lightbox.task, lightbox.asset, lightbox.index)
+                void downloadTaskAsset(lightbox.task, lightbox.asset, lightbox.index).catch(() => setDownloadError("下载未完成，请稍后重试。"))
               }
             >
               下载
             </button>
+            {downloadError ? <p role="alert">{downloadError}</p> : null}
           </div>
-        </div>
+        </LightboxFrame>
       ) : null}
     </section>
   );
@@ -256,7 +262,7 @@ function PreviewTaskCard({
               <button
                 type="button"
                 className="ghost-action-button"
-                onClick={() => downloadTaskAssets(task)}
+                onClick={() => void downloadTaskAssets(task).catch(() => setExportError("下载未完成，请重试。已下载图片会保留。"))}
               >
                 下载本次任务全部图片
               </button>
@@ -311,7 +317,7 @@ function PreviewTaskCard({
                   <button
                     type="button"
                     className="ghost-action-button"
-                    onClick={() => downloadTaskAsset(task, asset, index)}
+                    onClick={() => void downloadTaskAsset(task, asset, index).catch(() => setExportError("这张图片下载失败，请稍后重试。"))}
                   >
                     下载
                   </button>

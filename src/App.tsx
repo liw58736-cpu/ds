@@ -223,17 +223,19 @@ export default function App() {
         <HomePage onOpenStudio={handlePageChange} />
       )
     ) : page === "history" ? (
-      <HistoryPage />
+      <HistoryPage key={storageOwner} />
     ) : page === "pricing" ? (
       <PricingPage onRequireLogin={() => handlePageChange("login")} />
     ) : page === "materials" ? (
       <MaterialLibraryPage
+        key={storageOwner}
         onReturn={libraryReturn ? returnFromLibrary : undefined}
         isAuthenticated={isAuthenticated}
         onRequireLogin={() => handlePageChange("login")}
       />
     ) : page === "account" ? (
       <AccountPage
+        key={storageOwner}
         paymentStatus={initialPaymentStatus}
         onLogout={handleLogout}
       />

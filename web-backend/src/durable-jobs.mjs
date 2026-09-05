@@ -38,9 +38,9 @@ export function createDurableJobs({ env, fetch: fetchImpl, router }) {
     });
   function response(job) {
     return {
+      ...(job.result || {}),
       task_id: job.id,
       status: job.status,
-      ...(job.result || {}),
       billing_managed: true,
       credits_charged: job.status === "done" ? job.cost : 0,
       progress:
@@ -51,46 +51,76 @@ export function createDurableJobs({ env, fetch: fetchImpl, router }) {
             : undefined,
     };
   }
+  function track(entry, promise) {
+    entry.pending = promise
+      .catch((error) => console.error("durable_job_sync_failed", entry.id, error.message))
+      .finally(() => {
+        entry.pending = null;
+        if (entry.settled || !entry.claimed) active.delete(entry.id);
+      });
+    return entry.pending;
+  }
+  async function settle(entry) {
+    // Keep an on-time result while retrying settlement. Expiry must not turn
+    // a completed execution into an error just because the database is slow.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await finish(entry.claimed, entry.result.status === "done" ? "done" : "error", entry.result);
+        entry.settled = true;
+        return;
+      } catch (error) {
+        if (attempt === 4) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
+      }
+    }
+  }
+  function stopExecution(entry, message) {
+    if (entry.result || entry.controller.signal.aborted) return;
+    entry.controller.abort(new Error(message));
+    router.cancel(entry.id);
+  }
   function run(job) {
     if (active.has(job.id)) return;
-    const pending = (async () => {
+    const entry = { id: job.id, controller: new AbortController(), result: null, claimed: null, pending: null, settled: false };
+    active.set(job.id, entry);
+    track(entry, (async () => {
       const claimed = await rpc("web_job_claim", {
         p_id: job.id,
         p_user_id: job.user_id,
       });
       if (!claimed) return;
-      let result;
+      entry.claimed = claimed;
+      const deadline = Date.parse(claimed.lease_until) || Date.now() + 20 * 60 * 1000;
+      const expire = () => stopExecution(entry, "generation_timeout: 生成超时，预留积分将释放，请重试。");
+      const timer = setTimeout(expire, Math.max(0, deadline - Date.now()));
+      timer.unref?.();
+      if (Date.now() >= deadline) expire();
       try {
-        result = await router.execute(
+        entry.controller.signal.throwIfAborted();
+        entry.result = await abortable(router.execute(
           claimed.payload.request,
           { id: claimed.user_id },
           claimed.id,
-        );
+          { signal: entry.controller.signal, deadline },
+        ), entry.controller.signal);
       } catch (error) {
-        result = { status: "error", error: error.message || "生成失败" };
+        entry.result = { status: "error", error: error.message || "生成失败" };
+      } finally {
+        clearTimeout(timer);
       }
-      // Persist result before exposing completion; retries only repeat settlement, never provider work.
-      for (let attempt = 0; attempt < 5; attempt++) {
-        try {
-          await finish(
-            claimed,
-            result.status === "done" ? "done" : "error",
-            result,
-          );
-          return;
-        } catch (error) {
-          if (attempt === 4) throw error;
-          await new Promise((resolve) =>
-            setTimeout(resolve, 1000 * 2 ** attempt),
-          );
-        }
-      }
-    })()
-      .catch((error) =>
-        console.error("durable_job_sync_failed", job.id, error.message),
-      )
-      .finally(() => active.delete(job.id));
-    active.set(job.id, pending);
+      await settle(entry);
+    })());
+  }
+  async function recoverExpired(job) {
+    const entry = active.get(job.id);
+    if (entry) {
+      stopExecution(entry, "generation_timeout: 生成超时，预留积分将释放，请重试。");
+      if (!entry.pending && entry.result) track(entry, settle(entry));
+      await entry.pending;
+      const [current] = await request(query(job.user_id, job.id));
+      return current || job;
+    }
+    return finish(job, "error", { error: "生成服务已中断，预留积分已释放，请重试。" });
   }
   async function get(user, id) {
     let [job] = await request(query(user, id));
@@ -98,12 +128,12 @@ export function createDurableJobs({ env, fetch: fetchImpl, router }) {
     if (job.status === "queued") run(job);
     if (
       job.status === "processing" &&
-      !active.has(id) &&
       Date.parse(job.lease_until) < Date.now()
     ) {
-      job = await finish(job, "error", {
-        error: "生成服务已中断，预留积分已释放，请重试。",
-      });
+      job = await recoverExpired(job);
+    } else {
+      const entry = active.get(id);
+      if (entry?.result && !entry.pending) track(entry, settle(entry));
     }
     return response(job);
   }
@@ -204,10 +234,11 @@ export function createDurableJobs({ env, fetch: fetchImpl, router }) {
     );
     for (const job of rows) {
       if (job.status === "queued") run(job);
-      else if (!active.has(job.id) && Date.parse(job.lease_until) < Date.now())
-        await finish(job, "error", {
-          error: "服务中断，积分预留已释放，请重试。",
-        });
+      else if (Date.parse(job.lease_until) < Date.now()) await recoverExpired(job);
+      else {
+        const entry = active.get(job.id);
+        if (entry?.result && !entry.pending) await track(entry, settle(entry));
+      }
     }
   }
   return {
@@ -255,6 +286,13 @@ export function createDurableJobs({ env, fetch: fetchImpl, router }) {
       const [job] = await request(query(user, id));
       if (!job) return null;
       if (job.settled) return { canceled: false };
+      const entry = active.get(id);
+      if (entry?.result?.status === "done") {
+        if (!entry.pending) track(entry, settle(entry));
+        await entry.pending;
+        return { canceled: false };
+      }
+      if (entry) stopExecution(entry, "Task canceled");
       router.cancel(id);
       const settled = await finish(job, "error", {
         error: "已取消，预留积分已释放。",
@@ -262,4 +300,19 @@ export function createDurableJobs({ env, fetch: fetchImpl, router }) {
       return { canceled: settled.status === "error" };
     },
   };
+}
+
+function abortable(promise, signal) {
+  return new Promise((resolve, reject) => {
+    const finish = (callback, value) => {
+      signal.removeEventListener("abort", abort);
+      callback(value);
+    };
+    const abort = () => finish(reject, signal.reason || new Error("Task canceled"));
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+    Promise.resolve(promise).then(
+      (value) => finish(resolve, value), (error) => finish(reject, error),
+    );
+  });
 }

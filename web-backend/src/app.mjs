@@ -1,10 +1,11 @@
 import { createDurableJobs } from "./durable-jobs.mjs";
-import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import {
   createImageRouter,
   hasConfiguredImageProviders,
+  storeImageResult,
 } from "./image-router.mjs";
 
 const defaultFreeCredits = 5;
@@ -180,12 +181,10 @@ async function handleRequest(
       url.pathname === "/api/v1/materials/import" &&
       request.method === "POST"
     ) {
-      return await handleMaterialImport(
+      return await withMaterialRequestDeadline(
         request,
-        env,
         fetchImpl,
-        resolveHost,
-        state,
+        (fetch) => handleMaterialImport(request, env, fetch, resolveHost, state),
       );
     }
 
@@ -193,18 +192,28 @@ async function handleRequest(
       url.pathname === "/api/v1/materials/store" &&
       request.method === "POST"
     ) {
-      return await handleMaterialStore(request, env, fetchImpl, resolveHost);
+      return await withMaterialRequestDeadline(request, fetchImpl, (fetch) =>
+        handleMaterialStore(request, env, fetch, resolveHost),
+      );
     }
 
     if (
       url.pathname === "/api/v1/materials/upload" &&
       request.method === "POST"
     ) {
-      return await handleMaterialUpload(request, env, fetchImpl);
+      return await withMaterialRequestDeadline(
+        request, fetchImpl,
+        (fetch) => handleMaterialUpload(request, env, fetch),
+        25000,
+      );
     }
 
     if (url.pathname === "/api/v1/materials" && request.method === "GET") {
-      return await handleListMaterials(request, url, env, fetchImpl);
+      return await withMaterialRequestDeadline(
+        request, fetchImpl,
+        (fetch) => handleListMaterials(request, url, env, fetch),
+        25000,
+      );
     }
 
     if (
@@ -339,6 +348,46 @@ async function handleRequest(
   }
 }
 
+async function withMaterialRequestDeadline(
+  request, fetchImpl, handle, timeoutMs = 80000,
+) {
+  const controller = new AbortController();
+  const onCallerAbort = () => controller.abort(
+    new HttpError(499, { detail: "The material request was canceled." }),
+  );
+  const aborted = new Promise((_, reject) => {
+    controller.signal.addEventListener(
+      "abort", () => reject(controller.signal.reason), { once: true },
+    );
+  });
+  const timer = setTimeout(() => controller.abort(
+    new HttpError(504, { detail: "The material request timed out." }),
+  ), timeoutMs);
+  request.signal.addEventListener("abort", onCallerAbort, { once: true });
+  if (request.signal.aborted) onCallerAbort();
+  const fetchWithDeadline = (url, init = {}) => {
+    controller.signal.throwIfAborted();
+    return fetchImpl(url, {
+      ...init,
+      signal: init.signal
+        ? AbortSignal.any([controller.signal, init.signal])
+        : controller.signal,
+    });
+  };
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => {
+        controller.signal.throwIfAborted();
+        return handle(fetchWithDeadline);
+      }),
+      aborted,
+    ]);
+  } finally {
+    clearTimeout(timer);
+    request.signal.removeEventListener("abort", onCallerAbort);
+  }
+}
+
 async function handleMaterialImport(
   request,
   env,
@@ -371,6 +420,7 @@ async function handleMaterialImport(
   const finalUrl = parsePublicHttpUrl(response.url || requestedUrl.href);
 
   if (contentType.startsWith("image/")) {
+    await response.body?.cancel();
     const result = {
       source_url: finalUrl.href,
       title: fileNameFromUrl(finalUrl),
@@ -397,6 +447,7 @@ async function handleMaterialImport(
     10,
   );
   if (Number.isFinite(contentLength) && contentLength > 2 * 1024 * 1024) {
+    await response.body?.cancel();
     throw new HttpError(413, {
       detail: "The public page is too large to import.",
     });
@@ -475,6 +526,7 @@ async function handleMaterialStore(request, env, fetchImpl, resolveHost) {
     10,
   );
   if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+    await response.body?.cancel();
     throw new HttpError(413, { detail: "The material image exceeds 20 MB." });
   }
 
@@ -730,6 +782,7 @@ async function fetchPublicMaterialPage(
     }
 
     if ([301, 302, 303, 307, 308].includes(response.status)) {
+      await response.body?.cancel();
       const location = response.headers.get("location");
       if (!location || redirect === 5) {
         throw new HttpError(422, {
@@ -2054,7 +2107,7 @@ function isSupabaseSchemaDrift(error) {
 }
 
 async function handleImageProxy(request, env, fetchImpl, upstreamPath, method) {
-  await requireAuthUser(request, env, fetchImpl);
+  const authUser = await requireAuthUser(request, env, fetchImpl);
   const baseUrl = env.WEB_IMAGE_API_BASE_URL?.replace(/\/+$/, "");
 
   if (!baseUrl) {
@@ -2095,6 +2148,18 @@ async function handleImageProxy(request, env, fetchImpl, upstreamPath, method) {
     };
   }
 
+  if (response.ok && payload?.status === "done") {
+    const result = await storeImageResult({
+      result: payload,
+      task: { user_id: authUser.id, task_id: payload.task_id || (
+        upstreamPath.startsWith("/image/task/") ? upstreamPath.split("/").at(-1) : `web-proxy-${randomUUID()}`
+      ) },
+      env, fetchImpl, signal: request.signal, timeoutMs: 20000,
+    });
+    payload = result.error
+      ? { ...payload, status: "error", image_url: null, image_base64: null, error: result.error }
+      : { ...payload, ...result };
+  }
   return jsonResponse(payload, response.status);
 }
 
@@ -2133,7 +2198,10 @@ async function handlePaddleWebhook(request, env, fetchImpl) {
 
     if (
       existingEvent?.status === "failed_retryable" ||
-      existingEvent?.status === "received"
+      existingEvent?.status === "received" ||
+      // The transaction RPC is idempotent, including when a previous worker
+      // committed the credits but stopped before marking the event processed.
+      (env.WEB_DURABLE_JOBS === "true" && existingEvent?.status === "processing")
     ) {
       await updateBillingEvent(fetchImpl, env, eventId, {
         status: "processing",

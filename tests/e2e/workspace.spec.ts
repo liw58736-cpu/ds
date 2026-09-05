@@ -663,3 +663,62 @@ test("local upload stays exclusive to library and cleanup stays inside AI tools"
     page.getByRole("button", { name: "换模特", exact: true }),
   ).toBeVisible();
 });
+
+for (const suite of [
+  { page: "商品主图", selector: ".module-card-button", count: 8 },
+  { page: "详情页", selector: ".detail-module-button", count: 19 },
+]) {
+  test(`${suite.page}: every module accepts library references and distinct notes`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await seedAuthenticatedAccount(page, 100);
+    await seedImageLibrary(page);
+    await page.goto("/");
+    await navigateStudio(page, suite.page);
+    await chooseImageLibraryAsset(page, "从图片库选择商品图", "library-main.webp");
+    const cards = page.locator(suite.selector);
+    await expect(cards).toHaveCount(suite.count);
+    for (let index = 0; index < suite.count; index++) {
+      await cards.nth(index).getByRole("button", { name: "添加素材", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: /素材$/ });
+      await dialog.getByRole("button", { name: "从图片库添加模块参考图" }).click();
+      const picker = page.getByRole("dialog", { name: /从图片库/ });
+      await picker.getByRole("button", { name: /library-detail.webp/ }).click();
+      await dialog.getByLabel("素材备注", { exact: true }).fill(`模块${index + 1}约束，不把这句话写上图`);
+      await dialog.getByLabel("画面文字", { exact: true }).fill(`展示文字 ${index + 1}`);
+      await dialog.getByRole("button", { name: "保存素材", exact: true }).click();
+      await expect(cards.nth(index)).toHaveAttribute("aria-pressed", "true");
+    }
+    await page.locator(".version-grid button").first().click();
+    await generateAndExpectResults(page, suite.count);
+    const modules = await page.evaluate(() => {
+      const tasks = JSON.parse(localStorage.getItem("kroma-tasks-v2:account%3Aseller%40example.com") || "[]");
+      return tasks.find((task: { id: string }) => !task.id.startsWith("library-"))?.config.moduleReferenceAssets;
+    });
+    expect(Object.keys(modules)).toHaveLength(suite.count);
+    for (const assets of Object.values(modules) as Array<Array<{ imageUrl: string; note: string; visibleText: string }>>) {
+      expect(assets[0].imageUrl).toContain("kroma-detail-before-v2.webp");
+      expect(assets[0].note).toContain("不把这句话写上图");
+      expect(assets[0].visibleText).toMatch(/^展示文字 \d+$/);
+    }
+  });
+}
+
+test("result downloads create files and previews stay above the workspace", async ({ page }) => {
+  await seedAuthenticatedAccount(page);
+  await seedImageLibrary(page);
+  await page.goto("/");
+  await navigateStudio(page, "商品主图");
+  const resultsTab = page.getByRole("button", { name: /^结果/ });
+  if (await resultsTab.isVisible()) await resultsTab.click();
+  await page.getByRole("button", { name: "放大查看 library-detail.webp", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "library-detail.webp", exact: true });
+  await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate(el => el.parentElement === document.body)).toBe(true);
+  const beforeUrl = page.url();
+  const download = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "下载", exact: true }).click();
+  expect((await download).suggestedFilename()).toMatch(/\.webp$/);
+  expect(page.url()).toBe(beforeUrl);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});

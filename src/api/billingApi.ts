@@ -94,7 +94,11 @@ export async function purchasePlan(
     return requestRemoteJson<PurchasePlanResult>(request);
   }
 
-  if (import.meta.env.PROD) {
+  if (
+    import.meta.env.PROD ||
+    Boolean(import.meta.env.VITE_WEB_API_BASE_URL?.trim()) ||
+    getAccountSnapshot().session?.provider === "kroma"
+  ) {
     throw new Error("支付通道未配置，请稍后再试或联系支持。");
   }
 

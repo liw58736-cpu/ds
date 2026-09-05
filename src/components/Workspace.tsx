@@ -89,7 +89,9 @@ function getFailureDetails(error: unknown): {
   if (error instanceof GenerationProviderError) {
     return {
       errorCode: error.code,
-      errorMessage: error.message,
+      errorMessage: /failed to fetch|networkerror|load failed/i.test(error.message)
+        ? "网络连接中断，请检查网络后重试。"
+        : error.message,
     };
   }
 

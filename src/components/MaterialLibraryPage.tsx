@@ -17,6 +17,8 @@ import {
   type MaterialLibraryAsset,
 } from "../api/materialLibraryApi";
 import { NoticeDialog } from "./NoticeDialog";
+import { LightboxFrame } from "./LightboxFrame";
+import { getStorageOwner } from "../storage/workspaceDraftStore";
 
 interface MaterialLibraryPageProps {
   isAuthenticated: boolean;
@@ -143,6 +145,7 @@ export function MaterialLibraryPage({
 
   const runUploads = async (files: File[]) => {
     if (files.length === 0 || requireLogin()) return;
+    const requestOwner = getStorageOwner();
     if (files.length > 30) {
       setNotice({
         title: "本次最多上传 30 张",
@@ -156,6 +159,7 @@ export function MaterialLibraryPage({
     const failures: File[] = [];
     const errors: string[] = [];
     for (const [index, file] of files.entries()) {
+      if (getStorageOwner() !== requestOwner) break;
       setUploadStatus(`正在上传 ${index + 1} / ${files.length}：${file.name}`);
       try {
         const material = await uploadLocalMaterial(file);
@@ -168,7 +172,7 @@ export function MaterialLibraryPage({
             source: "saved",
             sourceLabel: "保存图片",
           },
-        ]);
+        ], requestOwner);
         succeeded++;
       } catch (error) {
         failures.push(file);
@@ -214,6 +218,7 @@ export function MaterialLibraryPage({
     if (requireLogin()) return;
 
     setIsSaving(true);
+    const requestOwner = getStorageOwner();
     const selected = images.filter((imageUrl) => selectedImages.has(imageUrl));
     const results = await Promise.allSettled(
       selected.map((imageUrl, index) =>
@@ -241,7 +246,7 @@ export function MaterialLibraryPage({
           createdAt: material.createdAt,
           source: "saved" as const,
           sourceLabel: "保存图片",
-        })),
+        })), requestOwner,
       );
     try {
       setSelectedImages(new Set(failedUrls));
@@ -598,28 +603,19 @@ export function MaterialLibraryPage({
         </button>
       ) : null}
       {lightbox ? (
-        <div
-          className="preview-lightbox"
-          role="dialog"
-          aria-label="图片预览"
-          onClick={() => setLightbox(null)}
-        >
+        <LightboxFrame label="图片预览" onClose={() => setLightbox(null)}>
           <div className="preview-lightbox-content">
             <button type="button" onClick={() => setLightbox(null)}>
               关闭
             </button>
             <img src={lightbox.imageUrl} alt={lightbox.fileName} />
           </div>
-        </div>
+        </LightboxFrame>
       ) : null}
       {extractedPreview ? (
-        <div
-          className="preview-lightbox extracted-image-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`提取照片 ${extractedPreview.index + 1} 大图预览`}
-          onClick={() => setExtractedPreview(null)}
-        >
+        <LightboxFrame className="extracted-image-lightbox"
+          label={`提取照片 ${extractedPreview.index + 1} 大图预览`}
+          onClose={() => setExtractedPreview(null)}>
           <div
             className="preview-lightbox-content"
             onClick={(event) => event.stopPropagation()}
@@ -640,7 +636,7 @@ export function MaterialLibraryPage({
               referrerPolicy="no-referrer"
             />
           </div>
-        </div>
+        </LightboxFrame>
       ) : null}
       <NoticeDialog
         open={Boolean(notice)}

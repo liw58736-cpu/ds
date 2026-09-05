@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { MaterialLibraryAsset } from "../api/materialLibraryApi";
 import type { ProductInput } from "../domain/types";
 import { MaterialPickerDialog } from "./MaterialPickerDialog";
+import { Images } from "lucide-react";
 
 interface UploadPanelProps {
   product: ProductInput | null;
@@ -60,6 +61,7 @@ export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
           aria-label="从图片库选择商品图"
           onClick={() => setPickerOpen(true)}
         >
+          <span className="upload-symbol" aria-hidden="true"><Images /></span>
           <span>从图片库选择商品图</span>
           <small>本地图片请先到图片库批量上传</small>
         </button>

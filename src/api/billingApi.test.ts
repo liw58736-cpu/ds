@@ -13,6 +13,13 @@ afterEach(() => {
 });
 
 describe("billingApi", () => {
+  it("cannot simulate a paid purchase while connected to the real web backend", async () => {
+    vi.stubEnv("VITE_WEB_API_BASE_URL", "https://web-api.example.com/api/v1");
+    const balance = getAccountSnapshot().balance;
+    await expect(purchasePlan({ planId: "pro-top-up", planName: "专业包", credits: 950, paymentChannel: "mock", note: "验收" }))
+      .rejects.toThrow("支付通道未配置");
+    expect(getAccountSnapshot().balance).toBe(balance);
+  });
   it("reports missing Paddle checkout configuration for a selected plan", () => {
     expect(getMissingPaddleCheckoutConfig("pro-top-up")).toEqual([
       "VITE_PADDLE_CLIENT_TOKEN",

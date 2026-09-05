@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import kromaLogo from "../assets/brand/kroma-logo.png";
+import { Image, Layers3, WandSparkles, Sparkles, Film, type LucideIcon } from "lucide-react";
 
 export type AppPage =
   | "home"
@@ -37,12 +38,12 @@ const topNavItems = [
   { page: "login", label: "登录" },
 ] satisfies Array<{ page: AppPage; label: string }>;
 
-const studioNavigation: Array<{ page: AppPage; label: string }> = [
-  { page: "main_image", label: "商品主图" },
-  { page: "detail_page", label: "详情页" },
-  { page: "white_background", label: "AI工具" },
-  { page: "inspiration", label: "灵感创作" },
-  { page: "motion", label: "Live图" },
+const studioNavigation: Array<{ page: AppPage; label: string; icon: LucideIcon }> = [
+  { page: "main_image", label: "商品主图", icon: Image },
+  { page: "detail_page", label: "详情页", icon: Layers3 },
+  { page: "white_background", label: "AI工具", icon: WandSparkles },
+  { page: "inspiration", label: "灵感创作", icon: Sparkles },
+  { page: "motion", label: "Live图", icon: Film },
 ];
 const legalLinks = [
   { page: "terms", label: "服务条款" },
@@ -81,7 +82,7 @@ export function AppShell({
   );
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-page={page}>
       <header className="topbar">
         <div className="brand-block">
           <img className="brand-mark" src={kromaLogo} alt="kroma logo" />
@@ -101,7 +102,7 @@ export function AppShell({
                   item.page === "main_image" ? lastStudio : item.page,
                 )
               }
-              aria-current={page === item.page ? "page" : undefined}
+              aria-current={(item.page === "main_image" ? inStudio : page === item.page) ? "page" : undefined}
             >
               {item.label}
             </button>
@@ -115,10 +116,12 @@ export function AppShell({
               type="button"
               key={item.page}
               className={page === item.page ? "nav-active" : ""}
+              data-tool={item.page}
               aria-current={page === item.page ? "page" : undefined}
               onClick={() => onPageChange(item.page)}
             >
-              {item.label}
+              <item.icon aria-hidden="true" />
+              <span>{item.label}</span>
             </button>
           ))}
         </nav>

@@ -182,6 +182,9 @@ const statuses = new Set<TaskStatus>([
 
 export interface LoadTasksOptions {
   keepResumableTasks?: boolean;
+  /** Read another owner's snapshot without normalizing or writing task state. */
+  readOnly?: boolean;
+  owner?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -657,23 +660,24 @@ function normalizeTask(
 }
 
 export function loadTasks(options: LoadTasksOptions = {}): GenerationTask[] {
-  const storedTasks = localStorage.getItem(getTaskStorageKey());
-
-  if (storedTasks === null) {
-    return [];
-  }
-
   try {
+    const storedTasks = localStorage.getItem(getTaskStorageKey(options.owner));
+    if (storedTasks === null) return [];
     const parsedTasks = JSON.parse(storedTasks);
     if (!Array.isArray(parsedTasks)) {
       return [];
     }
 
-    const now = new Date().toISOString();
-    const normalizedTasks = parsedTasks
+    const validTasks = parsedTasks
       .map(parseTask)
-      .filter((task): task is GenerationTask => task !== null)
-      .map((task) => normalizeTask(task, now, options));
+      .filter((task): task is GenerationTask => task !== null);
+    // An explicit owner is always a read-only lookup; recovery belongs to the
+    // workspace that owns the running tasks, never to the image picker.
+    if (options.readOnly || options.owner !== undefined) return validTasks;
+    const now = new Date().toISOString();
+    const normalizedTasks = validTasks.map((task) =>
+      normalizeTask(task, now, options),
+    );
 
     if (JSON.stringify(parsedTasks) !== JSON.stringify(normalizedTasks)) {
       saveTasks(normalizedTasks);

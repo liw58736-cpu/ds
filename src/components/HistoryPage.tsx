@@ -1,5 +1,6 @@
 import { exportDetailLongImage } from "../domain/imageExports";
 import { reuseTaskDraft } from "../storage/workspaceDraftStore";
+import { LightboxFrame } from "./LightboxFrame";
 import { useEffect, useMemo, useState } from "react";
 import {
   getGenerationTaskSnapshot,
@@ -235,7 +236,7 @@ export function HistoryPage() {
                         <button
                           type="button"
                           className="ghost-action-button"
-                          onClick={() => downloadTaskAssets(task)}
+                          onClick={() => void downloadTaskAssets(task).catch(() => setExportError("下载未完成，请重试。已下载图片会保留。"))}
                         >
                           下载本次任务全部图片
                         </button>
@@ -265,7 +266,7 @@ export function HistoryPage() {
                             className="ghost-action-button"
                             onClick={(event) => {
                               event.stopPropagation();
-                              downloadTaskAsset(task, asset, index);
+                              void downloadTaskAsset(task, asset, index).catch(() => setExportError("这张图片下载失败，请稍后重试。"));
                             }}
                           >
                             下载
@@ -311,13 +312,7 @@ export function HistoryPage() {
         </button>
       ) : null}
       {lightbox ? (
-        <div
-          className="preview-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label={lightbox.asset.label}
-          onClick={() => setLightbox(null)}
-        >
+        <LightboxFrame label={lightbox.asset.label} onClose={() => setLightbox(null)}>
           <div
             className="preview-lightbox-content"
             onClick={(event) => event.stopPropagation()}
@@ -337,13 +332,14 @@ export function HistoryPage() {
               type="button"
               className="ghost-action-button"
               onClick={() =>
-                downloadTaskAsset(lightbox.task, lightbox.asset, lightbox.index)
+                void downloadTaskAsset(lightbox.task, lightbox.asset, lightbox.index).catch(() => setExportError("图片下载失败，请稍后重试。"))
               }
             >
               下载
             </button>
+            {exportError ? <p role="alert">{exportError}</p> : null}
           </div>
-        </div>
+        </LightboxFrame>
       ) : null}
     </main>
   );

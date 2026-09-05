@@ -1461,6 +1461,8 @@ test("image generation uses the web backend provider router instead of forwardin
       RIGHTCODE_CONCURRENT: "2",
     },
     fetch: async (url, init = {}) => {
+      const storage = mockGenerationStorage(url, init, "https://cdn.example.com/result.png");
+      if (storage) return storage;
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
@@ -1522,7 +1524,7 @@ test("image generation uses the web backend provider router instead of forwardin
   assert.deepEqual(await readJson(task), {
     task_id: body.task_id,
     status: "done",
-    image_url: "https://cdn.example.com/result.png",
+    image_url: stableGenerationUrl(body.task_id),
     image_base64: null,
     channel_used: "rightcode",
     error: null,
@@ -1703,6 +1705,8 @@ test("PackyAPI source-image jobs use the edit endpoint and omit unsupported resp
       PACKYAPI_IMAGE_MODEL: "gpt-image-2",
     },
     fetch: async (url, init = {}) => {
+      const storage = mockGenerationStorage(url, init, "https://cdn.example.com/packy.png");
+      if (storage) return storage;
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
@@ -1756,7 +1760,7 @@ test("PackyAPI source-image jobs use the edit endpoint and omit unsupported resp
   assert.equal(task.status, 200);
   assert.equal(
     (await readJson(task)).image_url,
-    "https://cdn.example.com/packy.png",
+    stableGenerationUrl(body.task_id),
   );
   assert.equal(
     calls.some((call) => call.url.includes("/images/generations")),
@@ -1781,6 +1785,8 @@ test("PackyAPI masked cleanup sends the painted mask as a multipart file", async
       PACKYAPI_IMAGE_MODEL: "gpt-image-2",
     },
     fetch: async (url, init = {}) => {
+      const storage = mockGenerationStorage(url, init, "https://cdn.example.com/cleaned.png");
+      if (storage) return storage;
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
       }
@@ -1823,7 +1829,7 @@ test("PackyAPI masked cleanup sends the painted mask as a multipart file", async
   );
   assert.equal(
     (await readJson(task)).image_url,
-    "https://cdn.example.com/cleaned.png",
+    stableGenerationUrl(body.task_id),
   );
 });
 
@@ -1841,6 +1847,8 @@ test("AI outfit change uses edit routing with the uploaded target garment image"
       PACKYAPI_IMAGE_MODEL: "gpt-image-2",
     },
     fetch: async (url, init = {}) => {
+      const storage = mockGenerationStorage(url, init, "https://cdn.example.com/outfit-change.png");
+      if (storage) return storage;
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
@@ -1890,7 +1898,7 @@ test("AI outfit change uses edit routing with the uploaded target garment image"
   const taskBody = await readJson(task);
 
   assert.equal(taskBody.status, "done");
-  assert.equal(taskBody.image_url, "https://cdn.example.com/outfit-change.png");
+  assert.equal(taskBody.image_url, stableGenerationUrl(body.task_id));
   assert.equal(
     calls.some((call) => call.url.includes("/images/generations")),
     false,
@@ -1915,6 +1923,8 @@ test("AI model change uses edit routing with the uploaded target model image", a
       PACKYAPI_IMAGE_MODEL: "gpt-image-2",
     },
     fetch: async (url, init = {}) => {
+      const storage = mockGenerationStorage(url, init, "https://cdn.example.com/model-change.png");
+      if (storage) return storage;
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
@@ -1964,7 +1974,7 @@ test("AI model change uses edit routing with the uploaded target model image", a
   const taskBody = await readJson(task);
 
   assert.equal(taskBody.status, "done");
-  assert.equal(taskBody.image_url, "https://cdn.example.com/model-change.png");
+  assert.equal(taskBody.image_url, stableGenerationUrl(body.task_id));
   assert.equal(
     calls.some((call) => call.url.includes("/images/generations")),
     false,
@@ -1988,6 +1998,8 @@ test("AI edit tools fall back to standard providers when PackyAPI edit fails", a
       RIGHTCODE_KEY_1: "rightcode-key",
     },
     fetch: async (url, init = {}) => {
+      const storage = mockGenerationStorage(url, init, "https://cdn.example.com/rightcode-retouch.png");
+      if (storage) return storage;
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
@@ -2049,7 +2061,7 @@ test("AI edit tools fall back to standard providers when PackyAPI edit fails", a
   assert.equal(taskBody.status, "done");
   assert.equal(
     taskBody.image_url,
-    "https://cdn.example.com/rightcode-retouch.png",
+    stableGenerationUrl(body.task_id),
   );
   assert.equal(taskBody.channel_used, "rightcode");
   assert.equal(
@@ -2084,6 +2096,8 @@ test("detail-page template modules use PackyAPI edit fallback with product and m
       PACKYAPI_IMAGE_MODEL: "gpt-image-2",
     },
     fetch: async (url, init = {}) => {
+      const storage = mockGenerationStorage(url, init, "https://cdn.example.com/packy-template-edit.png");
+      if (storage) return storage;
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
@@ -2148,7 +2162,7 @@ test("detail-page template modules use PackyAPI edit fallback with product and m
   assert.equal(taskBody.channel_used, "packyapi");
   assert.equal(
     taskBody.image_url,
-    "https://cdn.example.com/packy-template-edit.png",
+    stableGenerationUrl(body.task_id),
   );
   assert.equal(
     calls.some(
@@ -2181,6 +2195,8 @@ test("buyer-show template references prefer PackyAPI edit before standard provid
       PACKYAPI_IMAGE_MODEL: "gpt-image-2",
     },
     fetch: async (url, init = {}) => {
+      const storage = mockGenerationStorage(url, init, "https://cdn.example.com/packy-buyer-show.png");
+      if (storage) return storage;
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
@@ -2237,7 +2253,7 @@ test("buyer-show template references prefer PackyAPI edit before standard provid
   const taskBody = await readJson(task);
   assert.equal(
     taskBody.image_url,
-    "https://cdn.example.com/packy-buyer-show.png",
+    stableGenerationUrl(body.task_id),
   );
   assert.equal(
     calls.some(
@@ -2272,6 +2288,8 @@ test("provider router rejects truncated base64 images and falls back", async () 
       GPTSAPI_KEY_1: "gpts-key",
     },
     fetch: async (url, init = {}) => {
+      const storage = mockGenerationStorage(url, init, "https://cdn.example.com/fallback.png");
+      if (storage) return storage;
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
@@ -2333,7 +2351,7 @@ test("provider router rejects truncated base64 images and falls back", async () 
   const taskBody = await readJson(task);
   assert.equal(taskBody.status, "done");
   assert.equal(taskBody.channel_used, "gptsapi");
-  assert.equal(taskBody.image_url, "https://cdn.example.com/fallback.png");
+  assert.equal(taskBody.image_url, stableGenerationUrl(body.task_id));
   assert.equal(
     calls.some(
       (call) => call.url === "https://packyapi.example.com/v1/images/edits",
@@ -2353,6 +2371,8 @@ test("GPTsAPI uses the app-compatible v3 async image endpoint", async () => {
       GPTSAPI_KEY_1: "gpts-key",
     },
     fetch: async (url, init = {}) => {
+      const storage = mockGenerationStorage(url, init, "https://cdn.example.com/gpts.png");
+      if (storage) return storage;
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
@@ -2411,7 +2431,7 @@ test("GPTsAPI uses the app-compatible v3 async image endpoint", async () => {
   const taskBody = await readJson(task);
   assert.equal(taskBody.status, "done");
   assert.equal(taskBody.channel_used, "gptsapi");
-  assert.equal(taskBody.image_url, "https://cdn.example.com/gpts.png");
+  assert.equal(taskBody.image_url, stableGenerationUrl(body.task_id));
   assert.equal(
     calls.some((call) => call.url.endsWith("/images/generations")),
     false,
@@ -2429,6 +2449,8 @@ test("Wuyinkeji accepts a full image_gpt create URL without double-appending the
       WUYINKEJI_KEY_1: "wuyin-key",
     },
     fetch: async (url, init = {}) => {
+      const storage = mockGenerationStorage(url, init, "https://cdn.example.com/wuyin.png");
+      if (storage) return storage;
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/user")) {
         return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
@@ -2481,7 +2503,7 @@ test("Wuyinkeji accepts a full image_gpt create URL without double-appending the
   const taskBody = await readJson(task);
   assert.equal(taskBody.status, "done");
   assert.equal(taskBody.channel_used, "wuyinkeji");
-  assert.equal(taskBody.image_url, "https://cdn.example.com/wuyin.png");
+  assert.equal(taskBody.image_url, stableGenerationUrl(body.task_id));
   assert.equal(
     calls.some((call) => call.url.includes("image_gpt/api/async")),
     false,
@@ -3576,3 +3598,18 @@ test("generation history lists only rows for the authenticated web user", async 
     true,
   );
 });
+
+function stableGenerationUrl(taskId) {
+  return 'https://web-project.supabase.co/storage/v1/object/public/web-generation-results/web-user-1/' + taskId + '/result.png';
+}
+function mockGenerationStorage(url, init, sourceUrl) {
+  if (url === sourceUrl) return new Response(Buffer.from('fixture-image'), { headers: { 'Content-Type': 'image/png' } });
+  if (url === 'https://web-project.supabase.co/storage/v1/bucket') return jsonResponse({ message: 'exists' }, 409);
+  if (url.startsWith('https://web-project.supabase.co/storage/v1/object/web-generation-results/web-user-1/')) {
+    assert.equal(init.method, 'PUT');
+    assert.equal(init.body.size, Buffer.byteLength('fixture-image'));
+    assert.ok(init.signal);
+    return jsonResponse({ saved: true });
+  }
+  return null;
+}

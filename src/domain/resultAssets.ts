@@ -56,7 +56,7 @@ export async function downloadTaskAsset(
 ): Promise<void> {
   const response = await fetch(asset.url);
   if (!response.ok) {
-    throw new Error(`Failed to download asset: ${response.status}`);
+    throw new Error("图片暂时无法下载，请稍后重试。");
   }
 
   const blob = await response.blob();
@@ -78,7 +78,7 @@ export async function downloadTaskAsset(
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(objectUrl);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
 export async function downloadTaskAssets(task: GenerationTask): Promise<void> {
