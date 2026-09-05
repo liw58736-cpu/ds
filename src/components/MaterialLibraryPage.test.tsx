@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -58,6 +58,17 @@ describe("MaterialLibraryPage", () => {
       "https://www.xiaohongshu.com/explore/note",
     );
     await user.click(screen.getByRole("button", { name: "提取图片" }));
+    await user.click(
+      await screen.findByRole("button", { name: "全屏预览提取照片 1" }),
+    );
+    const preview = screen.getByRole("dialog", {
+      name: "提取照片 1 大图预览",
+    });
+    expect(within(preview).getByAltText("提取照片 1 大图")).toBeVisible();
+    await user.click(within(preview).getByRole("button", { name: "关闭" }));
+    expect(
+      screen.queryByRole("dialog", { name: "提取照片 1 大图预览" }),
+    ).not.toBeInTheDocument();
     await user.click(
       await screen.findByRole("checkbox", { name: "选择照片 2" }),
     );

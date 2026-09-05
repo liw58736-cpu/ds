@@ -39,6 +39,10 @@ export function MaterialLibraryPage({
   const [search, setSearch] = useState("");
   const [source, setSource] = useState("all");
   const [lightbox, setLightbox] = useState<MaterialLibraryAsset | null>(null);
+  const [extractedPreview, setExtractedPreview] = useState<{
+    imageUrl: string;
+    index: number;
+  } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [remoteOffset, setRemoteOffset] = useState(0);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -84,6 +88,15 @@ export function MaterialLibraryPage({
   useEffect(() => {
     void loadLibrary();
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!extractedPreview) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExtractedPreview(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [extractedPreview]);
 
   const requireLogin = () => {
     if (isAuthenticated) return false;
@@ -337,82 +350,101 @@ export function MaterialLibraryPage({
           <h2 id="material-extract-title">链接提取</h2>
           <p>提取后先多选照片，再保存到个人图片库。</p>
         </div>
-        <div className="material-import-form">
-          <label className="field">
-            <span>分享文案或公开链接</span>
-            <div className="material-import-url-row">
-              <Link2 aria-hidden="true" />
-              <input
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-                aria-label="小红书素材链接"
-                placeholder="粘贴整段分享文案，或 https://…"
-              />
+        <div className="material-extract-workbench">
+          <div className="material-extract-source">
+            <div className="material-import-form">
+              <label className="field">
+                <span>分享文案或公开链接</span>
+                <div className="material-import-url-row">
+                  <Link2 aria-hidden="true" />
+                  <input
+                    value={url}
+                    onChange={(event) => setUrl(event.target.value)}
+                    aria-label="小红书素材链接"
+                    placeholder="粘贴整段分享文案，或 https://…"
+                  />
+                </div>
+              </label>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={isExtracting}
+                onClick={() => void handleExtract()}
+              >
+                {isExtracting ? (
+                  <LoaderCircle className="is-spinning" aria-hidden="true" />
+                ) : (
+                  <Link2 aria-hidden="true" />
+                )}
+                {isExtracting ? "正在提取" : "提取图片"}
+              </button>
+              <p className="material-import-message" role="status">
+                {message}
+              </p>
             </div>
-          </label>
-          <button
-            type="button"
-            className="primary-button"
-            disabled={isExtracting}
-            onClick={() => void handleExtract()}
-          >
-            {isExtracting ? (
-              <LoaderCircle className="is-spinning" aria-hidden="true" />
-            ) : (
-              <Link2 aria-hidden="true" />
-            )}
-            {isExtracting ? "正在提取" : "提取图片"}
-          </button>
-          <p className="material-import-message" role="status">
-            {message}
-          </p>
-        </div>
+          </div>
 
-        {images.length > 0 ? (
-          <div className="material-pick-section">
+          <section className="material-pick-section" aria-label="提取结果">
             <div className="material-section-heading">
               <div>
-                <strong>选择要保存的照片</strong>
+                <strong>提取照片</strong>
                 <span>
                   已选 {selectedImages.size} / {images.length}
                 </span>
               </div>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={isSaving}
-                onClick={() => void handleSave()}
-              >
-                {isSaving
-                  ? "保存中…"
-                  : `保存选中照片（${selectedImages.size}）`}
-              </button>
-            </div>
-            <div className="material-import-grid">
-              {images.map((imageUrl, index) => (
-                <label
-                  className={`material-pick-card${selectedImages.has(imageUrl) ? " is-selected" : ""}`}
-                  key={imageUrl}
+              {images.length > 0 ? (
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={isSaving}
+                  onClick={() => void handleSave()}
                 >
-                  <img
-                    src={imageUrl}
-                    alt={`提取照片 ${index + 1}`}
-                    referrerPolicy="no-referrer"
-                  />
-                  <span className="material-pick-check">
-                    <input
-                      type="checkbox"
-                      checked={selectedImages.has(imageUrl)}
-                      onChange={() => toggleImage(imageUrl)}
-                      aria-label={`选择照片 ${index + 1}`}
-                    />
-                    保存第 {index + 1} 张
-                  </span>
-                </label>
-              ))}
+                  {isSaving
+                    ? "保存中…"
+                    : `保存选中照片（${selectedImages.size}）`}
+                </button>
+              ) : null}
             </div>
-          </div>
-        ) : null}
+            {images.length > 0 ? (
+              <div className="material-import-grid">
+                {images.map((imageUrl, index) => (
+                  <article
+                    className={`material-pick-card${selectedImages.has(imageUrl) ? " is-selected" : ""}`}
+                    key={imageUrl}
+                  >
+                    <button
+                      type="button"
+                      className="material-extracted-thumbnail"
+                      aria-label={`全屏预览提取照片 ${index + 1}`}
+                      onClick={() => setExtractedPreview({ imageUrl, index })}
+                    >
+                      <img
+                        src={imageUrl}
+                        alt={`提取照片 ${index + 1}`}
+                        referrerPolicy="no-referrer"
+                      />
+                    </button>
+                    <label className="material-pick-check">
+                      <input
+                        type="checkbox"
+                        checked={selectedImages.has(imageUrl)}
+                        onChange={() => toggleImage(imageUrl)}
+                        aria-label={`选择照片 ${index + 1}`}
+                      />
+                      保存第 {index + 1} 张
+                    </label>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="material-extract-empty">
+                <ImagePlus aria-hidden="true" />
+                <strong>等待提取照片</strong>
+                <span>左侧粘贴链接并提取，结果会以缩略图显示在这里。</span>
+              </div>
+            )}
+          </section>
+        </div>
       </section>
 
       <section
@@ -552,6 +584,36 @@ export function MaterialLibraryPage({
               关闭
             </button>
             <img src={lightbox.imageUrl} alt={lightbox.fileName} />
+          </div>
+        </div>
+      ) : null}
+      {extractedPreview ? (
+        <div
+          className="preview-lightbox extracted-image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`提取照片 ${extractedPreview.index + 1} 大图预览`}
+          onClick={() => setExtractedPreview(null)}
+        >
+          <div
+            className="preview-lightbox-content"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="preview-lightbox-header">
+              <strong>提取照片 {extractedPreview.index + 1}</strong>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setExtractedPreview(null)}
+              >
+                关闭
+              </button>
+            </div>
+            <img
+              src={extractedPreview.imageUrl}
+              alt={`提取照片 ${extractedPreview.index + 1} 大图`}
+              referrerPolicy="no-referrer"
+            />
           </div>
         </div>
       ) : null}

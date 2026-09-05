@@ -63,4 +63,16 @@ describe("stylesheet quality guard", () => {
       /\.topbar,[\s\S]*?\.studio-navigation,[\s\S]*?\.workspace,[\s\S]*?\.site-footer\s*{[^}]*width:\s*min\(var\(--kroma-wide-layout\),\s*100%\);[^}]*margin-left:\s*auto;[^}]*margin-right:\s*auto;/,
     );
   });
+
+  it("uses a two-column link extractor with compact clickable thumbnails", () => {
+    expect(workspaceStylesheet).toMatch(
+      /\.material-extract-workbench\s*{[^}]*grid-template-columns:\s*minmax\(320px,\s*400px\)\s+minmax\(0,\s*1fr\);/,
+    );
+    expect(workspaceStylesheet).toMatch(
+      /\.material-extract-workbench\s+\.material-import-grid\s*{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(112px,\s*132px\)\);/,
+    );
+    expect(workspaceStylesheet).toMatch(
+      /\.material-extract-workbench\s+\.material-extracted-thumbnail\s*{[^}]*cursor:\s*zoom-in;/,
+    );
+  });
 });

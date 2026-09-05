@@ -58,6 +58,22 @@
 .material-library-page > .page-heading { padding:18px 20px; }
 .material-library-page > .page-heading > .library-toolbar { padding:12px 0 0; }
 .material-library-page > .page-heading > .library-toolbar button[aria-expanded="true"] { color:#2e3475; border-color:#929bd0; background:#e8eaff; box-shadow:inset 0 0 0 1px #c9cfec; }
+.material-extract-workbench { display:grid; grid-template-columns:minmax(320px,400px) minmax(0,1fr); min-height:320px; border-top:1px solid #e4e7ee; }
+.material-extract-source { min-width:0; border-right:1px solid #e4e7ee; background:#fafbfe; }
+.material-extract-source .material-import-form { position:sticky; top:0; }
+.material-extract-workbench .material-pick-section { min-width:0; align-content:start; padding:16px 18px 18px; border-top:0; }
+.material-extract-workbench .material-import-grid { grid-template-columns:repeat(auto-fill,minmax(112px,132px)); align-items:start; justify-content:start; gap:12px; padding:0; }
+.material-extract-workbench .material-pick-card { gap:7px; padding:7px; border-radius:12px; }
+.material-extract-workbench .material-extracted-thumbnail { display:block; width:100%; min-height:0; padding:0; overflow:hidden; border:0; border-radius:9px; background:#f4f6fb; cursor:zoom-in; }
+.material-extract-workbench .material-extracted-thumbnail img { display:block; width:100%; aspect-ratio:1; object-fit:cover; border-radius:9px; }
+.material-extract-workbench .material-extracted-thumbnail:hover img { opacity:.88; }
+.material-extract-empty { display:grid; min-height:240px; place-content:center; justify-items:center; gap:8px; padding:24px; color:#747d91; text-align:center; }
+.material-extract-empty svg { width:34px; height:34px; }
+.material-extract-empty strong { color:#30364a; }
+.material-extract-empty span { max-width:320px; font-size:13px; line-height:1.6; }
+.extracted-image-lightbox { padding:16px; }
+.extracted-image-lightbox .preview-lightbox-content { width:min(1200px,100%); max-height:calc(100dvh - 32px); }
+.extracted-image-lightbox .preview-lightbox-content img { max-height:82dvh; }
 [hidden] { display:none !important; }
 .library-image-preview { padding:0; border:0; background:none; }
 .library-image-preview img { width:100%; aspect-ratio:1; object-fit:contain; background:#f6f7fa; border-radius:12px; }
@@ -112,6 +128,10 @@
   .workspace[data-mobile-panel=settings] .studio-preview,.workspace[data-mobile-panel=results] .studio-settings { display:none; }
   .generation-footer { bottom:0; }
   .library-toolbar { padding:10px 0; }
+  .material-extract-workbench { grid-template-columns:1fr; }
+  .material-extract-source { border-right:0; border-bottom:1px solid #e4e7ee; }
+  .material-extract-source .material-import-form { position:static; }
+  .material-extract-workbench .material-import-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .material-library-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .dashboard-drafts { grid-template-columns:1fr; }
 }
