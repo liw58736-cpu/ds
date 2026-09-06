@@ -15,10 +15,12 @@ describe("InspirationUploadPanel", () => {
   it("keeps only the base image slot and delegates replacement images to creative controls", async () => {
     const user = userEvent.setup();
     const onInspirationChange = vi.fn();
+    const onInspirationRemove = vi.fn();
     render(
       <InspirationUploadPanel
         inspiration={null}
         onInspirationChange={onInspirationChange}
+        onInspirationRemove={onInspirationRemove}
       />,
     );
 
@@ -32,5 +34,28 @@ describe("InspirationUploadPanel", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /上传/ })).not.toBeInTheDocument();
     expect(screen.getByText(/创作控制/)).toBeInTheDocument();
+  });
+
+  it("offers a remove action after a base image has been selected", async () => {
+    const user = userEvent.setup();
+    const onInspirationRemove = vi.fn();
+    render(
+      <InspirationUploadPanel
+        inspiration={{
+          id: "base",
+          imageUrl: "https://cdn.example.com/base.jpg",
+          fileName: "base.jpg",
+          createdAt: "2026-09-03T00:00:00.000Z",
+          source: "upload",
+        }}
+        onInspirationChange={vi.fn()}
+        onInspirationRemove={onInspirationRemove}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "删除当前灵感原图" }),
+    );
+    expect(onInspirationRemove).toHaveBeenCalledOnce();
   });
 });

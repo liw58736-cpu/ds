@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { ImagePlus, Library } from "lucide-react";
+import { ImagePlus, Library, Trash2 } from "lucide-react";
 import type { ProductInput } from "../domain/types";
 import type { MaterialLibraryAsset } from "../api/materialLibraryApi";
 import { MaterialPickerDialog } from "./MaterialPickerDialog";
@@ -8,11 +8,13 @@ import { MaterialPickerDialog } from "./MaterialPickerDialog";
 interface InspirationUploadPanelProps {
   inspiration: ProductInput | null;
   onInspirationChange: (product: ProductInput) => void;
+  onInspirationRemove: () => void;
 }
 
 export function InspirationUploadPanel({
   inspiration,
   onInspirationChange,
+  onInspirationRemove,
 }: InspirationUploadPanelProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -44,6 +46,7 @@ export function InspirationUploadPanel({
           imageAlt="灵感原图"
           selectLabel="从图片库选择灵感原图"
           onOpenLibrary={() => setPickerOpen(true)}
+          onRemove={onInspirationRemove}
         />
       </div>
       <MaterialPickerDialog
@@ -66,6 +69,7 @@ function InspirationImageSlot({
   imageAlt,
   selectLabel,
   onOpenLibrary,
+  onRemove,
 }: {
   number: string;
   icon: ReactNode;
@@ -76,6 +80,7 @@ function InspirationImageSlot({
   imageAlt: string;
   selectLabel: string;
   onOpenLibrary: () => void;
+  onRemove: () => void;
 }) {
   return (
     <article className={`inspiration-image-slot${imageUrl ? " has-image" : ""}`}>
@@ -91,6 +96,17 @@ function InspirationImageSlot({
       {fileName ? <p title={fileName}>{fileName}</p> : null}
       <div className="inspiration-slot-actions">
         <button type="button" className="secondary-button" onClick={onOpenLibrary}><Library aria-hidden="true" />{selectLabel}</button>
+        {imageUrl ? (
+          <button
+            type="button"
+            className="secondary-button inspiration-base-remove"
+            aria-label="删除当前灵感原图"
+            onClick={onRemove}
+          >
+            <Trash2 aria-hidden="true" />
+            删除素材
+          </button>
+        ) : null}
       </div>
     </article>
   );

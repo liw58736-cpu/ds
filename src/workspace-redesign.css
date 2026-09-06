@@ -192,6 +192,24 @@
 .upload-panel:has(.current-product) .upload-symbol { display:none; }
 .empty-upload { display:none; }
 .current-product { background:#f7f6fb; border-radius:12px; padding:10px; margin:0 16px 16px; }
+.current-product > div { min-width:0; flex:1; }
+.current-product-remove {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  flex:none;
+  min-height:36px;
+  padding:7px 10px;
+  color:#8a3f4b;
+  border:1px solid #ead4d8;
+  border-radius:10px;
+  background:#fff;
+  font-size:.72rem;
+  font-weight:700;
+}
+.current-product-remove:hover { color:#71313d; border-color:#d9b8bf; background:#fff7f8; }
+.current-product-remove svg { width:14px; height:14px; }
 .generation-footer { border-radius:16px; padding:16px; box-shadow:0 -4px 14px #292e3b05; }
 .primary-button,.generate-button,.plan-pay-button,.login-submit { color:#fff; border-color:var(--button); background:var(--button); box-shadow:0 4px 10px #48438f12; }
 .primary-button:hover:not(:disabled),.generate-button:hover:not(:disabled),.plan-pay-button:hover:not(:disabled),.login-submit:hover:not(:disabled) { background:var(--button-hover); border-color:var(--button-hover); box-shadow:0 6px 14px #48438f20; }
@@ -324,8 +342,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   grid-column:2;
 }
 .inspiration-input-panel .inspiration-slot-actions {
-  grid-template-columns:minmax(0,1fr);
+  grid-template-columns:minmax(0,1fr) auto;
 }
+.inspiration-base-remove { color:#8a3f4b; border-color:#ead4d8; }
 .inspiration-replacement-reference {
   display:grid;
   grid-template-columns:minmax(0,1fr) 132px;
@@ -417,5 +436,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   .inspiration-reference-picker,
   .inspiration-reference-selected {
     grid-column:1;
+  }
+  .current-product { flex-direction:row; align-items:center; }
+  .current-product-remove span { display:none; }
+  .inspiration-input-panel .inspiration-slot-actions {
+    grid-template-columns:minmax(0,1fr);
   }
 }

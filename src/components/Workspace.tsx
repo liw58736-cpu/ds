@@ -190,6 +190,14 @@ export function Workspace({
     setDraftSaveFailed(!saveWorkspaceDraft(owner, activeModule, nextDraft));
   };
 
+  const handleProductRemove = () => {
+    const current = draftsRef.current[activeModule];
+    const nextDraft = { ...current, product: null };
+    draftsRef.current = { ...draftsRef.current, [activeModule]: nextDraft };
+    setDrafts(draftsRef.current);
+    setDraftSaveFailed(!saveWorkspaceDraft(owner, activeModule, nextDraft));
+  };
+
   useEffect(() => {
     const reload = () => {
       const next = loadWorkspaceDrafts(owner);
@@ -558,11 +566,13 @@ export function Workspace({
               <InspirationUploadPanel
                 inspiration={product}
                 onInspirationChange={handleProductChange}
+                onInspirationRemove={handleProductRemove}
               />
             ) : (
               <UploadPanel
                 product={product}
                 onProductChange={handleProductChange}
+                onProductRemove={handleProductRemove}
               />
             )}
             <ParameterPanel

@@ -184,6 +184,22 @@ test("sample product generates a mock ecommerce image", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "最近任务" })).toHaveCount(0);
 });
 
+test("selected product material can be removed without clearing other pages", async ({
+  page,
+}) => {
+  await loadSampleProduct(page);
+
+  await expect(
+    page.getByRole("button", { name: "删除当前商品素材" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "删除当前商品素材" }).click();
+
+  await expect(page.getByAltText("当前商品图")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "生成商品主图", exact: true }),
+  ).toBeDisabled();
+});
+
 test("main image multi-select creates one result per selected function and records the function", async ({
   page,
 }) => {

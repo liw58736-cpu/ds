@@ -111,6 +111,22 @@ describe("Workspace", () => {
     expect(screen.getByText("sample-product.jpg")).toBeInTheDocument();
   });
 
+  it("removes the selected product material and disables generation", async () => {
+    const user = userEvent.setup();
+    render(<Workspace />);
+
+    await user.click(screen.getByRole("button", { name: "使用示例商品" }));
+    await user.click(
+      screen.getByRole("button", { name: "删除当前商品素材" }),
+    );
+
+    expect(screen.queryByAltText("当前商品图")).not.toBeInTheDocument();
+    expect(screen.getByText("等待商品图")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "生成商品主图" }),
+    ).toBeDisabled();
+  });
+
   it("asks for a product image before selecting main image modules", async () => {
     const user = userEvent.setup();
     render(<Workspace />);

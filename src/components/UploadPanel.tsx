@@ -2,11 +2,12 @@ import { useState } from "react";
 import type { MaterialLibraryAsset } from "../api/materialLibraryApi";
 import type { ProductInput } from "../domain/types";
 import { MaterialPickerDialog } from "./MaterialPickerDialog";
-import { Images } from "lucide-react";
+import { Images, Trash2 } from "lucide-react";
 
 interface UploadPanelProps {
   product: ProductInput | null;
   onProductChange: (product: ProductInput) => void;
+  onProductRemove: () => void;
 }
 
 const sampleImageSvg = `
@@ -33,7 +34,11 @@ function createSampleProduct(): ProductInput {
   };
 }
 
-export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
+export function UploadPanel({
+  product,
+  onProductChange,
+  onProductRemove,
+}: UploadPanelProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const handleLibraryPick = (asset: MaterialLibraryAsset) => {
@@ -83,6 +88,15 @@ export function UploadPanel({ product, onProductChange }: UploadPanelProps) {
             <p className="file-label">当前文件</p>
             <p className="file-name">{product.fileName}</p>
           </div>
+          <button
+            type="button"
+            className="current-product-remove"
+            aria-label="删除当前商品素材"
+            onClick={onProductRemove}
+          >
+            <Trash2 aria-hidden="true" />
+            <span>删除素材</span>
+          </button>
         </div>
       ) : (
         <div className="empty-upload">
