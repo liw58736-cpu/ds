@@ -163,7 +163,9 @@ describe("App", () => {
       screen.getByRole("button", { name: "从图片库选择灵感原图" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "从图片库选择产品服装图" }),
+      screen.getByRole("button", {
+        name: "选择要替换进去的产品 / 服装",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "小红书图片提取" }),

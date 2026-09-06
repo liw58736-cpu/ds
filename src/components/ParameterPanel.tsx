@@ -24,6 +24,14 @@ import type {
 } from "../domain/types";
 import { NoticeDialog } from "./NoticeDialog";
 import { MaterialPickerDialog } from "./MaterialPickerDialog";
+import {
+  getInspirationReferenceAsset,
+  getMissingInspirationReference,
+  inspirationReferenceDefinitions,
+  isInspirationReferenceKey,
+  type InspirationReferenceDefinition,
+  type InspirationReferenceKey,
+} from "../domain/inspirationReferences";
 
 type StudioModule = Extract<
   GenerationModule,
@@ -63,7 +71,7 @@ const pageMeta = {
   lifestyle: {
     eyebrow: "INSPIRATION CREATOR",
     title: "灵感创作",
-    description: "保留灵感原图的人物与画面，将第二张产品或服装自然替换进去。",
+    description: "以灵感原图为画面基础，按需替换姿势、模特或产品，并分别使用对应参考照片。",
   },
 } as const satisfies Record<
   StudioModule,
@@ -344,9 +352,15 @@ export function ParameterPanel({
     useState(false);
   const [showModelChangeRequiredNotice, setShowModelChangeRequiredNotice] =
     useState(false);
+  const [missingInspirationReference, setMissingInspirationReference] =
+    useState<InspirationReferenceDefinition | null>(null);
   const [detailGroup, setDetailGroup] = useState("all");
   const [libraryPickerTarget, setLibraryPickerTarget] = useState<
-    "outfit_change" | "model_change" | "module_reference" | null
+    | "outfit_change"
+    | "model_change"
+    | "module_reference"
+    | InspirationReferenceKey
+    | null
   >(null);
   const resolution = config.resolution ?? "1K";
   const generationVersion = config.generationVersion ?? "standard";
@@ -408,6 +422,16 @@ export function ParameterPanel({
       setShowModelChangeRequiredNotice(false);
     }
   }, [whiteBackgroundMode, modelChangeTargetAsset]);
+
+  useEffect(() => {
+    if (
+      !missingInspirationReference ||
+      getMissingInspirationReference(config)?.key !==
+        missingInspirationReference.key
+    ) {
+      setMissingInspirationReference(null);
+    }
+  }, [config, missingInspirationReference]);
 
   const requireProductBeforeModuleSelection = () => {
     if (hasProduct) {
@@ -563,6 +587,22 @@ export function ParameterPanel({
       return;
     }
 
+    if (isInspirationReferenceKey(libraryPickerTarget)) {
+      const definition = inspirationReferenceDefinitions.find(
+        (item) => item.key === libraryPickerTarget,
+      );
+      if (!definition) return;
+      saveModuleReferenceAssets(definition.key, [
+        {
+          ...baseAsset,
+          note: definition.instruction,
+          noteMode: "instruction",
+        },
+      ]);
+      setMissingInspirationReference(null);
+      return;
+    }
+
     if (libraryPickerTarget === "module_reference") {
       setDraftReferenceAssets((currentAssets) => {
         const withoutDuplicate = currentAssets.filter(
@@ -650,6 +690,14 @@ export function ParameterPanel({
   };
 
   const handleGenerateClick = () => {
+    if (activeModule === "lifestyle") {
+      const missingReference = getMissingInspirationReference(config);
+      if (missingReference) {
+        setMissingInspirationReference(missingReference);
+        return;
+      }
+    }
+
     if (
       activeModule === "white_background" &&
       whiteBackgroundMode === "outfit_change" &&
@@ -1109,6 +1157,16 @@ export function ParameterPanel({
                     : control.key === "poseAction"
                       ? "poseChange"
                       : null;
+                const referenceDefinition =
+                  inspirationReferenceDefinitions.find(
+                    (definition) => definition.actionKey === control.key,
+                  );
+                const referenceAsset = referenceDefinition
+                  ? getInspirationReferenceAsset(
+                      config,
+                      referenceDefinition.key,
+                    )
+                  : null;
 
                 return (
                   <div className="inspiration-action-control" key={control.key}>
@@ -1169,6 +1227,18 @@ export function ParameterPanel({
                           })}
                         </div>
                       </div>
+                    ) : null}
+                    {referenceDefinition && selectedAction === "replace" ? (
+                      <InspirationReplacementReference
+                        definition={referenceDefinition}
+                        asset={referenceAsset}
+                        onOpen={() =>
+                          setLibraryPickerTarget(referenceDefinition.key)
+                        }
+                        onRemove={() =>
+                          saveModuleReferenceAssets(referenceDefinition.key, [])
+                        }
+                      />
                     ) : null}
                   </div>
                 );
@@ -1448,6 +1518,16 @@ export function ParameterPanel({
         message="换模特需要额外上传一张目标模特照片，系统会将它作为 Image 2 人物参考，只替换模特并保留原商品。"
         onClose={() => setShowModelChangeRequiredNotice(false)}
       />
+      <NoticeDialog
+        open={Boolean(missingInspirationReference)}
+        title={`请上传${missingInspirationReference?.title ?? "替换参考图"}`}
+        message={
+          missingInspirationReference
+            ? `你已选择替换${missingInspirationReference.shortLabel}，请先从图片库选择对应照片，系统会严格按照这个参考角色生成。`
+            : ""
+        }
+        onClose={() => setMissingInspirationReference(null)}
+      />
       <MaterialPickerDialog
         open={libraryPickerTarget !== null}
         title={
@@ -1455,11 +1535,57 @@ export function ParameterPanel({
             ? "从图片库选择换装服饰"
             : libraryPickerTarget === "model_change"
               ? "从图片库选择目标模特"
+              : isInspirationReferenceKey(libraryPickerTarget)
+                ? (inspirationReferenceDefinitions.find(
+                    (definition) => definition.key === libraryPickerTarget,
+                  )?.pickerTitle ?? "从图片库选择替换参考图")
               : "从图片库添加模块参考图"
         }
         onPick={handleLibraryAssetPick}
         onClose={() => setLibraryPickerTarget(null)}
       />
     </>
+  );
+}
+
+function InspirationReplacementReference({
+  definition,
+  asset,
+  onOpen,
+  onRemove,
+}: {
+  definition: InspirationReferenceDefinition;
+  asset: ModuleReferenceAsset | null;
+  onOpen: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="inspiration-replacement-reference">
+      <div>
+        <strong>{definition.title}</strong>
+        <small>{definition.description}</small>
+      </div>
+      <button
+        type="button"
+        className="inspiration-reference-picker"
+        aria-label={definition.buttonLabel}
+        onClick={onOpen}
+      >
+        {asset ? (
+          <img src={asset.imageUrl} alt={definition.imageAlt} />
+        ) : (
+          <span aria-hidden="true">＋</span>
+        )}
+        <span>{asset ? "更换参考照片" : definition.buttonLabel}</span>
+      </button>
+      {asset ? (
+        <div className="inspiration-reference-selected">
+          <span title={asset.fileName}>{asset.fileName}</span>
+          <button type="button" onClick={onRemove}>
+            删除
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }

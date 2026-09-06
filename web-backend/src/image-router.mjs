@@ -711,17 +711,7 @@ async function requestWuyinkeji({ key, requestBody, fetchImpl, signal }) {
     body: JSON.stringify({
       prompt: String(requestBody.prompt ?? ""),
       size: sizeToRatio(requestBody.size),
-      urls: [
-        requestBody.image_url,
-        requestBody.image_base64,
-        requestBody.template_image_base64,
-      ]
-        .concat(
-          Array.isArray(requestBody.template_image_base64s)
-            ? requestBody.template_image_base64s
-            : [],
-        )
-        .filter(Boolean),
+      urls: imageInputsFromRequest(requestBody),
     }),
   });
   const created = await parseJsonResponse(response);

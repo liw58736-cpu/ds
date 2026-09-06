@@ -6,6 +6,7 @@ import {
 import type { GenerationTaskResponse } from "./mockBackendClient";
 import type { GenerationTaskCreateRequest } from "./apiContracts";
 import type { AspectRatio, GenerationResolution } from "../domain/types";
+import { getOrderedInspirationReferenceAssets } from "../domain/inspirationReferences";
 import { getAccountAccessToken } from "../storage/accountStore";
 import { refreshKromaSession } from "./accountApi";
 
@@ -128,36 +129,37 @@ function getModuleReferenceImageInput(
   KromaGenerateRequest,
   "template_image_base64" | "template_image_base64s"
 > {
-  if (
-    request.body.config.module === "lifestyle" &&
-    request.body.config.inspirationSettings?.productAction === "keep"
-  )
-    return {};
+  if (request.body.config.module === "lifestyle") {
+    const imageUrls = getOrderedInspirationReferenceAssets(
+      request.body.config,
+    )
+      .map(({ asset }) => asset.imageUrl.trim())
+      .filter(Boolean)
+      .filter((imageUrl, index, allUrls) => allUrls.indexOf(imageUrl) === index);
+
+    if (imageUrls.length === 0) return {};
+
+    return {
+      template_image_base64: imageUrls[0],
+      template_image_base64s: imageUrls,
+    };
+  }
+
   const moduleIds = request.body.prompt.modules.map((module) => module.id);
-  const expandedModuleIds = moduleIds.flatMap((moduleId) =>
-    moduleId === "inspiration"
-      ? ["inspiration_product", "inspiration_garment", "inspiration"]
-      : [moduleId],
-  );
-  const allImageUrls = expandedModuleIds
+  const allImageUrls = moduleIds
     .flatMap((moduleId) =>
       (request.body.config.moduleReferenceAssets?.[moduleId] ?? [])
         .map((asset) => asset.imageUrl.trim())
         .filter(Boolean),
     )
     .filter((imageUrl, index, allUrls) => allUrls.indexOf(imageUrl) === index);
-  const imageUrls =
-    request.body.config.module === "lifestyle"
-      ? allImageUrls.slice(0, 1)
-      : allImageUrls;
-
-  if (imageUrls.length === 0) {
+  if (allImageUrls.length === 0) {
     return {};
   }
 
   return {
-    template_image_base64: imageUrls[0],
-    template_image_base64s: imageUrls,
+    template_image_base64: allImageUrls[0],
+    template_image_base64s: allImageUrls,
   };
 }
 

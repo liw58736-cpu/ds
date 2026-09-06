@@ -12,22 +12,25 @@ vi.mock("../api/materialLibraryApi", () => ({
 }));
 
 describe("InspirationUploadPanel", () => {
-  it("uses exactly two explicit image roles", async () => {
+  it("keeps only the base image slot and delegates replacement images to creative controls", async () => {
     const user = userEvent.setup();
     const onInspirationChange = vi.fn();
-    const onReplacementChange = vi.fn();
-    render(<InspirationUploadPanel inspiration={null} onInspirationChange={onInspirationChange} onReplacementChange={onReplacementChange} />);
+    render(
+      <InspirationUploadPanel
+        inspiration={null}
+        onInspirationChange={onInspirationChange}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "从图片库选择灵感原图" }));
-    let dialog = await screen.findByRole("dialog", { name: "从图片库选择灵感原图" });
+    const dialog = await screen.findByRole("dialog", { name: "从图片库选择灵感原图" });
     await user.click(within(dialog).getByRole("button", { name: /base.jpg/ }));
-    await user.click(screen.getByRole("button", { name: "从图片库选择产品服装图" }));
-    dialog = await screen.findByRole("dialog", { name: "从图片库选择产品 \/ 服装图" });
-    await user.click(within(dialog).getByRole("button", { name: /shirt.jpg/ }));
 
     expect(onInspirationChange).toHaveBeenCalledOnce();
-    expect(onReplacementChange).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("button", { name: /产品.*服装/ }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /上传/ })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Image 3/)).not.toBeInTheDocument();
+    expect(screen.getByText(/创作控制/)).toBeInTheDocument();
   });
 });

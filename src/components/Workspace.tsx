@@ -19,7 +19,6 @@ import type {
   GenerationConfig,
   GenerationModule,
   GenerationTask,
-  ModuleReferenceAsset,
   ProductInput,
 } from "../domain/types";
 import {
@@ -42,6 +41,10 @@ import { ParameterPanel } from "./ParameterPanel";
 import { ResultPreview } from "./ResultPreview";
 import { UploadPanel } from "./UploadPanel";
 import { InspirationUploadPanel } from "./InspirationUploadPanel";
+import {
+  getMissingInspirationReference,
+  type InspirationReferenceDefinition,
+} from "../domain/inspirationReferences";
 import { NoticeDialog } from "./NoticeDialog";
 import {
   getStorageOwner,
@@ -149,8 +152,8 @@ export function Workspace({
     string | null | undefined
   >(undefined);
   const [showLoginRequiredNotice, setShowLoginRequiredNotice] = useState(false);
-  const [showReplacementRequiredNotice, setShowReplacementRequiredNotice] =
-    useState(false);
+  const [missingInspirationReference, setMissingInspirationReference] =
+    useState<InspirationReferenceDefinition | null>(null);
 
   const hasLoadedTasksRef = useRef(true);
   const taskRunTokensRef = useRef<Record<string, number>>({});
@@ -185,21 +188,6 @@ export function Workspace({
     draftsRef.current = { ...draftsRef.current, [activeModule]: nextDraft };
     setDrafts(draftsRef.current);
     setDraftSaveFailed(!saveWorkspaceDraft(owner, activeModule, nextDraft));
-  };
-
-  const replacementAsset =
-    config.moduleReferenceAssets?.inspiration_product?.find(
-      (asset) => asset.imageUrl.trim().length > 0,
-    );
-
-  const handleReplacementChange = (asset: ModuleReferenceAsset) => {
-    setConfig((currentConfig) => ({
-      ...currentConfig,
-      moduleReferenceAssets: {
-        ...(currentConfig.moduleReferenceAssets ?? {}),
-        inspiration_product: [asset],
-      },
-    }));
   };
 
   useEffect(() => {
@@ -351,13 +339,12 @@ export function Workspace({
       return;
     }
 
-    if (
-      config.module === "lifestyle" &&
-      config.inspirationSettings?.productAction !== "keep" &&
-      !replacementAsset
-    ) {
-      setShowReplacementRequiredNotice(true);
-      return;
+    if (config.module === "lifestyle") {
+      const missingReference = getMissingInspirationReference(config);
+      if (missingReference) {
+        setMissingInspirationReference(missingReference);
+        return;
+      }
     }
 
     const queuedTask = createTask({
@@ -570,9 +557,7 @@ export function Workspace({
             {activeModule === "lifestyle" ? (
               <InspirationUploadPanel
                 inspiration={product}
-                replacement={replacementAsset}
                 onInspirationChange={handleProductChange}
-                onReplacementChange={handleReplacementChange}
               />
             ) : (
               <UploadPanel
@@ -620,10 +605,14 @@ export function Workspace({
         onClose={() => setShowLoginRequiredNotice(false)}
       />
       <NoticeDialog
-        open={showReplacementRequiredNotice}
-        title="请上传产品 / 服装图"
-        message="灵感创作需要两张图片：第一张保留人物与画面，第二张作为要替换进去的产品或服装。"
-        onClose={() => setShowReplacementRequiredNotice(false)}
+        open={Boolean(missingInspirationReference)}
+        title={`请上传${missingInspirationReference?.title ?? "替换参考图"}`}
+        message={
+          missingInspirationReference
+            ? `你已选择替换${missingInspirationReference.shortLabel}，请先在创作控制中选择对应参考照片。`
+            : ""
+        }
+        onClose={() => setMissingInspirationReference(null)}
       />
     </main>
   );

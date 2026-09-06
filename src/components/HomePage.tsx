@@ -249,7 +249,7 @@ export function HomePage({ onOpenStudio }: HomePageProps) {
             <Brush aria-hidden="true" />
             <span>02</span>
             <h3>换品灵感创作</h3>
-            <p>保持灵感原图的人物和场景，将第二张产品或服装自然替换进去。</p>
+            <p>以灵感原图为基础，按需替换姿势、模特或产品，并为每个替换项选择对应参考照片。</p>
             <button type="button" onClick={() => onOpenStudio("inspiration")}>
               新建创作任务
               <ArrowRight aria-hidden="true" />

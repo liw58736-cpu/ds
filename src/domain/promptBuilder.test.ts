@@ -60,7 +60,7 @@ describe("buildGenerationPrompt", () => {
     expect(prompt.modules[0].prompt).toContain("subtle contact shadow");
   });
 
-  it("builds inspiration prompts with Image 1, Image 2, and creative controls", () => {
+  it("builds inspiration prompts with fixed image roles and creative controls", () => {
     const prompt = buildGenerationPrompt({
       ...baseConfig,
       module: "lifestyle",
@@ -91,13 +91,51 @@ describe("buildGenerationPrompt", () => {
 
     expect(prompt.modules).toHaveLength(1);
     expect(prompt.modules[0]?.id).toBe("inspiration");
-    expect(prompt.modules[0]?.prompt).toContain("Image 1 is the inspiration base photo");
+    expect(prompt.modules[0]?.prompt).toContain("Image 1 is always the inspiration base photo");
     expect(prompt.modules[0]?.prompt).toContain("background=keep");
     expect(prompt.modules[0]?.prompt).toContain("pose=adjust (high change intensity)");
     expect(prompt.modules[0]?.prompt).toContain("product=replace");
     expect(prompt.modules[0]?.prompt).toContain(
-      "Image 2 is the only replacement product or clothing source",
+      "Image 2 is the replacement product or clothing source",
     );
+    expect(prompt.modules[0]?.prompt).toContain(
+      "Never swap, merge or infer roles from another reference image",
+    );
+  });
+
+  it("assigns pose, model, and product replacement images distinct roles", () => {
+    const makeAsset = (id: string) => ({
+      id,
+      fileName: `${id}.png`,
+      imageUrl: `data:image/png;base64,${id}`,
+      noteMode: "instruction" as const,
+    });
+    const prompt = buildGenerationPrompt({
+      ...baseConfig,
+      module: "lifestyle",
+      inspirationSettings: {
+        background: "studio",
+        pose: "natural",
+        model: "female",
+        composition: "hero",
+        purpose: "product_listing",
+        productHandling: "preserve",
+        backgroundAction: "keep",
+        poseAction: "replace",
+        modelAction: "replace",
+        productAction: "replace",
+      },
+      moduleReferenceAssets: {
+        inspiration_pose: [makeAsset("pose")],
+        inspiration_model: [makeAsset("model")],
+        inspiration_product: [makeAsset("product")],
+      },
+    });
+
+    expect(prompt.modules[0]?.prompt).toContain("Image 2 is the target pose reference");
+    expect(prompt.modules[0]?.prompt).toContain("Image 3 is the target model identity reference");
+    expect(prompt.modules[0]?.prompt).toContain("Image 4 is the replacement product or clothing source");
+    expect(prompt.modules[0]?.prompt).toContain("Never copy its clothing, product, pose or background");
   });
 
   it("creates distinct AI tool prompts for scene and model-change modes", () => {

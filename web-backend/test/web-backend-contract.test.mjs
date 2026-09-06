@@ -2438,7 +2438,7 @@ test("GPTsAPI uses the app-compatible v3 async image endpoint", async () => {
   );
 });
 
-test("Wuyinkeji accepts a full image_gpt create URL without double-appending the path", async () => {
+test("Wuyinkeji accepts a full image_gpt URL and forwards ordered reference images", async () => {
   const calls = [];
   const app = createWebBackend({
     env: {
@@ -2460,7 +2460,12 @@ test("Wuyinkeji accepts a full image_gpt create URL without double-appending the
         assert.deepEqual(JSON.parse(init.body), {
           prompt: "product hero",
           size: "1:1",
-          urls: ["https://cdn.example.com/product.png"],
+          urls: [
+            "https://cdn.example.com/product.png",
+            "https://cdn.example.com/pose.png",
+            "https://cdn.example.com/model.png",
+            "https://cdn.example.com/replacement.png",
+          ],
         });
         return jsonResponse({ code: 200, data: { id: "wuyin-task-1" } });
       }
@@ -2483,6 +2488,12 @@ test("Wuyinkeji accepts a full image_gpt create URL without double-appending the
       body: JSON.stringify({
         prompt: "product hero",
         image_url: "https://cdn.example.com/product.png",
+        template_image_base64: "https://cdn.example.com/pose.png",
+        template_image_base64s: [
+          "https://cdn.example.com/pose.png",
+          "https://cdn.example.com/model.png",
+          "https://cdn.example.com/replacement.png",
+        ],
         quality: "standard",
         size: "1024x1024",
         task_type: "ecommerce",

@@ -192,8 +192,51 @@ describe("kromaGenerationAdapter", () => {
     expect(kromaRequest.prompt).toContain("background=keep");
     expect(kromaRequest.prompt).toContain("product=replace");
     expect(kromaRequest.prompt).toContain(
-      "Image 2 is the replacement product or garment",
+      "Image 2 is the replacement product or clothing source",
     );
+  });
+
+  it("sends all active inspiration replacement references in their role order", () => {
+    const asset = (id: string) => ({
+      id,
+      fileName: `${id}.png`,
+      imageUrl: `data:image/png;base64,${id}`,
+    });
+    const request = buildGenerationTaskRequest({
+      ...baseInput,
+      config: {
+        ...baseInput.config,
+        module: "lifestyle",
+        inspirationSettings: {
+          background: "studio",
+          pose: "natural",
+          model: "female",
+          composition: "hero",
+          purpose: "product_listing",
+          productHandling: "preserve",
+          backgroundAction: "keep",
+          poseAction: "replace",
+          modelAction: "replace",
+          productAction: "replace",
+        },
+        moduleReferenceAssets: {
+          inspiration_pose: [asset("pose")],
+          inspiration_model: [asset("model")],
+          inspiration_product: [asset("product")],
+        },
+      },
+    });
+
+    expect(buildKromaGenerateRequest(request)).toMatchObject({
+      image_url: "https://cdn.example.com/product.png",
+      template_image_base64: "data:image/png;base64,pose",
+      template_image_base64s: [
+        "data:image/png;base64,pose",
+        "data:image/png;base64,model",
+        "data:image/png;base64,product",
+      ],
+      use_template_mode: true,
+    });
   });
 
   it("includes the selected detail module id in the backend style", () => {

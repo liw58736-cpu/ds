@@ -6,6 +6,10 @@ import type {
   ShadowMode,
   WhiteBackgroundMode,
 } from "./types";
+import {
+  buildInspirationReferenceRoleContract,
+  getOrderedInspirationReferenceAssets,
+} from "./inspirationReferences";
 
 export interface ModulePrompt {
   id: string;
@@ -168,7 +172,7 @@ const detailPrompts: Record<
 const inspirationPrompt = {
   title: "灵感创作",
   prompt:
-    "Create an identity-preserving product replacement edit. Image 1 is the inspiration base photo: it controls the person, pose, hands, body proportions, camera angle, composition, lighting, and scene. Image 2 is the replacement product or garment: place that exact item naturally into Image 1, preserving its category, silhouette, fabric, color, seams, buttons, logos, pattern, and recognisable design. Do not copy the person or scene from Image 2. Do not render upload instructions as visible text.",
+    "Create an identity-preserving guided edit. Image 1 is always the inspiration base photo. Preserve every Image 1 element configured as keep, and apply each additional reference image only to the specific role assigned in the reference image role contract. Do not render upload instructions as visible text.",
 };
 
 const shadowCopy: Record<ShadowMode, string> = {
@@ -306,12 +310,16 @@ function getModulePrompts(config: GenerationConfig): ModulePrompt[] {
   }
 
   if (config.module === "lifestyle") {
+    const productInstruction =
+      config.inspirationSettings?.productAction === "keep"
+        ? "Preserve the exact original Image 1 product or garment."
+        : "Replace the product or garment with the product reference assigned in the role contract, preserving its exact visible design.";
     return [
       {
         id: "inspiration",
         title: inspirationPrompt.title,
         prompt: withModuleReferencePrompt(
-          `${config.inspirationSettings?.productAction === "keep" ? "Edit Image 1 as the base photo. Preserve its original product or garment exactly; ignore Image 2 clothing. Apply only requested background, pose or model changes." : inspirationPrompt.prompt} ${getInspirationSettingsPrompt(config)}`,
+          `${inspirationPrompt.prompt} ${productInstruction} ${getInspirationSettingsPrompt(config)} ${buildInspirationReferenceRoleContract(config)}`,
           "inspiration",
           config,
         ),
@@ -335,7 +343,7 @@ function getInspirationSettingsPrompt(config: GenerationConfig): string {
   const settings = config.inspirationSettings;
 
   if (!settings) {
-    return "Creative controls: background=keep; pose=keep; model=keep; product=replace. Keep the Image 1 scene and person unchanged, and replace only the product or clothing with Image 2.";
+    return "Creative controls: background=keep; pose=keep; model=keep; product=replace. Keep the Image 1 scene, person and pose unchanged, and replace only the product or clothing with the assigned product reference image.";
   }
 
   const backgroundAction = settings.backgroundAction ?? "keep";
@@ -352,7 +360,7 @@ function getInspirationSettingsPrompt(config: GenerationConfig): string {
     poseAction === "adjust"
       ? `adjust (${poseChange} change intensity)`
       : poseAction;
-  return `Creative controls: background=${backgroundControl}; pose=${poseControl}; model=${modelAction}; product=${productAction}. Keep means preserve that Image 1 element exactly. Low change is subtle, medium change is clearly visible but identity-safe, and high change allows a larger visual difference. Pose or model replacement is generated without treating Image 2 as a person reference. Product replacement must use Image 2 as the sole product or garment source. Output ratio=${config.aspectRatio}.`;
+  return `Creative controls: background=${backgroundControl}; pose=${poseControl}; model=${modelAction}; product=${productAction}. Keep means preserve that Image 1 element exactly. Adjust means modify that element without importing another reference identity. Replace means follow only the dedicated reference image assigned to that element in the reference image role contract. Low change is subtle, medium change is clearly visible but identity-safe, and high change allows a larger visual difference. Output ratio=${config.aspectRatio}.`;
 }
 
 function withModuleReferencePrompt(
@@ -366,9 +374,7 @@ function withModuleReferencePrompt(
       : moduleId === "model_change"
         ? withModelChangeIdentityGuard(prompt)
         : moduleId === "inspiration"
-          ? config.inspirationSettings?.productAction === "keep"
-            ? prompt
-            : withInspirationReplacementGuard(prompt)
+          ? withInspirationReplacementGuard(prompt)
           : withProductIdentityGuard(prompt);
   const assets = getModuleReferenceAssets(config, moduleId);
 
@@ -397,10 +403,21 @@ function withModuleReferencePrompt(
   const noteOnlyAssets = assets.filter(
     (asset) => !hasModuleReferenceImage(asset) && hasModuleReferenceNote(asset),
   );
+  const inspirationReferences =
+    moduleId === "inspiration"
+      ? getOrderedInspirationReferenceAssets(config)
+      : [];
   const imageAssetDescriptions = imageAssets
     .map((asset, index) => {
       const note = asset.note?.trim();
-      const label = `Image 2 reference asset ${index + 1}`;
+      const inspirationReference = inspirationReferences[index];
+      const label = inspirationReference
+        ? `Image ${inspirationReference.imageNumber} (${inspirationReference.definition.shortLabel} reference)`
+        : `Image 2 reference asset ${index + 1}`;
+
+      if (inspirationReference) {
+        return `${label}: ${asset.fileName}. This image ${inspirationReference.definition.roleInstruction}. Treat these as editing instructions only and never render them as visible text.`;
+      }
 
       if (!note) {
         return `${label}: ${asset.fileName}`;
@@ -445,7 +462,7 @@ function withModuleReferencePrompt(
         : moduleId === "model_change"
           ? "Image 2 is the target model reference. Use the uploaded person's recognisable identity and appearance to replace only the model in Image 1. Keep the exact Image 1 sold product or garment; never copy Image 2 clothing, accessories, background, or products."
           : moduleId === "inspiration"
-            ? "Image 2 is the replacement product or garment. Use its exact visible design on the Image 1 person or in the Image 1 scene. Keep Image 1 as the base photo and do not introduce a third reference role."
+            ? "For inspiration creation, use every additional image only for its explicitly assigned pose, model, or product role. Image 1 remains the base photo. Never use a pose reference as a model identity, never copy clothing from a model reference, and never copy a person or scene from a product reference."
             : "Image 2 reference assets are user-uploaded materials for this module only; must use Image 2 reference assets as visual sources for this module while preserving Image 1 product identity. Image 1 is always the product being sold; Image 2 can guide scene, model, packaging, colors, or material references but must not replace Image 1 with an unrelated product.",
     );
   }
@@ -533,19 +550,14 @@ function withModelChangeIdentityGuard(prompt: string): string {
 }
 
 function withInspirationReplacementGuard(prompt: string): string {
-  if (prompt.includes("Image 1 remains the base inspiration photo"))
+  if (prompt.includes("Every additional reference image has one exclusive role"))
     return prompt;
-  return `${prompt} Image 1 remains the base inspiration photo. Preserve the Image 1 person identity, face, hands, pose, body proportions, camera angle, composition, and scene for every element configured as keep. Image 2 is the only replacement product or clothing source. Preserve Image 2 item details exactly and replace only the requested product or garment area.`;
+  return `${prompt} Image 1 remains the base inspiration photo. Preserve its identity, product, pose, body proportions, camera angle, composition, lighting, and scene for every element configured as keep. Every additional reference image has one exclusive role defined by the reference image role contract. Apply only the requested role from each reference and never copy unrelated people, clothing, products, poses, accessories, backgrounds, or scenes from it.`;
 }
 
 function getSharedImageIdentityInstruction(config: GenerationConfig): string {
-  if (
-    config.module === "lifestyle" &&
-    config.inspirationSettings?.productAction === "keep"
-  )
-    return "Preserve the exact Image 1 product; do not replace it with any reference clothing.";
   if (config.module === "lifestyle") {
-    return "For inspiration replacement, Image 1 is the base person and scene, while Image 2 is the replacement product or garment. Preserve the Image 1 identity and all configured keep elements; preserve the exact Image 2 product design. Never swap these roles.";
+    return `${buildInspirationReferenceRoleContract(config)} Preserve every Image 1 element configured as keep. Never swap the pose, model and product reference roles.`;
   }
   if (
     config.module === "white_background" &&
@@ -811,17 +823,9 @@ function getModuleReferenceAssets(
   config: GenerationConfig,
   moduleId: string,
 ): ModuleReferenceAsset[] {
-  if (
-    moduleId === "inspiration" &&
-    config.inspirationSettings?.productAction === "keep"
-  )
-    return [];
   const assets =
     moduleId === "inspiration"
-      ? (config.moduleReferenceAssets?.inspiration_product ??
-        config.moduleReferenceAssets?.inspiration_garment ??
-        config.moduleReferenceAssets?.inspiration ??
-        [])
+      ? getOrderedInspirationReferenceAssets(config).map(({ asset }) => asset)
       : (config.moduleReferenceAssets?.[moduleId] ?? []);
   return assets.filter(
     (asset) => hasModuleReferenceImage(asset) || hasModuleReferenceNote(asset),

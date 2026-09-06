@@ -438,7 +438,7 @@ test("new content tools render and remain usable without horizontal overflow", a
     page.getByRole("button", { name: "从图片库选择灵感原图" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "从图片库选择产品服装图" }),
+    page.getByRole("button", { name: "选择要替换进去的产品 / 服装" }),
   ).toBeVisible();
   await expect(page.locator('input[type="file"]')).toHaveCount(0);
   await expectNoHorizontalDocumentOverflow(page);
@@ -533,7 +533,7 @@ test("light motion generates a real downloadable WebM in the browser", async ({
     .toBe(100);
 });
 
-test("two-image inspiration results compare original and generated images and can open Live creation", async ({
+test("role-based inspiration results compare original and generated images and can open Live creation", async ({
   page,
 }) => {
   await seedAuthenticatedAccount(page);
@@ -547,7 +547,7 @@ test("two-image inspiration results compare original and generated images and ca
   );
   await chooseImageLibraryAsset(
     page,
-    "从图片库选择产品服装图",
+    "选择要替换进去的产品 / 服装",
     "library-detail.webp",
   );
   await expect(page.getByAltText("灵感原图")).toBeVisible();
@@ -630,7 +630,10 @@ test("library upload detour returns to the same picker and preserves its image r
   await page.goto("/");
   await navigateStudio(page, "灵感创作");
   await page
-    .getByRole("button", { name: "从图片库选择产品服装图", exact: true })
+    .getByRole("button", {
+      name: "选择要替换进去的产品 / 服装",
+      exact: true,
+    })
     .click();
   await page.getByRole("button", { name: "去图片库上传" }).click();
   await expect(
@@ -638,7 +641,7 @@ test("library upload detour returns to the same picker and preserves its image r
   ).toBeVisible();
   await page.getByRole("button", { name: "返回创作并选图" }).click();
   const picker = page.getByRole("dialog", {
-    name: "从图片库选择产品 / 服装图",
+    name: "从图片库选择替换产品 / 服装图",
   });
   await expect(picker).toBeVisible();
   await picker.getByRole("button", { name: /library-detail.webp/ }).click();

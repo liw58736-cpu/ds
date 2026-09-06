@@ -1,80 +1,56 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { ImagePlus, Library, Shirt } from "lucide-react";
-import type { ModuleReferenceAsset, ProductInput } from "../domain/types";
+import { ImagePlus, Library } from "lucide-react";
+import type { ProductInput } from "../domain/types";
 import type { MaterialLibraryAsset } from "../api/materialLibraryApi";
 import { MaterialPickerDialog } from "./MaterialPickerDialog";
 
 interface InspirationUploadPanelProps {
   inspiration: ProductInput | null;
-  replacement?: ModuleReferenceAsset;
   onInspirationChange: (product: ProductInput) => void;
-  onReplacementChange: (asset: ModuleReferenceAsset) => void;
 }
 
 export function InspirationUploadPanel({
   inspiration,
-  replacement,
   onInspirationChange,
-  onReplacementChange,
 }: InspirationUploadPanelProps) {
-  const [pickerRole, setPickerRole] = useState<"inspiration" | "replacement" | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const handleLibraryPick = (asset: MaterialLibraryAsset) => {
-    if (pickerRole === "inspiration") {
-      onInspirationChange({
-        id: `library-inspiration-${Date.now().toString(36)}`,
-        imageUrl: asset.imageUrl,
-        fileName: asset.fileName,
-        createdAt: new Date().toISOString(),
-        source: "upload",
-      });
-      return;
-    }
-    onReplacementChange({
-      id: `library-replacement-${Date.now().toString(36)}`,
+    onInspirationChange({
+      id: `library-inspiration-${Date.now().toString(36)}`,
       imageUrl: asset.imageUrl,
       fileName: asset.fileName,
-      note: "Use Image 2 as the replacement product or clothing.",
+      createdAt: new Date().toISOString(),
+      source: "upload",
     });
   };
 
   return (
     <section className="panel inspiration-input-panel" aria-labelledby="inspiration-input-title">
       <div className="panel-heading">
-        <p className="eyebrow">Two-image creation</p>
+        <p className="eyebrow">Base inspiration</p>
         <h2 id="inspiration-input-title">创作图片</h2>
-        <p>第一张是要保留人物和画面的灵感原图；第二张是要替换进去的产品或服装。</p>
+        <p>先选择作为画面基础的灵感原图；替换姿势、模特或产品的照片在下方“创作控制”中按需选择。</p>
       </div>
       <div className="inspiration-input-grid">
         <InspirationImageSlot
-          number="01"
+          number="BASE"
           icon={<ImagePlus aria-hidden="true" />}
           title="灵感原图"
-          description="人物、姿势、构图和场景以这张图为基础"
+          description="人物、姿势、构图和场景默认以这张图为基础"
           imageUrl={inspiration?.imageUrl}
           fileName={inspiration?.fileName}
           imageAlt="灵感原图"
           selectLabel="从图片库选择灵感原图"
-          onOpenLibrary={() => setPickerRole("inspiration")}
-        />
-        <InspirationImageSlot
-          number="02"
-          icon={<Shirt aria-hidden="true" />}
-          title="产品 / 服装图"
-          description="将这张产品或服装自然替换到灵感原图中"
-          imageUrl={replacement?.imageUrl}
-          fileName={replacement?.fileName}
-          imageAlt="替换产品服装图"
-          selectLabel="从图片库选择产品服装图"
-          onOpenLibrary={() => setPickerRole("replacement")}
+          onOpenLibrary={() => setPickerOpen(true)}
         />
       </div>
       <MaterialPickerDialog
-        open={pickerRole !== null}
-        title={pickerRole === "inspiration" ? "从图片库选择灵感原图" : "从图片库选择产品 / 服装图"}
+        open={pickerOpen}
+        title="从图片库选择灵感原图"
         onPick={handleLibraryPick}
-        onClose={() => setPickerRole(null)}
+        onClose={() => setPickerOpen(false)}
       />
     </section>
   );

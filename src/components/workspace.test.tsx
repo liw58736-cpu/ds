@@ -422,14 +422,14 @@ describe("Workspace", () => {
     expect(screen.getByText("library-product-2.png")).toBeInTheDocument();
   });
 
-  it("supports the two-image replacement workflow and screenshot-matched controls", async () => {
+  it("shows each replacement picker only beside its selected creative control", async () => {
     const user = userEvent.setup();
     render(<Workspace activeModule="lifestyle" />);
 
     await chooseLibraryAsset(user, "从图片库选择灵感原图");
     await chooseLibraryAsset(
       user,
-      "从图片库选择产品服装图",
+      "选择要替换进去的产品 / 服装",
       "library-product-2.png",
     );
     expect(
@@ -448,33 +448,71 @@ describe("Workspace", () => {
         name: "替换",
       }),
     ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.queryByRole("button", { name: "选择想要替换的姿势" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      within(screen.getByLabelText("姿势")).getByRole("button", {
+        name: "替换",
+      }),
+    );
+    expect(
+      screen.getByRole("button", { name: "选择想要替换的姿势" }),
+    ).toBeInTheDocument();
+    await chooseLibraryAsset(
+      user,
+      "选择想要替换的姿势",
+      "library-product-1.png",
+    );
+    expect(screen.getByAltText("目标姿势参考图")).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("姿势")).getByRole("button", {
+        name: "替换",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(
+      within(screen.getByLabelText("模特")).getByRole("button", {
+        name: "替换",
+      }),
+    );
+    await chooseLibraryAsset(
+      user,
+      "选择想要替换的模特",
+      "library-product-2.png",
+    );
+    expect(screen.getByAltText("灵感创作目标模特")).toBeInTheDocument();
     await user.click(
       within(screen.getByLabelText("姿势")).getByRole("button", {
         name: "调整",
       }),
     );
     expect(
-      within(screen.getByLabelText("姿势")).getByRole("button", {
-        name: "调整",
-      }),
-    ).toHaveAttribute("aria-pressed", "true");
+      screen.queryByRole("button", { name: "选择想要替换的姿势" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText("姿势变化幅度")).toBeInTheDocument();
-    await user.click(
-      within(screen.getByLabelText("姿势变化幅度")).getByRole("button", {
-        name: "高",
-      }),
-    );
-    expect(
-      within(screen.getByLabelText("姿势变化幅度")).getByRole("button", {
-        name: "高",
-      }),
-    ).toHaveAttribute("aria-pressed", "true");
     await user.click(
       within(screen.getByLabelText("背景")).getByRole("button", {
         name: "调整",
       }),
     );
     expect(screen.getByLabelText("背景变化幅度")).toBeInTheDocument();
+  });
+
+  it("blocks inspiration generation until every selected replacement has its own image", async () => {
+    const user = userEvent.setup();
+    render(<Workspace activeModule="lifestyle" />);
+
+    await chooseLibraryAsset(user, "从图片库选择灵感原图");
+    await user.click(
+      within(screen.getByLabelText("姿势")).getByRole("button", {
+        name: "替换",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "生成灵感创作" }));
+
+    expect(
+      screen.getByRole("alertdialog", { name: "请上传姿势参考图" }),
+    ).toBeInTheDocument();
   });
 
   it("asks for the target garment image before generating outfit change", async () => {
