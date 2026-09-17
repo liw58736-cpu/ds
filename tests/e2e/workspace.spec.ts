@@ -346,7 +346,7 @@ test("preview canvas uses an opaque surface behind generated results", async ({
     });
 
   expect(previewBackground.backgroundImage).toBe("none");
-  expect(previewBackground.backgroundColor).toBe("rgb(255, 255, 255)");
+  expect(previewBackground.backgroundColor).toBe("rgb(14, 17, 23)");
 });
 
 test("mobile workspace avoids horizontal document overflow", async ({
@@ -467,7 +467,10 @@ test("new content tools render and remain usable without horizontal overflow", a
     page.getByRole("button", { name: "从图片库选择动态源图" }),
   ).toBeVisible();
   await expect(page.getByLabel("动态提示词")).toBeVisible();
-  await expect(page.getByText("固定 3 秒", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("固定 8 秒", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("视频比例")).toHaveValue("16:9");
   await expect(page.getByLabel("运镜方式")).toHaveCount(0);
   await expectNoHorizontalDocumentOverflow(page);
 
@@ -502,43 +505,83 @@ test("guest Xiaohongshu extraction uses a visible login dialog", async ({
   await expect(page.getByRole("heading", { name: "登录" })).toBeVisible();
 });
 
-test("light motion generates a real downloadable WebM in the browser", async ({
+test("AI Live generation submits a first-frame task and returns an MP4", async ({
   page,
-}, testInfo) => {
-  test.skip(
-    testInfo.project.name.includes("mobile"),
-    "One browser render is enough for the local encoder.",
-  );
+}) => {
   await seedAuthenticatedAccount(page);
-  await seedImageLibrary(page);
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "kroma-motion-draft:account:seller@example.com",
+      JSON.stringify({
+        imageUrl: "https://cdn.example.com/live-frame.jpg",
+        fileName: "live-frame.jpg",
+        motionPrompt: "人物自然眨眼并轻微转动视线",
+      }),
+    );
+  });
+  await page.route("https://cdn.example.com/live-frame.jpg", async (route) => {
+    await route.fulfill({
+      contentType: "image/webp",
+      path: "src/assets/home/kroma-main-before-v2.webp",
+    });
+  });
+  await page.route("**/api/v1/video/frame", async (route) => {
+    expect(route.request().method()).toBe("POST");
+    expect(await route.request().headerValue("content-type")).toContain(
+      "multipart/form-data",
+    );
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        frame_url: "https://cdn.example.com/live-frame-105.webp",
+      }),
+    });
+  });
+  await page.route("**/api/v1/video/generate", async (route) => {
+    const body = route.request().postDataJSON();
+    expect(body).toMatchObject({
+      firstFrameUrl: "https://cdn.example.com/live-frame-105.webp",
+      lastFrameUrl: "https://cdn.example.com/live-frame-105.webp",
+      aspectRatio: "16:9",
+      size: "720p",
+    });
+    expect(body.prompt).toContain("The camera is completely locked");
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        task_id: "web-video-e2e",
+        status: "processing",
+        progress: "正在生成 Live 图",
+      }),
+    });
+  });
+  await page.route("**/api/v1/video/task/web-video-e2e", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        task_id: "web-video-e2e",
+        status: "done",
+        video_url: "https://cdn.example.com/live-result.mp4",
+      }),
+    });
+  });
   await page.goto("/");
   await navigateStudio(page, "Live图");
-  await chooseImageLibraryAsset(
-    page,
-    "从图片库选择动态源图",
-    "library-main.webp",
-  );
-  await page.getByLabel("动态提示词").fill("画面缓慢拉远，逐步展示完整商品。");
-  await expect(page.locator(".motion-preview-frame")).toHaveClass(
-    /is-zoom_out/,
-  );
-  await page.getByLabel("清晰度").selectOption("1080p");
-  await expect(
-    page.getByRole("button", { name: "生成轻动效（免费）" }),
-  ).toBeVisible();
-  await page.getByLabel("清晰度").selectOption("2k");
-  await expect(
-    page.getByRole("button", { name: "生成轻动效（免费）" }),
-  ).toBeVisible();
-  await page.getByLabel("清晰度").selectOption("720p");
+  await expect(page.getByLabel("清晰度").locator("option")).toHaveCount(2);
   await page
-    .getByRole("button", { name: "生成轻动效（免费）", exact: true })
+    .getByRole("button", { name: "生成 Live 图（30 积分）", exact: true })
     .click();
 
-  const download = page.getByRole("link", { name: "下载 WebM", exact: true });
+  const download = page.getByRole("button", {
+    name: "下载 MP4",
+    exact: true,
+  });
   await expect(download).toBeVisible({ timeout: 12_000 });
-  await expect(download).toHaveAttribute("href", /^blob:/);
-  await expect(page.getByRole("status")).toContainText("已生成 3 秒");
+  await expect(page.locator(".motion-preview-frame video")).toHaveAttribute(
+    "src",
+    "https://cdn.example.com/live-result.mp4",
+  );
+  await expect(page.getByRole("status")).toContainText("已消耗 30 积分");
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -546,7 +589,7 @@ test("light motion generates a real downloadable WebM in the browser", async ({
         return value ? JSON.parse(value).balance : null;
       }),
     )
-    .toBe(100);
+    .toBe(70);
 });
 
 test("role-based inspiration results compare original and generated images and can open Live creation", async ({

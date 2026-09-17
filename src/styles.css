@@ -4028,20 +4028,7 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  animation-duration: 5s;
-  animation-iteration-count: infinite;
-  animation-timing-function: ease-in-out;
 }
-
-.motion-preview-frame.is-zoom_in img { animation-name: kroma-zoom-in; }
-.motion-preview-frame.is-zoom_out img { animation-name: kroma-zoom-out; }
-.motion-preview-frame.is-pan_left img { animation-name: kroma-pan-left; }
-.motion-preview-frame.is-float img { animation-name: kroma-float; }
-
-@keyframes kroma-zoom-in { from { transform: scale(1); } to { transform: scale(1.12); } }
-@keyframes kroma-zoom-out { from { transform: scale(1.12); } to { transform: scale(1); } }
-@keyframes kroma-pan-left { from { transform: scale(1.1) translateX(4%); } to { transform: scale(1.1) translateX(-4%); } }
-@keyframes kroma-float { 0%,100% { transform: scale(1.06) translate(0); } 50% { transform: scale(1.1) translate(1.5%, -1%); } }
 
 .motion-preview-frame > div,
 .cleanup-empty {

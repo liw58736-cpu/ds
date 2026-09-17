@@ -23,8 +23,13 @@ test("all signed-in pages remain aligned at desktop and phone widths", async ({ 
       expect(firstNav!.width).toBeLessThan(130);
     }
     if (route !== "account") {
-      expect(Math.abs(bounds.left - bounds.mainLeft), route).toBeLessThan(2);
-      expect(Math.abs(bounds.right - bounds.mainRight), route).toBeLessThan(2);
+      if (mobile) {
+        expect(Math.abs(bounds.left - bounds.mainLeft), route).toBeLessThan(2);
+        expect(Math.abs(bounds.right - bounds.mainRight), route).toBeLessThan(2);
+      } else {
+        expect(Math.abs(bounds.mainLeft - bounds.right - 16), route).toBeLessThan(2);
+        expect(Math.abs(bounds.mainRight - (bounds.width - 16)), route).toBeLessThan(2);
+      }
     }
     if (["home", "main_image", "materials", "pricing"].includes(route)) {
       await page.screenshot({ path: `output/qa-2026-09-05/ui-${mobile ? "mobile" : "desktop"}-${route}.png`, fullPage: true });
@@ -42,8 +47,12 @@ test("login and recovery stay centered and recovery actions align", async ({ pag
   expect(Math.abs(p!.x + p!.width - b!.x - b!.width)).toBeLessThan(2);
   await forgot.click();
   const card = await page.locator(".password-reset-card").boundingBox();
-  const width = await page.evaluate(() => document.documentElement.clientWidth);
-  expect(Math.abs(card!.x + card!.width / 2 - width / 2)).toBeLessThan(2);
+  const loginPage = await page.locator(".login-page").boundingBox();
+  expect(
+    Math.abs(
+      card!.x + card!.width / 2 - (loginPage!.x + loginPage!.width / 2),
+    ),
+  ).toBeLessThan(2);
   await expect(page.getByRole("button", { name: "发送找回验证码" })).toBeVisible();
 });
 

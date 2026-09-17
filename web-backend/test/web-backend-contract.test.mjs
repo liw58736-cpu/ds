@@ -61,6 +61,7 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       WEB_PADDLE_PRICE_CREDITS_JSON: '{"pri_test":{"credits":120}}',
       WEB_IMAGE_API_BASE_URL: "https://image-web.example.com/api/v1",
       WEB_IMAGE_API_KEY: "image-secret",
+      WUYINKEJI_VIDEO_KEY: "video-secret",
       RENDER_GIT_COMMIT: "commit-1",
     },
     fetch: async (url) => {
@@ -100,6 +101,7 @@ test("health endpoint reports deployment commit and missing configuration", asyn
       checkoutReviewed: false,
       imageApiBaseUrl: true,
       imageApiKey: true,
+      videoApiKey: true,
     },
     database: {
       webUsers: true,
@@ -468,6 +470,59 @@ test("material upload stores a local image in the authenticated user's library",
   assert.equal(body.size, Buffer.byteLength("local-image"));
 });
 
+test("Live frame upload stores the deterministic crop outside the visible material list", async () => {
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WEB_MATERIAL_STORAGE_BUCKET: "web-materials",
+    },
+    fetch: async (url, init = {}) => {
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url === "https://web-project.supabase.co/storage/v1/bucket") {
+        return jsonResponse({ id: "web-materials" }, 200);
+      }
+      if (
+        url.startsWith(
+          "https://web-project.supabase.co/storage/v1/object/web-materials/web-user-1/video-frames/",
+        )
+      ) {
+        assert.equal(init.method, "PUT");
+        assert.equal(init.headers["Content-Type"], "image/webp");
+        assert.equal(await init.body.text(), "cropped-105-frame");
+        return jsonResponse({ Key: "stored" }, 200);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const form = new FormData();
+  form.append(
+    "image",
+    new Blob(["cropped-105-frame"], { type: "image/webp" }),
+    "kroma-live-frame.webp",
+  );
+
+  const response = await app.handle(
+    new Request("http://local.test/api/v1/video/frame", {
+      method: "POST",
+      headers: { Authorization: "Bearer access-token" },
+      body: form,
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await readJson(response);
+  assert.match(
+    body.frame_url,
+    /^https:\/\/web-project\.supabase\.co\/storage\/v1\/object\/public\/web-materials\/web-user-1\/video-frames\/\d+-\d+-105pct\.webp$/,
+  );
+  assert.equal(body.content_type, "image/webp");
+  assert.equal(body.size, Buffer.byteLength("cropped-105-frame"));
+});
+
 test("material library lists only the authenticated user's saved images", async () => {
   const calls = [];
   const app = createWebBackend({
@@ -691,6 +746,7 @@ test("health endpoint treats non-blocking production helpers as optional configu
     "internalBillingKey",
     "durableJobs",
     "checkoutReviewed",
+    "videoApiKey",
   ]);
   assert.ok(!body.missing.includes("authCodeSecret"));
   assert.ok(!body.missing.includes("internalBillingKey"));
@@ -778,6 +834,111 @@ test("health endpoint flags missing Supabase schema tables", async () => {
   assert.equal(body.missing.length, 0);
   assert.equal(body.database.webUsers, true);
   assert.equal(body.database.webBillingEvents, false);
+});
+
+test("video generation requires web auth, keeps the provider key server-side, and isolates task reads", async () => {
+  const calls = [];
+  const app = createWebBackend({
+    env: {
+      WEB_SUPABASE_URL: "https://web-project.supabase.co",
+      WEB_SUPABASE_ANON_KEY: "anon-key",
+      WEB_SUPABASE_SERVICE_ROLE_KEY: "service-key",
+      WUYINKEJI_VIDEO_KEY: "server-video-secret",
+      WUYINKEJI_VIDEO_URL:
+        "https://api.wuyinkeji.com/api/async/video_veo3.1_fast",
+    },
+    fetch: async (url, init = {}) => {
+      calls.push({ url, init });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "web-user-1", email: "seller@example.com" });
+      }
+      if (url.includes("/rest/v1/web_users?id=eq.web-user-1")) {
+        return jsonResponse([
+          { id: "web-user-1", email: "seller@example.com", credits: 5, plan: "free" },
+        ]);
+      }
+      if (url.endsWith("/api/async/video_veo3.1_fast")) {
+        assert.equal(init.headers.Authorization, "server-video-secret");
+        assert.deepEqual(JSON.parse(init.body), {
+          prompt: "natural blink",
+          firstFrameUrl: "https://cdn.example.com/frame.jpg",
+          lastFrameUrl: "https://cdn.example.com/frame.jpg",
+          aspectRatio: "16:9",
+          size: "720p",
+        });
+        return jsonResponse({ code: 200, data: { id: "provider-video-1" } });
+      }
+      if (url.endsWith("/api/async/detail?id=provider-video-1")) {
+        return jsonResponse({
+          code: 200,
+          data: { status: 2, result: ["https://cdn.example.com/live.mp4"] },
+        });
+      }
+      if (url === "https://cdn.example.com/live.mp4") {
+        return new Response(new Uint8Array([0, 0, 0, 24]), {
+          status: 200,
+          headers: { "Content-Type": "video/mp4" },
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const unauthenticated = await app.handle(
+    new Request("http://local.test/api/v1/video/generate", {
+      method: "POST",
+      body: JSON.stringify({
+        prompt: "natural blink",
+        firstFrameUrl: "https://cdn.example.com/frame.jpg",
+      }),
+    }),
+  );
+  assert.equal(unauthenticated.status, 401);
+
+  const created = await app.handle(
+    new Request("http://local.test/api/v1/video/generate", {
+      method: "POST",
+      headers: { Authorization: "Bearer web-access-token" },
+      body: JSON.stringify({
+        prompt: "natural blink",
+        firstFrameUrl: "https://cdn.example.com/frame.jpg",
+        size: "720p",
+      }),
+    }),
+  );
+  assert.equal(created.status, 200);
+  const task = await readJson(created);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const result = await app.handle(
+    new Request(`http://local.test/api/v1/video/task/${task.task_id}`, {
+      headers: { Authorization: "Bearer web-access-token" },
+    }),
+  );
+  assert.equal(result.status, 200);
+  assert.deepEqual(await readJson(result), {
+    task_id: task.task_id,
+    status: "done",
+    video_url: "https://cdn.example.com/live.mp4",
+    error: null,
+    progress: "Live 图生成完成",
+  });
+  const download = await app.handle(
+    new Request(
+      `http://local.test/api/v1/video/task/${task.task_id}/download`,
+      { headers: { Authorization: "Bearer web-access-token" } },
+    ),
+  );
+  assert.equal(download.status, 200);
+  assert.equal(download.headers.get("Content-Type"), "video/mp4");
+  assert.match(
+    download.headers.get("Content-Disposition"),
+    /attachment; filename="kroma-live-/,
+  );
+  assert.equal(
+    calls.some(({ init }) => JSON.stringify(init.body || "").includes("server-video-secret")),
+    false,
+  );
 });
 
 test("auth signup creates an unconfirmed user and only sends the custom six digit code", async () => {

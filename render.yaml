@@ -43,6 +43,10 @@ services:
         sync: false
       - key: WUYINKEJI_CONCURRENT
         value: 10
+      - key: WUYINKEJI_VIDEO_KEY
+        sync: false
+      - key: WUYINKEJI_VIDEO_URL
+        value: https://api.wuyinkeji.com/api/async/video_veo3.1_fast
       - key: PACKYAPI_BASE_URL
         sync: false
       - key: PACKYAPI_KEY_1

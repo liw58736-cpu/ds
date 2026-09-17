@@ -7,6 +7,7 @@ import {
   hasConfiguredImageProviders,
   storeImageResult,
 } from "./image-router.mjs";
+import { createVideoRouter } from "./video-router.mjs";
 
 const defaultFreeCredits = 5;
 const defaultSender = "kroma <no-reply@i18.pro>";
@@ -17,6 +18,7 @@ export function createWebBackend({
   resolveHost = (hostname) => lookup(hostname, { all: true }),
 } = {}) {
   const imageRouter = createImageRouter({ env, fetch: fetchImpl });
+  const videoRouter = createVideoRouter({ env, fetch: fetchImpl });
   const state = {
     databaseHealthCache: { value: null, expiresAt: 0 },
     recoveryAttempts: new Map(),
@@ -27,7 +29,15 @@ export function createWebBackend({
     recoverJobs: () =>
       state.jobs.enabled ? state.jobs.recover() : Promise.resolve(),
     handle: (request) =>
-      handleRequest(request, env, fetchImpl, imageRouter, state, resolveHost),
+      handleRequest(
+        request,
+        env,
+        fetchImpl,
+        imageRouter,
+        videoRouter,
+        state,
+        resolveHost,
+      ),
   };
 }
 
@@ -54,6 +64,7 @@ async function handleRequest(
   env,
   fetchImpl,
   imageRouter,
+  videoRouter,
   state,
   resolveHost,
 ) {
@@ -257,6 +268,76 @@ async function handleRequest(
       request.method === "POST"
     ) {
       return await handlePaddleWebhook(request, env, fetchImpl);
+    }
+
+    if (
+      url.pathname === "/api/v1/video/generate" &&
+      request.method === "POST"
+    ) {
+      const user = await requireAuthUser(request, env, fetchImpl);
+      await getOrCreateWebUser(fetchImpl, env, user);
+      return jsonResponse(
+        await videoRouter.submit(await readJsonBody(request), user),
+      );
+    }
+
+    if (
+      url.pathname === "/api/v1/video/frame" &&
+      request.method === "POST"
+    ) {
+      return await withMaterialRequestDeadline(
+        request,
+        fetchImpl,
+        (fetch) => handleVideoFrameUpload(request, env, fetch),
+        25000,
+      );
+    }
+
+    if (
+      url.pathname.startsWith("/api/v1/video/task/") &&
+      url.pathname.endsWith("/download") &&
+      request.method === "GET"
+    ) {
+      const taskId = url.pathname
+        .replace("/api/v1/video/task/", "")
+        .replace(/\/download$/, "");
+      const user = await requireAuthUser(request, env, fetchImpl);
+      const task = videoRouter.get(taskId);
+      if (!task || task.user_id !== user.id || task.status !== "done") {
+        throw new HttpError(404, { detail: "Video result not found" });
+      }
+      const video = await fetchImpl(task.video_url);
+      if (!video.ok) {
+        throw new HttpError(502, { detail: "Video result download failed" });
+      }
+      const contentType = String(
+        video.headers.get("content-type") || "video/mp4",
+      ).split(";")[0];
+      if (!contentType.startsWith("video/")) {
+        await video.body?.cancel();
+        throw new HttpError(502, { detail: "Invalid video result format" });
+      }
+      return new Response(video.body, {
+        status: 200,
+        headers: corsHeaders({
+          "Content-Type": contentType,
+          "Content-Disposition": `attachment; filename="kroma-live-${sanitizeStoragePathSegment(taskId)}.mp4"`,
+          "Cache-Control": "private, no-store",
+        }),
+      });
+    }
+
+    if (
+      url.pathname.startsWith("/api/v1/video/task/") &&
+      request.method === "GET"
+    ) {
+      const taskId = url.pathname.replace("/api/v1/video/task/", "");
+      const user = await requireAuthUser(request, env, fetchImpl);
+      const task = videoRouter.get(taskId);
+      if (!task || task.user_id !== user.id) {
+        throw new HttpError(404, { detail: "Video task not found" });
+      }
+      return jsonResponse(videoRouter.response(task));
     }
 
     if (
@@ -658,6 +739,77 @@ async function handleMaterialUpload(request, env, fetchImpl) {
     stored_url: `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath}`,
     file_name: materialTitle || "local-image",
     created_at: new Date().toISOString(),
+    content_type: contentType,
+    size: buffer.length,
+  });
+}
+
+async function handleVideoFrameUpload(request, env, fetchImpl) {
+  const authUser = await requireAuthUser(request, env, fetchImpl);
+  let formData;
+  try {
+    formData = await request.formData();
+  } catch {
+    throw new HttpError(400, { detail: "Invalid Live frame upload form." });
+  }
+
+  const image = formData.get("image");
+  if (
+    !image ||
+    typeof image === "string" ||
+    typeof image.arrayBuffer !== "function"
+  ) {
+    throw new HttpError(422, { detail: "Choose a cropped Live frame." });
+  }
+
+  const declaredContentType = String(image.type ?? "").toLowerCase();
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(declaredContentType)) {
+    throw new HttpError(415, {
+      detail: "Only PNG, JPEG, and WebP Live frames can be uploaded.",
+    });
+  }
+  const maxBytes = 20 * 1024 * 1024;
+  if (image.size <= 0 || image.size > maxBytes) {
+    throw new HttpError(image.size <= 0 ? 422 : 413, {
+      detail:
+        image.size <= 0
+          ? "The cropped Live frame is empty."
+          : "The cropped Live frame exceeds 20 MB.",
+    });
+  }
+
+  const buffer = Buffer.from(await image.arrayBuffer());
+  const contentType = detectSupportedImageType(buffer, declaredContentType);
+  if (!contentType) {
+    throw new HttpError(415, { detail: "The cropped Live frame is invalid." });
+  }
+
+  const bucket =
+    env.WEB_MATERIAL_STORAGE_BUCKET?.trim() || "web-imported-materials";
+  await ensureGenerationStorageBucket(fetchImpl, env, bucket);
+  const extension = imageExtension(contentType, String(image.name ?? "frame.webp"));
+  const objectPath = [
+    sanitizeStoragePathSegment(authUser.id),
+    "video-frames",
+    `${Date.now()}-${randomInt(100000, 999999)}-105pct.${extension}`,
+  ].join("/");
+  const upload = await fetchImpl(
+    `${supabaseUrl(env)}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath}`,
+    {
+      method: "PUT",
+      headers: {
+        apikey: env.WEB_SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.WEB_SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": contentType,
+        "x-upsert": "false",
+      },
+      body: new Blob([buffer], { type: contentType }),
+    },
+  );
+  await parseSupabaseResponse(upload);
+
+  return jsonResponse({
+    frame_url: `${supabaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectPath}`,
     content_type: contentType,
     size: buffer.length,
   });
@@ -2805,6 +2957,7 @@ async function buildHealthResponse(env, fetchImpl, state) {
     "authCodeSecret",
     "durableJobs",
     "checkoutReviewed",
+    "videoApiKey",
   ]);
   const usesMobileAppImageRouter = isMobileAppImageRouter(
     env.WEB_IMAGE_API_BASE_URL,
@@ -2829,6 +2982,7 @@ async function buildHealthResponse(env, fetchImpl, state) {
       Boolean(env.WEB_IMAGE_API_KEY) ||
       usesMobileAppImageRouter ||
       hasImageProviders,
+    videoApiKey: Boolean(env.WUYINKEJI_VIDEO_KEY),
   };
   const missing = Object.entries(config)
     .filter(([key, configured]) => !configured && !optionalConfigKeys.has(key))

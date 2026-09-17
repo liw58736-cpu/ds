@@ -258,10 +258,9 @@ export function HomePage({ onOpenStudio }: HomePageProps) {
           <article>
             <Film aria-hidden="true" />
             <span>03</span>
-            <h3>免费轻动效</h3>
+            <h3>AI Live 视频</h3>
             <p>
-              为完成的图片添加 3 秒缩放或平移动效，下载
-              WebM。人物动作生成尚未开放。
+              将完成的图片生成几秒 MP4。人物会有自然眨眼、轻微表情与视角变化，并尽量保持人物和商品一致。
             </p>
             <button type="button" onClick={() => onOpenStudio("motion")}>
               打开 Live 图<ArrowRight aria-hidden="true" />

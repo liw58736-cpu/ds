@@ -1,89 +1,23 @@
 import { getStorageOwner } from "../storage/workspaceDraftStore";
-import { useEffect, useMemo, useState } from "react";
-import { Download, Film, ImagePlus, Play } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Download, Film, ImagePlus, Play, Trash2 } from "lucide-react";
 import { NoticeDialog } from "./NoticeDialog";
-import { getCurrentAccountSnapshot } from "../api/accountApi";
+import {
+  consumeCredits,
+  getCurrentAccountSnapshot,
+} from "../api/accountApi";
+import {
+  downloadLiveVideo,
+  generateLiveVideo,
+  getLiveVideoCreditCost,
+  type LiveVideoClarity,
+} from "../api/liveVideoApi";
 import type { ProductInput } from "../domain/types";
 import type { MaterialLibraryAsset } from "../api/materialLibraryApi";
 import { MaterialPickerDialog } from "./MaterialPickerDialog";
 
-type MotionStyle = "zoom_in" | "zoom_out" | "pan_left" | "float";
-type MotionRatio = "9:16" | "4:5" | "1:1";
-type MotionClarity = "720p" | "1080p" | "2k";
-
-const livePhotoDurationSeconds = 3;
-const defaultMotionPrompt = "画面缓慢自然推进，主体保持居中，整体稳定流畅。";
-
-function resolveMotionStyle(prompt: string): MotionStyle {
-  const normalizedPrompt = prompt.trim().toLowerCase();
-  if (/拉远|缩小|远景|全景|zoom\s*out/.test(normalizedPrompt))
-    return "zoom_out";
-  if (/横移|侧移|向左|向右|左右|平移|pan/.test(normalizedPrompt))
-    return "pan_left";
-  if (/漂移|浮动|呼吸|轻摆|摇曳|float/.test(normalizedPrompt)) return "float";
-  return "zoom_in";
-}
-
-const clarityScale: Record<MotionClarity, number> = {
-  "720p": 720,
-  "1080p": 1080,
-  "2k": 1440,
-};
-
-const clarityCredits: Record<MotionClarity, number> = {
-  "720p": 0,
-  "1080p": 0,
-  "2k": 0,
-};
-
-function motionSize(ratio: MotionRatio, clarity: MotionClarity) {
-  const width = clarityScale[clarity];
-  if (ratio === "9:16") return { width, height: Math.round((width * 16) / 9) };
-  if (ratio === "4:5") return { width, height: Math.round((width * 5) / 4) };
-  return { width, height: width };
-}
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("图片加载失败"));
-    image.src = src;
-  });
-}
-
-function drawMotionFrame(
-  context: CanvasRenderingContext2D,
-  image: HTMLImageElement,
-  width: number,
-  height: number,
-  progress: number,
-  style: MotionStyle,
-) {
-  const baseScale = Math.max(
-    width / image.naturalWidth,
-    height / image.naturalHeight,
-  );
-  const motionScale =
-    style === "zoom_out" ? 1.12 - progress * 0.12 : 1 + progress * 0.12;
-  const scale = baseScale * motionScale;
-  const drawWidth = image.naturalWidth * scale;
-  const drawHeight = image.naturalHeight * scale;
-  let x = (width - drawWidth) / 2;
-  let y = (height - drawHeight) / 2;
-
-  if (style === "pan_left")
-    x += (progress - 0.5) * Math.min(drawWidth - width, width * 0.18);
-  if (style === "float") {
-    x += Math.sin(progress * Math.PI * 2) * width * 0.018;
-    y += Math.cos(progress * Math.PI * 2) * height * 0.012;
-  }
-
-  context.fillStyle = "#111322";
-  context.fillRect(0, 0, width, height);
-  context.drawImage(image, x, y, drawWidth, drawHeight);
-}
+const defaultMotionPrompt =
+  "人物自然眨眼并轻微呼吸；保持原姿势、服装、商品和背景不变。";
 
 interface MotionStudioPageProps {
   initialProduct?: ProductInput | null;
@@ -113,17 +47,17 @@ export function MotionStudioPage({
   const [motionPrompt, setMotionPrompt] = useState<string>(
     savedDraft.motionPrompt || defaultMotionPrompt,
   );
-  const [ratio, setRatio] = useState<MotionRatio>("9:16");
-  const [clarity, setClarity] = useState<MotionClarity>("720p");
+  const [clarity, setClarity] = useState<LiveVideoClarity>("720p");
   const [status, setStatus] = useState(
-    "上传静图、填写动态提示词并选择清晰度，即可生成固定 3 秒 Live 图。失败不扣积分。",
+    "从图片库选择照片并描述人物动作，即可生成真实 AI Live 视频。失败不扣积分。",
   );
-  const [downloadUrl, setDownloadUrl] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoTaskId, setVideoTaskId] = useState("");
+  const [isDownloading, setIsDownloading] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
   const [errorNotice, setErrorNotice] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
-  const style = useMemo(() => resolveMotionStyle(motionPrompt), [motionPrompt]);
-  const creditCost = clarityCredits[clarity];
+  const creditCost = getLiveVideoCreditCost(clarity);
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -137,25 +71,26 @@ export function MotionStudioPage({
     if (!initialProduct) return;
     setImageUrl(initialProduct.imageUrl);
     setFileName(initialProduct.fileName);
-    setStatus("已载入生成结果，请填写动态提示词并选择清晰度。");
+    setVideoUrl("");
+    setVideoTaskId("");
+    setStatus("已载入生成结果，可以填写动态提示词并生成 Live 图。");
     onInitialProductConsumed?.();
   }, [initialProduct, onInitialProductConsumed]);
-
-  useEffect(
-    () => () => {
-      if (downloadUrl) URL.revokeObjectURL(downloadUrl);
-    },
-    [downloadUrl],
-  );
 
   const handleLibraryPick = (asset: MaterialLibraryAsset) => {
     setImageUrl(asset.imageUrl);
     setFileName(asset.fileName);
-    setStatus("已从图片库选择静图。填写动态提示词后即可生成 3 秒 Live 图。");
-    if (downloadUrl) {
-      URL.revokeObjectURL(downloadUrl);
-      setDownloadUrl("");
-    }
+    setVideoUrl("");
+    setVideoTaskId("");
+    setStatus("已从图片库选择首帧照片，可以开始生成真实 AI Live 视频。");
+  };
+
+  const removeImage = () => {
+    setImageUrl("");
+    setFileName("");
+    setVideoUrl("");
+    setVideoTaskId("");
+    setStatus("请先从图片库选择一张首帧照片。");
   };
 
   const renderVideo = async () => {
@@ -163,106 +98,80 @@ export function MotionStudioPage({
       setErrorNotice("登录后才能生成 Live 图并记录积分消耗。");
       return;
     }
-    if (getCurrentAccountSnapshot().balance < creditCost) {
-      setErrorNotice(
-        `当前积分不足，${clarity} Live 图需要 ${creditCost} 积分。`,
-      );
+    if (!imageUrl) {
+      setErrorNotice("请先从图片库选择一张首帧照片。");
       return;
     }
-    if (!imageUrl || typeof MediaRecorder === "undefined") {
-      const errorMessage = imageUrl
-        ? "当前浏览器不支持本地视频生成，请使用最新版 Chrome。"
-        : "请先上传静图。";
-      setStatus(errorMessage);
-      setErrorNotice(errorMessage);
+    if (!/^https:\/\//i.test(imageUrl)) {
+      setErrorNotice("当前照片不是可访问的图片库地址，请重新从图片库选择。");
+      return;
+    }
+    if (getCurrentAccountSnapshot().balance < creditCost) {
+      setErrorNotice(
+        `当前积分不足，${clarity.toUpperCase()} Live 图需要 ${creditCost} 积分。`,
+      );
       return;
     }
 
     setIsRendering(true);
-    setStatus("正在本地生成轻动态视频，请保持页面打开…");
+    setVideoUrl("");
+    setVideoTaskId("");
+    setStatus("正在裁切 105% 固定首帧并生成 Live 视频…");
     try {
-      const image = await loadImage(imageUrl);
-      const canvas = document.createElement("canvas");
-      const size = motionSize(ratio, clarity);
-      canvas.width = size.width;
-      canvas.height = size.height;
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("无法创建视频画布");
-      const stream = canvas.captureStream(30);
-      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-        ? "video/webm;codecs=vp9"
-        : "video/webm";
-      const videoBitsPerSecond =
-        clarity === "2k"
-          ? 12_000_000
-          : clarity === "1080p"
-            ? 8_000_000
-            : 5_000_000;
-      const recorder = new MediaRecorder(stream, {
-        mimeType,
-        videoBitsPerSecond,
-      });
-      const chunks: BlobPart[] = [];
-      recorder.ondataavailable = (event) =>
-        event.data.size > 0 && chunks.push(event.data);
-      const finished = new Promise<Blob>((resolve, reject) => {
-        recorder.onerror = () => reject(new Error("视频编码失败"));
-        recorder.onstop = () =>
-          resolve(new Blob(chunks, { type: "video/webm" }));
-      });
-      recorder.start(250);
-      const startedAt = performance.now();
-      await new Promise<void>((resolve) => {
-        const frame = (now: number) => {
-          const progress = Math.min(
-            1,
-            (now - startedAt) / (livePhotoDurationSeconds * 1000),
-          );
-          drawMotionFrame(
-            context,
-            image,
-            size.width,
-            size.height,
-            progress,
-            style,
-          );
-          if (progress < 1) requestAnimationFrame(frame);
-          else resolve();
-        };
-        requestAnimationFrame(frame);
-      });
-      recorder.stop();
-      stream.getTracks().forEach((track) => track.stop());
-      const blob = await finished;
-      if (downloadUrl) URL.revokeObjectURL(downloadUrl);
-      const nextUrl = URL.createObjectURL(blob);
-      setDownloadUrl(nextUrl);
+      const result = await generateLiveVideo(
+        { firstFrameUrl: imageUrl, prompt: motionPrompt, size: clarity },
+        { onProgress: setStatus },
+      );
+      setVideoUrl(result.videoUrl);
+      setVideoTaskId(result.taskId);
       try {
-        // Local camera animation is free; paid AI video requires a configured provider.
+        await consumeCredits({ amount: creditCost, label: "生成 Live 图" });
         setStatus(
-          `已生成 ${livePhotoDurationSeconds} 秒 ${ratio} ${clarity} Live 图，本地轻动效免费。`,
+          `Live 图生成完成：16:9 · ${clarity.toUpperCase()}，已消耗 ${creditCost} 积分。`,
         );
       } catch {
-        setStatus("Live 图已生成，但积分同步暂时失败；结果仍可下载。");
+        setStatus("Live 图已生成，但积分同步暂时失败；视频仍可播放和下载。");
       }
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "视频生成失败，请重试。";
-      setStatus(errorMessage);
-      setErrorNotice(errorMessage);
+      const message =
+        error instanceof Error ? error.message : "Live 图生成失败，请重试。";
+      setStatus(`${message} 失败任务不会扣除积分。`);
+      setErrorNotice(message);
     } finally {
       setIsRendering(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!videoTaskId || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const blob = await downloadLiveVideo(videoTaskId);
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `${fileName.replace(/\.[^.]+$/, "") || "kroma-live"}.mp4`;
+      anchor.click();
+      globalThis.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      setErrorNotice(
+        error instanceof Error ? error.message : "Live 图下载失败，请稍后重试。",
+      );
+    } finally {
+      setIsDownloading(false);
     }
   };
 
   return (
     <main className="motion-page page-surface">
       <section className="page-heading motion-page-heading">
-        <p className="eyebrow">STILL TO MOTION</p>
+        <p className="eyebrow">AI LIVE VIDEO</p>
         <h1>Live 图生成</h1>
         <p>
-          当前提供免费 3 秒轻动效，可缩放或平移图片。人物眨眼、转身等 AI
-          动作及实况图格式尚未开放。
+          首帧先真实中心裁切为 105%，从第一帧起完全锁定镜头；只允许人物眨眼、呼吸等自身微动作，同时保持服装、商品与背景一致。
+        </p>
+        <p className="motion-provider-limit">
+          当前接口仅支持 16:9、720P 或 1080P；建议选择单张 16:9 人物照片，拼图或竖图可能被重新裁切。
         </p>
       </section>
       <div className="motion-workbench">
@@ -274,37 +183,41 @@ export function MotionStudioPage({
             onClick={() => setPickerOpen(true)}
           >
             <ImagePlus aria-hidden="true" />
-            <span>从图片库选择静态图片</span>
-            <small>本地图片请先到图片库批量上传</small>
+            <span>从图片库选择首帧照片</span>
+            <small>需要使用图片库中的公网图片地址</small>
           </button>
           {fileName ? (
-            <p className="motion-file-name">当前图片：{fileName}</p>
+            <div className="motion-selected-file">
+              <p className="motion-file-name">当前图片：{fileName}</p>
+              <button
+                type="button"
+                className="motion-remove-image"
+                aria-label="删除当前动态源图"
+                onClick={removeImage}
+              >
+                <Trash2 aria-hidden="true" />
+                删除
+              </button>
+            </div>
           ) : null}
           <label className="field motion-prompt-field">
             <span>动态提示词</span>
             <textarea
-              rows={4}
+              rows={5}
               value={motionPrompt}
               aria-label="动态提示词"
               onChange={(event) => setMotionPrompt(event.target.value)}
-              placeholder="例如：画面缓慢推进或拉远。当前仅识别基础运镜描述。"
+              placeholder="例如：人物自然眨眼，轻微转动视线，头发和衣角随微风轻动。"
             />
             <small>
-              可描述推进、拉远、横移或轻微漂移；当前生成固定 3 秒轻动态。
+              建议只描述人物自身的轻微动作；系统会锁定裁切后的镜头，禁止后续缩放、平移、晃动和大幅换姿势。
             </small>
           </label>
-          <div className="compact-fields">
+          <div className="compact-fields motion-video-specs">
             <label className="field">
               <span>比例</span>
-              <select
-                value={ratio}
-                onChange={(event) =>
-                  setRatio(event.target.value as MotionRatio)
-                }
-              >
-                <option>9:16</option>
-                <option>4:5</option>
-                <option>1:1</option>
+              <select value="16:9" disabled aria-label="视频比例">
+                <option>16:9</option>
               </select>
             </label>
             <label className="field">
@@ -312,18 +225,17 @@ export function MotionStudioPage({
               <select
                 value={clarity}
                 onChange={(event) =>
-                  setClarity(event.target.value as MotionClarity)
+                  setClarity(event.target.value as LiveVideoClarity)
                 }
               >
-                <option value="720p">720P · 免费</option>
-                <option value="1080p">1080P · 免费</option>
-                <option value="2k">2K · 免费</option>
+                <option value="720p">720P · 30 积分</option>
+                <option value="1080p">1080P · 40 积分</option>
               </select>
             </label>
           </div>
           <p className="motion-fixed-duration">
             <span>时长</span>
-            <strong>固定 3 秒</strong>
+            <strong>固定 8 秒</strong>
           </p>
           <button
             type="button"
@@ -332,37 +244,43 @@ export function MotionStudioPage({
             onClick={renderVideo}
           >
             <Film aria-hidden="true" />
-            <span>{isRendering ? "正在生成" : `生成轻动效（免费）`}</span>
+            <span>
+              {isRendering
+                ? "正在生成 Live 图"
+                : `生成 Live 图（${creditCost} 积分）`}
+            </span>
           </button>
           <p className="motion-credit-hint">
-            当前为免费的图片运镜预览，不支持人物动作生成。
+            真实 AI 图生视频，仅成功后消耗积分；失败任务不扣积分。
           </p>
-          {downloadUrl ? (
-            <a
+          {videoUrl && videoTaskId ? (
+            <button
+              type="button"
               className="secondary-button motion-download-button"
-              href={downloadUrl}
-              download={`${fileName.replace(/\.[^.]+$/, "") || "kroma-motion"}.webm`}
+              disabled={isDownloading}
+              onClick={handleDownload}
             >
               <Download aria-hidden="true" />
-              下载 WebM
-            </a>
+              {isDownloading ? "正在下载" : "下载 MP4"}
+            </button>
           ) : null}
           <p className="motion-status" role="status">
             {status}
           </p>
         </section>
         <section className="panel motion-preview-panel" aria-label="动态预览">
-          <div
-            className={`motion-preview-frame is-${style}`}
-            data-ratio={ratio}
-          >
-            {imageUrl ? (
+          <div className="motion-preview-frame" data-ratio="16:9">
+            {videoUrl ? (
+              <video src={videoUrl} controls autoPlay loop playsInline>
+                你的浏览器不支持视频播放。
+              </video>
+            ) : imageUrl ? (
               <img src={imageUrl} alt="动态源图预览" />
             ) : (
               <div>
                 <Play aria-hidden="true" />
-                <strong>等待静图</strong>
-                <span>从图片库选择后，这里会按提示词循环预览</span>
+                <strong>等待首帧照片</strong>
+                <span>从图片库选择后，生成结果会在这里播放</span>
               </div>
             )}
           </div>

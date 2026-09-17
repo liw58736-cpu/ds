@@ -275,6 +275,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .login-card-header { background:#f3f0fa; padding-top:30px; }
 .login-form,.password-reset-form { background:#fff; }
 .motion-page-heading { background:#eaf3f7; border-color:#d6e5ed; box-shadow:none; }
+.motion-provider-limit { margin-top:8px !important; color:#7b5060 !important; font-size:.8rem !important; }
+.motion-selected-file { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.motion-selected-file .motion-file-name { flex:1; min-width:0; }
+.motion-remove-image { display:inline-flex; align-items:center; gap:5px; flex:none; padding:6px 9px; color:#8a3f4b; border:1px solid #ead4d8; border-radius:9px; background:#fff; font-size:.7rem; font-weight:700; }
+.motion-remove-image svg { width:13px; height:13px; }
+.motion-preview-frame[data-ratio="16:9"] { width:min(780px,100%); aspect-ratio:16/9; }
+.motion-preview-frame img { animation:none; }
+.motion-preview-frame video { width:100%; height:100%; display:block; object-fit:contain; background:#111322; }
 .cleanup-page > .page-heading { background:#e9f3ed; box-shadow:none; }
 .kroma-home { gap:28px; }
 .kroma-home-hero { min-height:550px; grid-template-columns:minmax(0,.94fr) minmax(0,1.06fr); background:#faf2e8; border-color:#eadfd1; box-shadow:none; border-radius:26px; }

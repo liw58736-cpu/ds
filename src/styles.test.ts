@@ -6,6 +6,7 @@ const workspaceStylesheet = readFileSync(
   "src/workspace-redesign.css",
   "utf8",
 );
+const hubThemeStylesheet = readFileSync("src/hub-theme.css", "utf8");
 
 describe("stylesheet quality guard", () => {
   it("does not use thick one-sided accent borders on cards or hints", () => {
@@ -50,8 +51,39 @@ describe("stylesheet quality guard", () => {
   });
 
   it("keeps the interface on solid colors", () => {
-    expect(`${stylesheet}\n${workspaceStylesheet}`).not.toMatch(
+    expect(`${stylesheet}\n${workspaceStylesheet}\n${hubThemeStylesheet}`).not.toMatch(
       /(?:linear|radial|conic)-gradient\s*\(/i,
+    );
+  });
+
+  it("applies a dark desktop sidebar and returns navigation to page flow on smaller screens", () => {
+    expect(hubThemeStylesheet).toMatch(/--canvas:\s*#090b10;/);
+    expect(hubThemeStylesheet).toMatch(
+      /\.topbar\s*{[^}]*position:\s*fixed;[^}]*width:\s*var\(--hub-sidebar\);/s,
+    );
+    expect(hubThemeStylesheet).toMatch(
+      /@media\s*\(max-width:\s*1040px\)[\s\S]*?\.topbar\s*{[^}]*position:\s*relative;/s,
+    );
+  });
+
+  it("shows mobile app and studio navigation without horizontal clipping", () => {
+    expect(hubThemeStylesheet).toMatch(
+      /@media\s*\(max-width:\s*700px\)[\s\S]*?\.topnav\s*{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/s,
+    );
+    expect(hubThemeStylesheet).toMatch(
+      /@media\s*\(max-width:\s*700px\)[\s\S]*?\.studio-navigation\s*{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/s,
+    );
+  });
+
+  it("keeps every AI-tool secondary surface on the dark theme", () => {
+    expect(hubThemeStylesheet).toMatch(
+      /\.setting-group\s+\.outfit-change-target-card,[\s\S]*?background:\s*#10161e;/,
+    );
+    expect(hubThemeStylesheet).toMatch(
+      /\.cleanup-page\s*>\s*\.page-heading\s*{[^}]*background:\s*#111a21;/s,
+    );
+    expect(hubThemeStylesheet).toMatch(
+      /\.notice-dialog-content,[\s\S]*?\.notice-dialog\s*{[^}]*background:\s*#12161e;/s,
     );
   });
 

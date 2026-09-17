@@ -54,6 +54,8 @@ RIGHTCODE_BASE_URL=<rightcode-openai-compatible-base-url>
 RIGHTCODE_KEY_1=<rightcode-key>
 WUYINKEJI_BASE_URL=<wuyinkeji-base-url>
 WUYINKEJI_KEY_1=<wuyinkeji-key>
+WUYINKEJI_VIDEO_KEY=<wuyinkeji-video-key>
+WUYINKEJI_VIDEO_URL=https://api.wuyinkeji.com/api/async/video_veo3.1_fast
 PACKYAPI_BASE_URL=<packyapi-openai-compatible-base-url>
 PACKYAPI_KEY_1=<packyapi-key>
 GPTSAPI_BASE_URL=<gptsapi-openai-compatible-base-url>
@@ -73,6 +75,11 @@ PACKYAPI_IMAGE_MODEL=gpt-image-2
 WEB_IMAGE_API_BASE_URL=<legacy-image-upstream-url>
 WEB_IMAGE_API_KEY=<legacy-image-upstream-key-if-required>
 ```
+
+`WUYINKEJI_VIDEO_KEY` stays on the backend and must never use a `VITE_`
+prefix. The Live video route accepts a public HTTPS first-frame image, submits
+an asynchronous Veo 3.1 Fast task, polls the shared result endpoint, and
+returns an MP4 URL. The provider currently supports only 16:9 and 720p/1080p.
 
 `WEB_AUTH_CODE_SECRET` is used to hash public 6 digit email codes before storing
 them in Supabase. Use a long random value and keep it stable after launch so

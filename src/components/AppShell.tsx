@@ -1,6 +1,20 @@
 import { useEffect, useState, type ReactNode } from "react";
 import kromaLogo from "../assets/brand/kroma-logo.png";
-import { Image, Layers3, WandSparkles, Sparkles, Film, type LucideIcon } from "lucide-react";
+import {
+  BadgeDollarSign,
+  CircleUserRound,
+  Film,
+  History,
+  Home,
+  Image,
+  Images,
+  Layers3,
+  LogIn,
+  PanelsTopLeft,
+  Sparkles,
+  WandSparkles,
+  type LucideIcon,
+} from "lucide-react";
 
 export type AppPage =
   | "home"
@@ -29,14 +43,14 @@ interface AppShellProps {
 }
 
 const topNavItems = [
-  { page: "home", label: "首页" },
-  { page: "main_image", label: "创作工作台" },
-  { page: "materials", label: "图片库" },
-  { page: "history", label: "任务中心" },
-  { page: "pricing", label: "价格" },
-  { page: "account", label: "账户" },
-  { page: "login", label: "登录" },
-] satisfies Array<{ page: AppPage; label: string }>;
+  { page: "home", label: "首页", icon: Home },
+  { page: "main_image", label: "创作工作台", icon: PanelsTopLeft },
+  { page: "materials", label: "图片库", icon: Images },
+  { page: "history", label: "任务中心", icon: History },
+  { page: "pricing", label: "价格", icon: BadgeDollarSign },
+  { page: "account", label: "账户", icon: CircleUserRound },
+  { page: "login", label: "登录", icon: LogIn },
+] satisfies Array<{ page: AppPage; label: string; icon: LucideIcon }>;
 
 const studioNavigation: Array<{ page: AppPage; label: string; icon: LucideIcon }> = [
   { page: "main_image", label: "商品主图", icon: Image },
@@ -104,7 +118,8 @@ export function AppShell({
               }
               aria-current={(item.page === "main_image" ? inStudio : page === item.page) ? "page" : undefined}
             >
-              {item.label}
+              <item.icon aria-hidden="true" />
+              <span>{item.label}</span>
             </button>
           ))}
         </nav>

@@ -187,9 +187,10 @@ describe("App", () => {
       screen.getByRole("button", { name: "从图片库选择动态源图" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("动态提示词")).toHaveValue(
-      "画面缓慢自然推进，主体保持居中，整体稳定流畅。",
+      "人物自然眨眼并轻微呼吸；保持原姿势、服装、商品和背景不变。",
     );
-    expect(screen.getByText("固定 3 秒")).toBeInTheDocument();
+    expect(screen.getByText("固定 8 秒")).toBeInTheDocument();
+    expect(screen.getByLabelText("视频比例")).toHaveValue("16:9");
     expect(screen.queryByLabelText("运镜方式")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("时长")).not.toBeInTheDocument();
     expect(screen.getByLabelText("清晰度")).toHaveValue("720p");
