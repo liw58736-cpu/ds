@@ -47,6 +47,14 @@ services:
         sync: false
       - key: WUYINKEJI_VIDEO_URL
         value: https://api.wuyinkeji.com/api/async/video_veo3.1_fast
+      - key: AI_MODEL_HUB_VIDEO_KEY
+        sync: false
+      - key: AI_MODEL_HUB_VIDEO_URL
+        value: https://api.lk888.ai/v1/media/generate
+      - key: AI_MODEL_HUB_VIDEO_STATUS_URL
+        value: https://api.lk888.ai/v1/media/status
+      - key: AI_MODEL_HUB_VIDEO_MODEL
+        value: minimax-h3
       - key: PACKYAPI_BASE_URL
         sync: false
       - key: PACKYAPI_KEY_1

@@ -56,6 +56,10 @@ WUYINKEJI_BASE_URL=<wuyinkeji-base-url>
 WUYINKEJI_KEY_1=<wuyinkeji-key>
 WUYINKEJI_VIDEO_KEY=<wuyinkeji-video-key>
 WUYINKEJI_VIDEO_URL=https://api.wuyinkeji.com/api/async/video_veo3.1_fast
+AI_MODEL_HUB_VIDEO_KEY=<ai-model-hub-key>
+AI_MODEL_HUB_VIDEO_URL=https://api.lk888.ai/v1/media/generate
+AI_MODEL_HUB_VIDEO_STATUS_URL=https://api.lk888.ai/v1/media/status
+AI_MODEL_HUB_VIDEO_MODEL=minimax-h3
 PACKYAPI_BASE_URL=<packyapi-openai-compatible-base-url>
 PACKYAPI_KEY_1=<packyapi-key>
 GPTSAPI_BASE_URL=<gptsapi-openai-compatible-base-url>
@@ -76,10 +80,11 @@ WEB_IMAGE_API_BASE_URL=<legacy-image-upstream-url>
 WEB_IMAGE_API_KEY=<legacy-image-upstream-key-if-required>
 ```
 
-`WUYINKEJI_VIDEO_KEY` stays on the backend and must never use a `VITE_`
-prefix. The Live video route accepts a public HTTPS first-frame image, submits
-an asynchronous Veo 3.1 Fast task, polls the shared result endpoint, and
-returns an MP4 URL. The provider currently supports only 16:9 and 720p/1080p.
+Video keys stay on the backend and must never use a `VITE_` prefix. When
+`AI_MODEL_HUB_VIDEO_KEY` is configured, the Live route uses MiniMax H3 through
+AI Model Hub. Otherwise it falls back to `WUYINKEJI_VIDEO_KEY`. The browser
+submits only an authenticated task and public frame URLs; provider credentials
+are attached by the server-side video router.
 
 `WEB_AUTH_CODE_SECRET` is used to hash public 6 digit email codes before storing
 them in Supabase. Use a long random value and keep it stable after launch so

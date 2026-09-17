@@ -85,6 +85,7 @@ test("health endpoint reports deployment commit and missing configuration", asyn
     service: "kroma-web-backend",
     commit: "commit-1",
     checked_at: body.checked_at,
+    video_provider: "wuyinkeji",
     config: {
       supabaseUrl: true,
       supabaseAnonKey: true,

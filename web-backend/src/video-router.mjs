@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-const defaultCreateUrl =
+const defaultWuyinCreateUrl =
   "https://api.wuyinkeji.com/api/async/video_veo3.1_fast";
+const defaultModelHubCreateUrl = "https://api.lk888.ai/v1/media/generate";
+const defaultModelHubStatusUrl = "https://api.lk888.ai/v1/media/status";
 const pollIntervalMs = 5000;
 const maxPolls = 120;
 
@@ -12,9 +14,9 @@ export function createVideoRouter({
   const tasks = new Map();
 
   return {
-    configured: () => Boolean(videoApiKey(env)),
+    configured: () => Boolean(resolveVideoProvider(env)),
     submit: async (requestBody, authUser = {}) => {
-      if (!videoApiKey(env)) {
+      if (!resolveVideoProvider(env)) {
         return {
           task_id: `web-video-${randomUUID()}`,
           status: "error",
@@ -46,57 +48,134 @@ export function createVideoRouter({
 async function runVideoTask({ task, requestBody, env, fetchImpl }) {
   try {
     const payload = buildVideoPayload(requestBody);
-    const response = await fetchImpl(videoCreateUrl(env), {
-      method: "POST",
-      headers: {
-        Authorization: videoApiKey(env),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    const created = await parseJson(response);
-
-    if (!response.ok || Number(created?.code) !== 200) {
-      throw new Error(providerError(response.status, created));
+    const provider = resolveVideoProvider(env);
+    if (!provider) throw new Error("Live 图视频服务尚未配置。");
+    if (provider === "model_hub") {
+      await runModelHubVideoTask({ task, payload, env, fetchImpl });
+    } else {
+      await runWuyinVideoTask({ task, payload, env, fetchImpl });
     }
-
-    const providerTaskId = String(created?.data?.id ?? "").trim();
-    if (!providerTaskId) throw new Error("视频服务没有返回任务编号。");
-    task.provider_task_id = providerTaskId;
-
-    for (let attempt = 0; attempt < maxPolls; attempt += 1) {
-      const poll = await fetchImpl(
-        `${videoDetailUrl(env)}?id=${encodeURIComponent(providerTaskId)}`,
-        { method: "GET", headers: { Authorization: videoApiKey(env) } },
-      );
-      const polled = await parseJson(poll);
-      if (!poll.ok) {
-        if (attempt < maxPolls - 1) continue;
-        throw new Error(providerError(poll.status, polled));
-      }
-      const data = polled?.data ?? {};
-      const status = Number(data.status);
-      const result = extractVideoUrl(data.result ?? data.url ?? data.video_url);
-
-      if (status === 2 || result) {
-        if (!result) throw new Error("视频任务已完成，但没有返回视频地址。");
-        task.status = "done";
-        task.video_url = result;
-        task.progress = "Live 图生成完成";
-        return;
-      }
-      if (status === 3) {
-        throw new Error(String(data.message ?? data.msg ?? "Live 图生成失败。"));
-      }
-      await wait(pollIntervalMs);
-    }
-
-    throw new Error("Live 图生成超时，请稍后重试。");
   } catch (error) {
     task.status = "error";
     task.error = error instanceof Error ? error.message : "Live 图生成失败。";
     task.progress = "生成失败";
   }
+}
+
+async function runWuyinVideoTask({ task, payload, env, fetchImpl }) {
+  const response = await fetchImpl(wuyinCreateUrl(env), {
+    method: "POST",
+    headers: {
+      Authorization: wuyinVideoApiKey(env),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const created = await parseJson(response);
+  if (!response.ok || Number(created?.code) !== 200) {
+    throw new Error(providerError(response.status, created));
+  }
+
+  const providerTaskId = String(created?.data?.id ?? "").trim();
+  if (!providerTaskId) throw new Error("视频服务没有返回任务编号。");
+  task.provider_task_id = providerTaskId;
+
+  for (let attempt = 0; attempt < maxPolls; attempt += 1) {
+    const poll = await fetchImpl(
+      `${wuyinDetailUrl(env)}?id=${encodeURIComponent(providerTaskId)}`,
+      { method: "GET", headers: { Authorization: wuyinVideoApiKey(env) } },
+    );
+    const polled = await parseJson(poll);
+    if (!poll.ok) {
+      if (attempt < maxPolls - 1) {
+        await wait(pollIntervalMs);
+        continue;
+      }
+      throw new Error(providerError(poll.status, polled));
+    }
+    const data = polled?.data ?? {};
+    const status = Number(data.status);
+    const result = extractVideoUrl(data.result ?? data.url ?? data.video_url);
+    if (status === 2 || result) {
+      completeVideoTask(task, result);
+      return;
+    }
+    if (status === 3) {
+      throw new Error(String(data.message ?? data.msg ?? "Live 图生成失败。"));
+    }
+    await wait(pollIntervalMs);
+  }
+
+  throw new Error("Live 图生成超时，请稍后重试。");
+}
+
+async function runModelHubVideoTask({ task, payload, env, fetchImpl }) {
+  const response = await fetchImpl(modelHubCreateUrl(env), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${modelHubVideoApiKey(env)}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(buildModelHubVideoPayload(payload, env)),
+  });
+  const created = await parseJson(response);
+  const providerTaskId = String(
+    created?.data?.task_id ??
+      created?.data?.id ??
+      created?.task_id ??
+      created?.id ??
+      "",
+  ).trim();
+  if (!response.ok || (Number(created?.code) !== 200 && !providerTaskId)) {
+    throw new Error(providerError(response.status, created));
+  }
+  if (!providerTaskId) throw new Error("视频服务没有返回任务编号。");
+  task.provider_task_id = providerTaskId;
+
+  for (let attempt = 0; attempt < maxPolls; attempt += 1) {
+    const pollUrl = new URL(modelHubStatusUrl(env));
+    pollUrl.searchParams.set("task_id", providerTaskId);
+    const poll = await fetchImpl(pollUrl, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${modelHubVideoApiKey(env)}` },
+    });
+    const polled = await parseJson(poll);
+    if (!poll.ok) {
+      if (attempt < maxPolls - 1) {
+        await wait(pollIntervalMs);
+        continue;
+      }
+      throw new Error(providerError(poll.status, polled));
+    }
+
+    const state = String(polled?.state ?? "").toLowerCase();
+    const isFinal = polled?.is_final === true;
+    const result = extractVideoUrl(
+      polled?.result_url ?? polled?.result ?? polled?.video_url,
+    );
+    task.progress = String(polled?.progress || "正在生成 Live 图");
+    if (state === "success" || (isFinal && result)) {
+      completeVideoTask(task, result);
+      return;
+    }
+    if (isFinal || ["error", "failed", "failure"].includes(state)) {
+      throw new Error(
+        String(
+          polled?.error || polled?.msg || polled?.status || "Live 图生成失败。",
+        ),
+      );
+    }
+    await wait(pollIntervalMs);
+  }
+
+  throw new Error("Live 图生成超时，请稍后重试。");
+}
+
+function completeVideoTask(task, result) {
+  if (!result) throw new Error("视频任务已完成，但没有返回视频地址。");
+  task.status = "done";
+  task.video_url = result;
+  task.progress = "Live 图生成完成";
 }
 
 export function buildVideoPayload(requestBody) {
@@ -114,6 +193,22 @@ export function buildVideoPayload(requestBody) {
     lastFrameUrl: requestedLastFrameUrl || firstFrameUrl,
     aspectRatio: "16:9",
     size,
+  };
+}
+
+export function buildModelHubVideoPayload(payload, env = process.env) {
+  const images = [payload.firstFrameUrl];
+  if (payload.lastFrameUrl) images.push(payload.lastFrameUrl);
+  return {
+    model: String(env.AI_MODEL_HUB_VIDEO_MODEL || "minimax-h3").trim(),
+    prompt: payload.prompt,
+    params: {
+      mode: "shouweizhen",
+      images,
+      duration: "4",
+      aspect_ratio: "adaptive",
+      resolution: payload.size === "1080p" ? "1080P" : "768P",
+    },
   };
 }
 
@@ -157,20 +252,42 @@ function extractVideoUrl(value) {
   return "";
 }
 
-function videoApiKey(env) {
+function resolveVideoProvider(env) {
+  if (modelHubVideoApiKey(env)) return "model_hub";
+  if (wuyinVideoApiKey(env)) return "wuyin";
+  return null;
+}
+
+function modelHubVideoApiKey(env) {
+  return String(env.AI_MODEL_HUB_VIDEO_KEY ?? "").trim();
+}
+
+function wuyinVideoApiKey(env) {
   return String(env.WUYINKEJI_VIDEO_KEY ?? "").trim();
 }
 
-function videoCreateUrl(env) {
-  return String(env.WUYINKEJI_VIDEO_URL ?? defaultCreateUrl)
+function modelHubCreateUrl(env) {
+  return String(env.AI_MODEL_HUB_VIDEO_URL ?? defaultModelHubCreateUrl)
     .trim()
     .replace(/\/+$/, "");
 }
 
-function videoDetailUrl(env) {
+function modelHubStatusUrl(env) {
+  return String(env.AI_MODEL_HUB_VIDEO_STATUS_URL ?? defaultModelHubStatusUrl)
+    .trim()
+    .replace(/\/+$/, "");
+}
+
+function wuyinCreateUrl(env) {
+  return String(env.WUYINKEJI_VIDEO_URL ?? defaultWuyinCreateUrl)
+    .trim()
+    .replace(/\/+$/, "");
+}
+
+function wuyinDetailUrl(env) {
   const configured = String(env.WUYINKEJI_VIDEO_DETAIL_URL ?? "").trim();
   if (configured) return configured.replace(/\/+$/, "");
-  return videoCreateUrl(env).replace(
+  return wuyinCreateUrl(env).replace(
     /\/api\/async\/video_veo3\.1_fast$/i,
     "/api/async/detail",
   );

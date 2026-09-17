@@ -2982,7 +2982,9 @@ async function buildHealthResponse(env, fetchImpl, state) {
       Boolean(env.WEB_IMAGE_API_KEY) ||
       usesMobileAppImageRouter ||
       hasImageProviders,
-    videoApiKey: Boolean(env.WUYINKEJI_VIDEO_KEY),
+    videoApiKey: Boolean(
+      env.AI_MODEL_HUB_VIDEO_KEY || env.WUYINKEJI_VIDEO_KEY,
+    ),
   };
   const missing = Object.entries(config)
     .filter(([key, configured]) => !configured && !optionalConfigKeys.has(key))
@@ -3003,6 +3005,11 @@ async function buildHealthResponse(env, fetchImpl, state) {
     service: "kroma-web-backend",
     commit: env.RENDER_GIT_COMMIT ?? env.GIT_COMMIT ?? "unknown",
     checked_at: new Date().toISOString(),
+    video_provider: env.AI_MODEL_HUB_VIDEO_KEY
+      ? "ai_model_hub"
+      : env.WUYINKEJI_VIDEO_KEY
+        ? "wuyinkeji"
+        : "unconfigured",
     config,
     database,
     missing,
