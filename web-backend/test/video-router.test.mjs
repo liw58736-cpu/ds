@@ -17,7 +17,6 @@ test("video payload accepts only a public HTTPS first frame and supported option
     {
       prompt: "natural blink",
       firstFrameUrl: "https://cdn.example.com/frame.jpg",
-      lastFrameUrl: "https://cdn.example.com/frame.jpg",
       aspectRatio: "16:9",
       size: "1080p",
     },
@@ -84,7 +83,6 @@ test("video router keeps the provider key server-side and maps async success", a
     assert.deepEqual(JSON.parse(calls[0].init.body), {
       prompt: "natural blink",
       firstFrameUrl: "https://cdn.example.com/frame.jpg",
-      lastFrameUrl: "https://cdn.example.com/frame.jpg",
       aspectRatio: "16:9",
       size: "720p",
     });

@@ -281,6 +281,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .motion-remove-image { display:inline-flex; align-items:center; gap:5px; flex:none; padding:6px 9px; color:#8a3f4b; border:1px solid #ead4d8; border-radius:9px; background:#fff; font-size:.7rem; font-weight:700; }
 .motion-remove-image svg { width:13px; height:13px; }
 .motion-preview-frame[data-ratio="16:9"] { width:min(780px,100%); aspect-ratio:16/9; }
+.motion-preview-frame[data-ratio="adaptive"] { width:min(780px,100%); min-height:420px; aspect-ratio:auto; }
+.motion-preview-frame[data-ratio="adaptive"] img,
+.motion-preview-frame[data-ratio="adaptive"] video { width:100%; height:auto; max-height:650px; object-fit:contain; }
 .motion-preview-frame img { animation:none; }
 .motion-preview-frame video { width:100%; height:100%; display:block; object-fit:contain; background:#111322; }
 .cleanup-page > .page-heading { background:#e9f3ed; box-shadow:none; }

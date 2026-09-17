@@ -69,7 +69,7 @@ async function runWuyinVideoTask({ task, payload, env, fetchImpl }) {
       Authorization: wuyinVideoApiKey(env),
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(buildWuyinVideoPayload(payload)),
   });
   const created = await parseJson(response);
   if (!response.ok || Number(created?.code) !== 200) {
@@ -190,10 +190,17 @@ export function buildVideoPayload(requestBody) {
   return {
     prompt,
     firstFrameUrl,
-    lastFrameUrl: requestedLastFrameUrl || firstFrameUrl,
-    aspectRatio: "16:9",
+    ...(requestedLastFrameUrl ? { lastFrameUrl: requestedLastFrameUrl } : {}),
+    aspectRatio:
+      String(requestBody?.aspectRatio ?? "").toLowerCase() === "adaptive"
+        ? "adaptive"
+        : "16:9",
     size,
   };
+}
+
+function buildWuyinVideoPayload(payload) {
+  return { ...payload, aspectRatio: "16:9" };
 }
 
 export function buildModelHubVideoPayload(payload, env = process.env) {

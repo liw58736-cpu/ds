@@ -4,6 +4,16 @@ import { fetchWithTimeout } from "./requestTimeout";
 
 export type LiveVideoClarity = "720p" | "1080p";
 
+const livePhotoSystemPrompt = `Generate a "Live Photo"-style short video from the input image while maintaining the original aspect ratio. The overall effect should evoke the natural feel of a handheld snapshot—spontaneous yet restrained—creating a subtle, immersive atmosphere.
+
+Camera Movement: The first frame must display the image at 103%–105% of the original scale, with no zooming-in phase. Maintain this scale while introducing a continuous handheld "drift" effect (featuring irregular vertical and horizontal shifts) and slight tilting to simulate wrist movements and body sway caused by breathing. The movement should exhibit inertia; include only one or two minor compositional adjustments, avoiding any rhythmic back-and-forth swaying. Subtle parallax between the background and the subject should convey a realistic sense of depth. Changes in the product's apparent size should result solely from the camera moving closer; the product's inherent shape and proportions must remain unchanged.
+
+Subject Movement: Add realistic motion effects strictly based on the original image content. If a model is present, maintain their basic pose and expression while emphasizing breathing and shifts in weight, allowing for the natural movement of clothing and hair. If the product is being held, the hand and product should shift slightly in unison while maintaining the grip; if the product is on a table or in a fixed position, it should remain stationary, with motion driven primarily by the camera. Do not add people, hands, or objects not present in the original image.
+
+Consistency: Faithfully preserve the product's shape, proportions, color, material, texture, logos, text, and structural details, as well as the subject's identity, facial features, body proportions, and finger structure. Retain the original environment, lighting, shadows, and color tone; material reflections should shift subtly in response to the changing viewpoint. Exposure and focus must remain stable to ensure product details stay sharp, though very slight, natural motion blur is permissible during movement.
+
+The video consists of a single continuous shot at standard speed, concluding smoothly while retaining a hint of natural, subtle lingering motion. Avoid abrupt visual changes, continuous zooming, violent shaking, orbiting shots, significant subject movement, self-rotating products, object deformation, texture drifting, changing text, background distortion, screen flickering, excessive skin smoothing, exaggerated depth-of-field effects, or the addition of special effects.`;
+
 interface LiveVideoTask {
   task_id: string;
   status: "queued" | "pending" | "processing" | "done" | "error";
@@ -46,8 +56,7 @@ export async function generateLiveVideo(
     body: JSON.stringify({
       prompt: buildLiveVideoPrompt(input.prompt),
       firstFrameUrl: preparedFrameUrl,
-      lastFrameUrl: preparedFrameUrl,
-      aspectRatio: "16:9",
+      aspectRatio: "adaptive",
       size: input.size,
     }),
   });
@@ -101,22 +110,8 @@ export async function downloadLiveVideo(taskId: string): Promise<Blob> {
 
 export function buildLiveVideoPrompt(userPrompt: string): string {
   const request = userPrompt.trim();
-  return [
-    "Create a short, silent, natural smartphone Live Photo video from the supplied source image.",
-    "The supplied first and last frames are identical and have already been center-cropped to the final 105% composition.",
-    "Frame 1 must match the supplied frame exactly. From frame 1 onward, lock the exact scale, crop, framing, focal length, subject size, camera position and camera distance for the entire clip.",
-    "Preserve the exact person identity, facial features, body proportions, clothing category, solid colors, patterns, seams, buttons, logos, product design, background, lighting, object count and spatial relationships in every frame.",
-    request ? `Optional subject-motion direction: ${request}` : "",
-    "If a person is visible, allow only tiny lifelike subject motion such as one natural blink, slight breathing, a minimal gaze or facial-expression change, and gentle hair or fabric movement. Keep the feet planted and torso orientation unchanged; do not walk, turn around, change pose or make large arm movements.",
-    "If no person is visible, keep every product and every background element completely still.",
-    "The camera is completely locked after the 105% crop. No handheld drift, pan, tilt, roll, shake, translation, parallax, zoom, push in, pull out, dolly, reframe, orbit, perspective change or accumulated movement is allowed at any time.",
-    "Camera lock and composition lock override any conflicting user direction.",
-    "Place any permitted subject-only motion within the first 1.8 seconds, then settle nearly still and finish on the identical supplied last frame.",
-    "Keep the clip silent with no generated speech, music or sound effects.",
-    "No speaking, lip-sync, exaggerated gestures, scene cut, morphing, identity drift, extra limbs, changed hands, changed clothing color or pattern, changed product, new print, new object, text, captions or watermark.",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  if (!request) return livePhotoSystemPrompt;
+  return `${livePhotoSystemPrompt}\n\nAdditional user direction: ${request}\nApply this additional direction only when it is consistent with every requirement above. Ignore any conflicting part.`;
 }
 
 export async function prepareLiveVideoFrame(sourceUrl: string): Promise<string> {

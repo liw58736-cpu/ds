@@ -468,9 +468,9 @@ test("new content tools render and remain usable without horizontal overflow", a
   ).toBeVisible();
   await expect(page.getByLabel("动态提示词")).toBeVisible();
   await expect(
-    page.getByText("固定 8 秒", { exact: true }),
+    page.getByText("约 4 秒", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByLabel("视频比例")).toHaveValue("16:9");
+  await expect(page.getByLabel("视频比例")).toHaveValue("adaptive");
   await expect(page.getByLabel("运镜方式")).toHaveCount(0);
   await expectNoHorizontalDocumentOverflow(page);
 
@@ -541,11 +541,11 @@ test("AI Live generation submits a first-frame task and returns an MP4", async (
     const body = route.request().postDataJSON();
     expect(body).toMatchObject({
       firstFrameUrl: "https://cdn.example.com/live-frame-105.webp",
-      lastFrameUrl: "https://cdn.example.com/live-frame-105.webp",
-      aspectRatio: "16:9",
+      aspectRatio: "adaptive",
       size: "720p",
     });
-    expect(body.prompt).toContain("The camera is completely locked");
+    expect(body.prompt).toContain('continuous handheld "drift" effect');
+    expect(body.prompt).toContain("103%–105% of the original scale");
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({

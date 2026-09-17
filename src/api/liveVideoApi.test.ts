@@ -15,18 +15,26 @@ afterEach(() => {
 });
 
 describe("liveVideoApi", () => {
-  it("uses an already-cropped 105 percent frame and locks the camera completely", () => {
+  it("builds the restrained handheld Live Photo system prompt", () => {
     const prompt = buildLiveVideoPrompt("人物轻轻眨眼");
 
-    expect(prompt).toContain("natural blink");
-    expect(prompt).toContain("already been center-cropped to the final 105% composition");
-    expect(prompt).toContain("The camera is completely locked");
-    expect(prompt).toContain("No handheld drift, pan, tilt, roll, shake");
-    expect(prompt).toContain("first 1.8 seconds");
-    expect(prompt).toContain("Preserve the exact person identity");
-    expect(prompt).toContain("torso orientation unchanged");
-    expect(prompt).toContain("changed clothing color or pattern");
+    expect(prompt).toContain("maintaining the original aspect ratio");
+    expect(prompt).toContain("103%–105% of the original scale");
+    expect(prompt).toContain('continuous handheld "drift" effect');
+    expect(prompt).toContain("irregular vertical and horizontal shifts");
+    expect(prompt).toContain("avoiding any rhythmic back-and-forth swaying");
+    expect(prompt).toContain("Subtle parallax between the background and the subject");
+    expect(prompt).toContain("Do not add people, hands, or objects");
+    expect(prompt).toContain("finger structure");
+    expect(prompt).toContain("Additional user direction:");
+    expect(prompt).toContain("Ignore any conflicting part");
     expect(prompt).toContain("人物轻轻眨眼");
+  });
+
+  it("does not append an empty user direction to the built-in prompt", () => {
+    expect(buildLiveVideoPrompt("   ")).not.toContain(
+      "Additional user direction:",
+    );
   });
 
   it("charges more credits for 1080p", () => {
@@ -161,8 +169,7 @@ describe("liveVideoApi", () => {
     const submitted = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(submitted).toMatchObject({
       firstFrameUrl: "https://cdn.example.com/frame-105.webp",
-      lastFrameUrl: "https://cdn.example.com/frame-105.webp",
-      aspectRatio: "16:9",
+      aspectRatio: "adaptive",
       size: "720p",
     });
     expect(fetchMock.mock.calls[0][1].headers).toEqual(

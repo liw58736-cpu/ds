@@ -17,7 +17,7 @@ import type { MaterialLibraryAsset } from "../api/materialLibraryApi";
 import { MaterialPickerDialog } from "./MaterialPickerDialog";
 
 const defaultMotionPrompt =
-  "人物自然眨眼并轻微呼吸；保持原姿势、服装、商品和背景不变。";
+  "人物自然呼吸并轻微转移重心，头发和衣料随动作自然微动；保持原姿势、表情、商品和背景一致。";
 
 interface MotionStudioPageProps {
   initialProduct?: ProductInput | null;
@@ -127,7 +127,7 @@ export function MotionStudioPage({
       try {
         await consumeCredits({ amount: creditCost, label: "生成 Live 图" });
         setStatus(
-          `Live 图生成完成：16:9 · ${clarity.toUpperCase()}，已消耗 ${creditCost} 积分。`,
+          `Live 图生成完成：原图比例 · ${clarity.toUpperCase()}，已消耗 ${creditCost} 积分。`,
         );
       } catch {
         setStatus("Live 图已生成，但积分同步暂时失败；视频仍可播放和下载。");
@@ -168,10 +168,10 @@ export function MotionStudioPage({
         <p className="eyebrow">AI LIVE VIDEO</p>
         <h1>Live 图生成</h1>
         <p>
-          首帧先真实中心裁切为 105%，从第一帧起完全锁定镜头；只允许人物眨眼、呼吸等自身微动作，同时保持服装、商品与背景一致。
+          首帧直接采用 103%–105% 构图，不展示放大过程；随后保持该尺度，加入克制的手持漂移、轻微倾斜与自然主体微动作。
         </p>
         <p className="motion-provider-limit">
-          当前接口仅支持 16:9、720P 或 1080P；建议选择单张 16:9 人物照片，拼图或竖图可能被重新裁切。
+          输出保持原图比例；H3 生成约 4 秒母片，支持 768P 或 1080P。建议选择单张清晰照片，避免拼图。
         </p>
       </section>
       <div className="motion-workbench">
@@ -210,14 +210,14 @@ export function MotionStudioPage({
               placeholder="例如：人物自然眨眼，轻微转动视线，头发和衣角随微风轻动。"
             />
             <small>
-              建议只描述人物自身的轻微动作；系统会锁定裁切后的镜头，禁止后续缩放、平移、晃动和大幅换姿势。
+              系统已内置自然手持漂移、一致性保护和禁止项；这里只需补充希望人物或商品如何轻微运动。
             </small>
           </label>
           <div className="compact-fields motion-video-specs">
             <label className="field">
               <span>比例</span>
-              <select value="16:9" disabled aria-label="视频比例">
-                <option>16:9</option>
+              <select value="adaptive" disabled aria-label="视频比例">
+                <option value="adaptive">原图比例</option>
               </select>
             </label>
             <label className="field">
@@ -228,14 +228,14 @@ export function MotionStudioPage({
                   setClarity(event.target.value as LiveVideoClarity)
                 }
               >
-                <option value="720p">720P · 30 积分</option>
+                <option value="720p">H3 768P · 30 积分</option>
                 <option value="1080p">1080P · 40 积分</option>
               </select>
             </label>
           </div>
           <p className="motion-fixed-duration">
             <span>时长</span>
-            <strong>固定 8 秒</strong>
+            <strong>约 4 秒</strong>
           </p>
           <button
             type="button"
@@ -269,7 +269,7 @@ export function MotionStudioPage({
           </p>
         </section>
         <section className="panel motion-preview-panel" aria-label="动态预览">
-          <div className="motion-preview-frame" data-ratio="16:9">
+          <div className="motion-preview-frame" data-ratio="adaptive">
             {videoUrl ? (
               <video src={videoUrl} controls autoPlay loop playsInline>
                 你的浏览器不支持视频播放。

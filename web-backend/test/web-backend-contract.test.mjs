@@ -863,7 +863,6 @@ test("video generation requires web auth, keeps the provider key server-side, an
         assert.deepEqual(JSON.parse(init.body), {
           prompt: "natural blink",
           firstFrameUrl: "https://cdn.example.com/frame.jpg",
-          lastFrameUrl: "https://cdn.example.com/frame.jpg",
           aspectRatio: "16:9",
           size: "720p",
         });
