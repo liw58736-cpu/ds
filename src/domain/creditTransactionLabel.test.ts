@@ -54,5 +54,11 @@ describe("getCreditTransactionDisplayLabel", () => {
         amount: 100,
       }),
     ).toBe("手动充值积分");
+    expect(
+      getCreditTransactionDisplayLabel({
+        description: "Paddle purchase: 基础包",
+        amount: 1500,
+      }),
+    ).toBe("购买基础包");
   });
 });

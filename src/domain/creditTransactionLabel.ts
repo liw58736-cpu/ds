@@ -41,5 +41,9 @@ export function getCreditTransactionDisplayLabel(input: {
   if (["Web credit top-up", "Manual credit top-up"].includes(description)) {
     return "手动充值积分";
   }
+  if (description.startsWith("Paddle purchase:")) {
+    const planName = description.slice("Paddle purchase:".length).trim();
+    return planName ? `购买${planName}` : "购买积分套餐";
+  }
   return description || "积分变动";
 }
