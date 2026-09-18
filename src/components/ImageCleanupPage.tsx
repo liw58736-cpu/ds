@@ -314,7 +314,12 @@ export function ImageCleanupPage({
       ]);
       try {
         if (!result.billingManaged)
-          await consumeCredits({ amount: 1, label: "图片清理" });
+          await consumeCredits({
+            amount: 1,
+            label:
+              mode === "watermark_remove" ? "图片局部清理" : "图片移除物体",
+            referenceId: completed.backendTaskId || completed.id,
+          });
         setStatus("清理完成，已扣除 1 积分并保存到历史任务。");
       } catch {
         setStatus(

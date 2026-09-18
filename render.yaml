@@ -55,6 +55,8 @@ services:
         value: https://api.lk888.ai/v1/media/status
       - key: AI_MODEL_HUB_VIDEO_MODEL
         value: minimax-h3
+      - key: WEB_VIDEO_STORAGE_BUCKET
+        value: web-live-videos
       - key: PACKYAPI_BASE_URL
         sync: false
       - key: PACKYAPI_KEY_1

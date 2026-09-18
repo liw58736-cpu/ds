@@ -12,7 +12,7 @@ Subject Movement: Add realistic motion effects strictly based on the original im
 
 Consistency: Faithfully preserve the product's shape, proportions, color, material, texture, logos, text, and structural details, as well as the subject's identity, facial features, body proportions, and finger structure. Retain the original environment, lighting, shadows, and color tone; material reflections should shift subtly in response to the changing viewpoint. Exposure and focus must remain stable to ensure product details stay sharp, though very slight, natural motion blur is permissible during movement.
 
-The video consists of a single continuous shot at standard speed, concluding smoothly while retaining a hint of natural, subtle lingering motion. Avoid abrupt visual changes, continuous zooming, violent shaking, orbiting shots, significant subject movement, self-rotating products, object deformation, texture drifting, changing text, background distortion, screen flickering, excessive skin smoothing, exaggerated depth-of-field effects, or the addition of special effects.`;
+The delivered Live Photo must be a silent three-second clip with no audio track. It consists of a single continuous shot at standard speed, concluding smoothly while retaining a hint of natural, subtle lingering motion. Avoid abrupt visual changes, continuous zooming, violent shaking, orbiting shots, significant subject movement, self-rotating products, object deformation, texture drifting, changing text, background distortion, screen flickering, excessive skin smoothing, exaggerated depth-of-field effects, or the addition of special effects.`;
 
 interface LiveVideoTask {
   task_id: string;
@@ -20,6 +20,8 @@ interface LiveVideoTask {
   video_url?: string | null;
   error?: string | null;
   progress?: string | null;
+  duration_seconds?: number | null;
+  has_audio?: boolean | null;
 }
 
 interface GenerateLiveVideoInput {
@@ -69,6 +71,9 @@ export async function generateLiveVideo(
     options.onProgress?.(task.progress || "正在生成 Live 图");
     if (task.status === "done") {
       if (!task.video_url) throw new Error("视频生成完成，但没有返回视频地址。");
+      if (task.duration_seconds !== 3 || task.has_audio !== false) {
+        throw new Error("Live 图尚未完成 3 秒无声处理，请稍后重试。");
+      }
       return { taskId: task.task_id, videoUrl: task.video_url };
     }
     if (task.status === "error") {

@@ -468,7 +468,7 @@ test("new content tools render and remain usable without horizontal overflow", a
   ).toBeVisible();
   await expect(page.getByLabel("动态提示词")).toBeVisible();
   await expect(
-    page.getByText("约 4 秒", { exact: true }),
+    page.getByText("3 秒", { exact: true }),
   ).toBeVisible();
   await expect(page.getByLabel("视频比例")).toHaveValue("adaptive");
   await expect(page.getByLabel("运镜方式")).toHaveCount(0);
@@ -562,6 +562,8 @@ test("AI Live generation submits a first-frame task and returns an MP4", async (
         task_id: "web-video-e2e",
         status: "done",
         video_url: "https://cdn.example.com/live-result.mp4",
+        duration_seconds: 3,
+        has_audio: false,
       }),
     });
   });
@@ -580,6 +582,10 @@ test("AI Live generation submits a first-frame task and returns an MP4", async (
   await expect(page.locator(".motion-preview-frame video")).toHaveAttribute(
     "src",
     "https://cdn.example.com/live-result.mp4",
+  );
+  await expect(page.locator(".motion-preview-frame video")).toHaveAttribute(
+    "muted",
+    "",
   );
   await expect(page.getByRole("status")).toContainText("已消耗 30 积分");
   await expect

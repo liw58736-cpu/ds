@@ -189,7 +189,7 @@ describe("App", () => {
     expect(screen.getByLabelText("动态提示词")).toHaveValue(
       "人物自然呼吸并轻微转移重心，头发和衣料随动作自然微动；保持原姿势、表情、商品和背景一致。",
     );
-    expect(screen.getByText("约 4 秒")).toBeInTheDocument();
+    expect(screen.getByText("3 秒")).toBeInTheDocument();
     expect(screen.getByLabelText("视频比例")).toHaveValue("adaptive");
     expect(screen.queryByLabelText("运镜方式")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("时长")).not.toBeInTheDocument();

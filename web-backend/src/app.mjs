@@ -16,9 +16,14 @@ export function createWebBackend({
   env = process.env,
   fetch: fetchImpl = globalThis.fetch,
   resolveHost = (hostname) => lookup(hostname, { all: true }),
+  deliverVideo,
 } = {}) {
   const imageRouter = createImageRouter({ env, fetch: fetchImpl });
-  const videoRouter = createVideoRouter({ env, fetch: fetchImpl });
+  const videoRouter = createVideoRouter({
+    env,
+    fetch: fetchImpl,
+    ...(deliverVideo ? { deliverVideo } : {}),
+  });
   const state = {
     databaseHealthCache: { value: null, expiresAt: 0 },
     recoveryAttempts: new Map(),
@@ -1697,12 +1702,19 @@ async function handleDeductCredits(request, url, env, fetchImpl) {
   }
 
   const credits = user.credits - amount;
+  const description = sanitizeCreditDescription(
+    url.searchParams.get("description"),
+  );
+  const referenceId = sanitizeCreditReference(
+    url.searchParams.get("reference_id"),
+  );
   await updateWebUserCredits(fetchImpl, env, user.id, credits);
   await createCreditTransaction(fetchImpl, env, {
     user_id: user.id,
     amount: -amount,
     type: "generation",
-    description: "Web image generation",
+    description,
+    ...(referenceId ? { reference_id: referenceId } : {}),
   });
 
   return jsonResponse({
@@ -1710,6 +1722,21 @@ async function handleDeductCredits(request, url, env, fetchImpl) {
     charged: true,
     credits_remaining: credits,
   });
+}
+
+function sanitizeCreditDescription(value) {
+  const normalized = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+  return normalized || "生成图片";
+}
+
+function sanitizeCreditReference(value) {
+  return String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .slice(0, 160);
 }
 
 async function handleAddCredits(request, url, env, fetchImpl) {

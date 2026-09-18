@@ -58,6 +58,7 @@ export function MotionStudioPage({
   const [errorNotice, setErrorNotice] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const creditCost = getLiveVideoCreditCost(clarity);
+  const clarityLabel = clarity === "1080p" ? "1080P" : "768P";
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -108,7 +109,7 @@ export function MotionStudioPage({
     }
     if (getCurrentAccountSnapshot().balance < creditCost) {
       setErrorNotice(
-        `当前积分不足，${clarity.toUpperCase()} Live 图需要 ${creditCost} 积分。`,
+        `当前积分不足，${clarityLabel} Live 图需要 ${creditCost} 积分。`,
       );
       return;
     }
@@ -125,9 +126,13 @@ export function MotionStudioPage({
       setVideoUrl(result.videoUrl);
       setVideoTaskId(result.taskId);
       try {
-        await consumeCredits({ amount: creditCost, label: "生成 Live 图" });
+        await consumeCredits({
+          amount: creditCost,
+          label: "生成 Live 图",
+          referenceId: result.taskId,
+        });
         setStatus(
-          `Live 图生成完成：原图比例 · ${clarity.toUpperCase()}，已消耗 ${creditCost} 积分。`,
+          `Live 图生成完成：原图比例 · ${clarityLabel}，已消耗 ${creditCost} 积分。`,
         );
       } catch {
         setStatus("Live 图已生成，但积分同步暂时失败；视频仍可播放和下载。");
@@ -171,7 +176,7 @@ export function MotionStudioPage({
           首帧直接采用 103%–105% 构图，不展示放大过程；随后保持该尺度，加入克制的手持漂移、轻微倾斜与自然主体微动作。
         </p>
         <p className="motion-provider-limit">
-          输出保持原图比例；H3 生成约 4 秒母片，支持 768P 或 1080P。建议选择单张清晰照片，避免拼图。
+          输出保持原图比例；成片固定为 3 秒无声视频，支持 768P 或 1080P。建议选择单张清晰照片，避免拼图。
         </p>
       </section>
       <div className="motion-workbench">
@@ -235,7 +240,7 @@ export function MotionStudioPage({
           </div>
           <p className="motion-fixed-duration">
             <span>时长</span>
-            <strong>约 4 秒</strong>
+            <strong>3 秒</strong>
           </p>
           <button
             type="button"
@@ -271,7 +276,7 @@ export function MotionStudioPage({
         <section className="panel motion-preview-panel" aria-label="动态预览">
           <div className="motion-preview-frame" data-ratio="adaptive">
             {videoUrl ? (
-              <video src={videoUrl} controls autoPlay loop playsInline>
+              <video src={videoUrl} controls autoPlay loop muted playsInline>
                 你的浏览器不支持视频播放。
               </video>
             ) : imageUrl ? (

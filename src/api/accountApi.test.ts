@@ -738,7 +738,7 @@ describe("accountApi", () => {
       type: "generation",
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8000/api/v1/user/credits/deduct?amount=2&task_status=completed&charge_policy=success_only",
+      `http://127.0.0.1:8000/api/v1/user/credits/deduct?amount=2&task_status=completed&charge_policy=success_only&description=${encodeURIComponent("鐢熸垚鍟嗗搧绱犳潗")}`,
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -815,7 +815,7 @@ describe("accountApi", () => {
     });
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://127.0.0.1:8000/api/v1/user/credits/deduct?amount=3&task_status=completed&charge_policy=success_only",
+      `http://127.0.0.1:8000/api/v1/user/credits/deduct?amount=3&task_status=completed&charge_policy=success_only&description=${encodeURIComponent("生成商品素材")}`,
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: "Bearer expired-access-token",
@@ -832,7 +832,7 @@ describe("accountApi", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "http://127.0.0.1:8000/api/v1/user/credits/deduct?amount=3&task_status=completed&charge_policy=success_only",
+      `http://127.0.0.1:8000/api/v1/user/credits/deduct?amount=3&task_status=completed&charge_policy=success_only&description=${encodeURIComponent("生成商品素材")}`,
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: "Bearer fresh-access-token",

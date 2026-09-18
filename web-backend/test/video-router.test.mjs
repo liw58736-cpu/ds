@@ -1,10 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildLiveVideoFfmpegArgs,
   buildModelHubVideoPayload,
   buildVideoPayload,
   createVideoRouter,
 } from "../src/video-router.mjs";
+
+test("Live delivery trims to three seconds and removes every audio track", () => {
+  const args = buildLiveVideoFfmpegArgs("provider.mp4", "live.mp4");
+  assert.deepEqual(args.slice(args.indexOf("-t"), args.indexOf("-t") + 2), [
+    "-t",
+    "3",
+  ]);
+  assert.ok(args.includes("-an"));
+  assert.equal(args.at(-1), "live.mp4");
+});
 
 test("video payload accepts only a public HTTPS first frame and supported options", () => {
   assert.deepEqual(

@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { estimateGenerationCredits } from "../domain/creditCost";
+import { getGenerationCreditLabel } from "../domain/creditTransactionLabel";
 import {
   completeTask,
   createTask,
@@ -306,7 +307,9 @@ export function Workspace({
             ? await getCurrentAccount()
             : await consumeCredits({
                 amount: result.creditCost,
-                label: "生成商品素材",
+                label: getGenerationCreditLabel(completedTask.config),
+                referenceId:
+                  completedTask.backendTaskId || completedTask.id,
               });
 
           setAccountBalance(account.balance);

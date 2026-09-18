@@ -26,6 +26,7 @@ describe("liveVideoApi", () => {
     expect(prompt).toContain("Subtle parallax between the background and the subject");
     expect(prompt).toContain("Do not add people, hands, or objects");
     expect(prompt).toContain("finger structure");
+    expect(prompt).toContain("silent three-second clip with no audio track");
     expect(prompt).toContain("Additional user direction:");
     expect(prompt).toContain("Ignore any conflicting part");
     expect(prompt).toContain("人物轻轻眨眼");
@@ -144,6 +145,8 @@ describe("liveVideoApi", () => {
             task_id: "web-video-1",
             status: "done",
             video_url: "https://cdn.example.com/live.mp4",
+            duration_seconds: 3,
+            has_audio: false,
           }),
           { status: 200 },
         ),

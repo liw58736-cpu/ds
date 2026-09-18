@@ -848,6 +848,11 @@ test("video generation requires web auth, keeps the provider key server-side, an
       WUYINKEJI_VIDEO_URL:
         "https://api.wuyinkeji.com/api/async/video_veo3.1_fast",
     },
+    deliverVideo: async ({ sourceUrl }) => ({
+      url: sourceUrl,
+      durationSeconds: 3,
+      hasAudio: false,
+    }),
     fetch: async (url, init = {}) => {
       calls.push({ url, init });
       if (url.endsWith("/auth/v1/user")) {
@@ -922,6 +927,8 @@ test("video generation requires web auth, keeps the provider key server-side, an
     video_url: "https://cdn.example.com/live.mp4",
     error: null,
     progress: "Live 图生成完成",
+    duration_seconds: 3,
+    has_audio: false,
   });
   const download = await app.handle(
     new Request(
@@ -1462,7 +1469,7 @@ test("deduct endpoint charges only completed success-only tasks", async () => {
 
   const charged = await app.handle(
     new Request(
-      "http://local.test/api/v1/user/credits/deduct?amount=2&task_status=completed&charge_policy=success_only",
+      `http://local.test/api/v1/user/credits/deduct?amount=2&task_status=completed&charge_policy=success_only&description=${encodeURIComponent("生成 Live 图")}&reference_id=web-video-test`,
       { method: "POST", headers: { Authorization: "Bearer access-token" } },
     ),
   );
@@ -1474,6 +1481,8 @@ test("deduct endpoint charges only completed success-only tasks", async () => {
   assert.equal(rows[0].credits, 3);
   assert.equal(transactions.length, 1);
   assert.equal(transactions[0].amount, -2);
+  assert.equal(transactions[0].description, "生成 Live 图");
+  assert.equal(transactions[0].reference_id, "web-video-test");
 });
 
 test("image generation proxy requires auth and a dedicated web image upstream", async () => {

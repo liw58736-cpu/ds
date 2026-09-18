@@ -23,6 +23,7 @@ import {
 export interface ConsumeCreditsInput {
   amount: number;
   label: string;
+  referenceId?: string;
 }
 
 export type AccountCreditSyncStatus = "trial" | "cloud" | "cloud_sync_failed";
@@ -438,7 +439,7 @@ async function consumeKromaCredits(
 
   const response =
     await requestKromaJsonWithAuthRefresh<KromaDeductCreditsResponse>(
-      `${baseUrl}/user/credits/deduct?amount=${encodeURIComponent(String(amount))}&task_status=completed&charge_policy=success_only`,
+      `${baseUrl}/user/credits/deduct?amount=${encodeURIComponent(String(amount))}&task_status=completed&charge_policy=success_only&description=${encodeURIComponent(input.label)}${input.referenceId ? `&reference_id=${encodeURIComponent(input.referenceId)}` : ""}`,
       (token) => ({
         method: "POST",
         headers: {
