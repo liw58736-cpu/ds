@@ -27,3 +27,19 @@ export function getGenerationCreditLabel(config: GenerationConfig): string {
   }
   return "生成图片";
 }
+
+export function getCreditTransactionDisplayLabel(input: {
+  description: string;
+  amount: number;
+}): string {
+  const description = input.description.trim();
+  if (description === "Web image generation") {
+    return [30, 40].includes(Math.abs(input.amount))
+      ? "生成 Live 图"
+      : "生成图片（历史记录）";
+  }
+  if (["Web credit top-up", "Manual credit top-up"].includes(description)) {
+    return "手动充值积分";
+  }
+  return description || "积分变动";
+}

@@ -5,6 +5,7 @@ import {
   getCurrentAccountSnapshot,
   getCurrentAccountWithCreditSync,
 } from "../api/accountApi";
+import { getCreditTransactionDisplayLabel } from "../domain/creditTransactionLabel";
 import type { AccountCreditSyncStatus } from "../api/accountApi";
 
 function formatNumber(value: number): string {
@@ -152,7 +153,7 @@ export function AccountPage({ paymentStatus, onLogout }: AccountPageProps) {
                 {transactions.map((item) => (
                   <tr key={item.id}>
                     <td>{new Date(item.created_at).toLocaleString()}</td>
-                    <td>{item.description}</td>
+                    <td>{getCreditTransactionDisplayLabel(item)}</td>
                     <td>
                       {item.amount > 0 ? "+" : ""}
                       {item.amount}
